@@ -1,7 +1,7 @@
 {
   "name": "KINGMD V4",
   "short_name": "KINGMD",
-  "description": "KINGMD V4 (KINGMD Bot) — deploy your own free WhatsApp bot in seconds, no hosting required.",
+  "description": "KINGMD V4 (Kingmd Bot) — deploy your own free WhatsApp bot in seconds, no hosting required.",
   "id": "/",
   "start_url": "/app.html",
   "scope": "/app",
