@@ -51,9 +51,9 @@
         '<a class="tap" data-go="tutorial"><span class="ic" style="--a:#fb923c;--b:#ea580c">' + ic('play') + '</span>Tutorial</a>' +
         '<a class="tap" data-go="faq"><span class="ic" style="--a:#94a3b8;--b:#475569">' + ic('help') + '</span>FAQ</a>' +
       '</nav>' +
-      '<button class="admrow ai-row rise tap" data-go="ai" style="--i:4"><span class="admic">' + ic('bolt') + '</span><span class="admtx"><b>Ask KINGMD AI</b><small>Instant help about your bot and the app</small></span><span class="admgo">' + ic('chevR') + '</span></button>' +
+      '<button class="admrow ai-row rise tap" data-go="ai" style="--i:4"><span class="admic">' + ic('bolt') + '</span><span class="admtx"><b>Ask EMMYHENZ AI</b><small>Instant help about your bot and the app</small></span><span class="admgo">' + ic('chevR') + '</span></button>' +
       '<button class="admrow rise hide tap" data-adm data-admin style="--i:4"><span class="admic">' + ic('shield') + '</span><span class="admtx"><b>Admin panel</b><small>Users, servers, payments and settings</small></span><span class="admgo">' + ic('chevR') + '</span></button>' +
-      '<div class="sec rise" style="--i:4"><h3>What you can do on KINGMD V4</h3></div>' +
+      '<div class="sec rise" style="--i:4"><h3>What you can do on EMMYHENZ V4</h3></div>' +
       '<div class="rail rise" style="--i:5">' +
         '<a class="rc tap" data-tab="deploy"><img src="/features/deploy.svg" alt="" loading="lazy"><div><b>Your own bot, free</b><p>Pair your number with a code and your bot is live in a minute.</p><em>Deploy ' + ic('arrow') + '</em></div></a>' +
         '<a class="rc tap" data-go="spin"><img src="/features/spin.svg" alt="" loading="lazy"><div><b>Daily Spin &amp; Tasks</b><p>Spin the wheel every day and win EH coins.</p><em>Spin now ' + ic('arrow') + '</em></div></a>' +
@@ -71,7 +71,7 @@
       '</div>' +
       '<div data-testi hidden><div class="sec rise" style="--i:8"><h3>What users say</h3></div><div class="rail tq-rail rise" style="--i:8" data-tq></div></div>' +
       EH.adCard() +
-      '<div class="foot rise" style="--i:8"><b>KINGMD V4</b><br>Free WhatsApp bot · 24/7 · by KINGMDTech</div>';
+      '<div class="foot rise" style="--i:8"><b>EMMYHENZ V4</b><br>Free WhatsApp bot · 24/7 · by EmmyHenzTech</div>';
 
     var sx = $('[data-sx]', body), offSx = EH.on('season', function () { if (alive) sx.innerHTML = EH.seasonCard ? EH.seasonCard() : ''; });   // the celebration card (nothing while none is on)
     sx.innerHTML = EH.seasonCard ? EH.seasonCard() : '';
@@ -103,7 +103,7 @@
     }
     EH.api('/api/testimonials', { auth: false, timeout: 10000 }).then(function (r) {   // real ratings with a comment (same as the site)
       var l = r.d && r.d.success ? (r.d.testimonials || []).slice(0, 10) : []; if (!alive || !l.length) return;
-      $('[data-tq]', body).innerHTML = l.map(function (t) { var n = Math.max(1, Math.min(5, Math.round(t.stars || 5))); return '<div class="tq"><div class="tq-s">' + '★★★★★'.slice(0, n) + '</div><p>“' + EH.esc(t.comment) + '”</p><b>@' + EH.esc(t.username) + ' <span>· ' + EH.esc(t.feature || 'KINGMD') + '</span></b></div>'; }).join('');
+      $('[data-tq]', body).innerHTML = l.map(function (t) { var n = Math.max(1, Math.min(5, Math.round(t.stars || 5))); return '<div class="tq"><div class="tq-s">' + '★★★★★'.slice(0, n) + '</div><p>“' + EH.esc(t.comment) + '”</p><b>@' + EH.esc(t.username) + ' <span>· ' + EH.esc(t.feature || 'EMMYHENZ') + '</span></b></div>'; }).join('');
       $('[data-testi]', body).hidden = false;
     }, function () {});
     user(); if (Object.keys(cache).length) paint(cache);

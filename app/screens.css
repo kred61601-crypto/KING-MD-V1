@@ -314,6 +314,3 @@ html.droid .av.lg{box-shadow:0 0 0 4px rgba(var(--p-rgb),.75)!important}
 .chat-unread{display:flex;align-items:center;gap:10px;margin:14px 8px 10px;color:var(--p);font-size:12px;font-weight:800}
 .chat-unread::before,.chat-unread::after{content:"";flex:1;height:1px;background:rgba(var(--p-rgb),.5)}
 .chat-unread span{padding:3px 11px;border-radius:999px;background:rgba(var(--p-rgb),.16);border:1px solid rgba(var(--p-rgb),.4)}
-
-/* KINGMD V4: hide legacy advertisement slots */
-.adc,[data-adc],.eh-ad,.eh-ad-wait,.eh-adfix{display:none!important}

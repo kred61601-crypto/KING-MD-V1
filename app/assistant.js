@@ -1,4 +1,4 @@
-/* KINGMD V4 AI: the assistant chat (the same one as the site's Help chat) */
+/* EMMYHENZ V4 AI: the assistant chat (the same one as the site's Help chat) */
 (function () {
   var EH = window.EH, $ = EH.$, $$ = EH.$$, ic = EH.ic, esc = EH.esc;
   var KEY = 'eh_ai_chat', HOUR = 60 * 60 * 1000;
@@ -14,7 +14,7 @@
   }
 
   EH.screen('ai', { mount: function (scr) {
-    var f = EH.frame(scr, { bar: 'push', title: 'KINGMD AI', sub: 'Ask anything about the site or your bot', logo: true, verified: true }), body = f.body, alive = true, busy = false;
+    var f = EH.frame(scr, { bar: 'push', title: 'EMMYHENZ AI', sub: 'Ask anything about the site or your bot', logo: true, verified: true }), body = f.body, alive = true, busy = false;
     body.classList.remove('body'); body.className = 'chat-body';
     body.innerHTML = '<div class="chat-list ai-list" data-list></div>' +
       '<div class="chat-foot"><div class="ai-chips" data-chips></div><div class="ai-rep">Not satisfied? <a data-report>Report to Emmy</a></div><div class="chat-in"><textarea class="chat-ta" data-ta rows="1" maxlength="600" placeholder="Ask the AI…"></textarea><button class="chat-send tap" data-send aria-label="Send">' + ic('send') + '</button></div></div>';
@@ -23,7 +23,7 @@
     function save() { st.t = Date.now(); EH.ls.set(KEY, JSON.stringify({ sid: st.sid, msgs: st.msgs.slice(-40), t: st.t })); }
     function add(role, text, note) { var d = document.createElement('div'); d.className = 'ai-m ' + (role === 'u' ? 'me' : 'bot') + (note ? ' note' : ''); d.innerHTML = '<div class="ai-b">' + fmt(text) + '</div>'; list.appendChild(d); list.scrollTop = list.scrollHeight; return d; }
     function typing() { var d = document.createElement('div'); d.className = 'ai-m bot'; d.innerHTML = '<div class="ai-b"><span class="ai-dots"><i></i><i></i><i></i></span><span class="ai-wait"></span></div>'; list.appendChild(d); list.scrollTop = list.scrollHeight; return d; }
-    function greet() { if (!st.msgs.length) add('a', "Hi! 👋 I'm *KINGMD V4 AI*, Emmy's personal assistant. I can help with anything about the site or your bot. What do you need?"); st.msgs.forEach(function (m) { add(m.r, m.t); }); chips.hidden = st.msgs.length > 0; }
+    function greet() { if (!st.msgs.length) add('a', "Hi! 👋 I'm *EMMYHENZ V4 AI*, Emmy's personal assistant. I can help with anything about the site or your bot. What do you need?"); st.msgs.forEach(function (m) { add(m.r, m.t); }); chips.hidden = st.msgs.length > 0; }
     function send(text) {
       text = String(text || ta.value).trim(); if (!text || busy) return; busy = true; ta.value = ''; ta.style.height = ''; chips.hidden = true;
       add('u', text); st.msgs.push({ r: 'u', t: text }); var tp = typing(), wait = $('.ai-wait', tp);
@@ -46,7 +46,7 @@
       var b = s.el; $('[data-rs]', b).onclick = function () {
         var issue = $('[data-ri]', b).value.trim(); if (!issue) return EH.toast('Describe the problem first', 'er');
         var btn = $('[data-rs]', b); btn.disabled = true;
-        EH.api('/api/report', { method: 'POST', auth: false, body: { name: $('[data-rn]', b).value.trim() || 'Anonymous', issue: issue, workedStatus: '\n💬 From: KINGMD AI chat (app)' } }).then(function (r) {
+        EH.api('/api/report', { method: 'POST', auth: false, body: { name: $('[data-rn]', b).value.trim() || 'Anonymous', issue: issue, workedStatus: '\n💬 From: EMMYHENZ AI chat (app)' } }).then(function (r) {
           if (r.d && r.d.success) { s.close(); EH.toast('Sent to Emmy ✅', 'ok'); } else { btn.disabled = false; EH.toast((r.d && r.d.error) || 'Could not send. Try again', 'er'); }
         });
       };

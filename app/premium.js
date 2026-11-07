@@ -11,9 +11,9 @@
     ['phone', 'Log in on 3 devices at once', 'A free account can be logged in on only 1 device. With Premium, the same account stays logged in on 3 devices at the same time.'],
     ['edit', 'Change your bot name', 'Your bot shows your own name in the menu, ping and replies.'],
     ['image', 'Change your bot profile picture', 'Set the picture your bot shows on the menu, ping and results.'],
-    ['user', 'Change your bot owner name', 'Your name shows as the owner in the menu, and nobody sees KINGMD links or credits there.'],
+    ['user', 'Change your bot owner name', 'Your name shows as the owner in the menu, and nobody sees EMMYHENZ links or credits there.'],
     ['chat', 'Add your own channel to your bot', 'The "View channel" button on your bot\'s replies opens your channel.'],
-    ['doc', 'Remove the KINGMD watermark', 'Hide the heading at the top and the credit at the bottom of your bot\'s replies.'],
+    ['doc', 'Remove the EmmyHenz watermark', 'Hide the heading at the top and the credit at the bottom of your bot\'s replies.'],
     ['smile', 'Write your own welcome and goodbye messages', 'Choose what your bot says when someone joins or leaves a group.'],
     ['phone', 'Write your own anti-call message', 'Choose what people get when they call your bot number while anti-call is on.'],
     ['hash', 'Teach your bot replies', 'Pick a word and a reply. When someone says that word, your bot answers by itself.'],
@@ -52,7 +52,7 @@
         var total = Math.max(1, Math.round((Date.parse(d.until) - Date.parse(d.since)) / 86400000)), pct = Math.max(4, Math.min(100, Math.round(d.daysLeft / total * 100)));
         var tile = function (icn, label, o) { var left = Math.max(0, o.limit - o.used); return '<div class="ptile"><div class="t">' + ic(icn) + label + '</div><div class="n">' + left + '<span> / ' + o.limit + ' left</span></div><div class="pbar"><i style="width:' + Math.round(left / o.limit * 100) + '%"></i></div></div>'; };
         var used = d.react.used >= d.react.limit || d.vote.used >= d.vote.limit;
-        box.innerHTML = '<div class="mcard"><div class="mc-top"><span>KINGMD V4</span><b class="mc-tag">PREMIUM</b></div><div class="mc-sim"></div><div class="mc-name">' + esc(d.name || '') + '</div>' +
+        box.innerHTML = '<div class="mcard"><div class="mc-top"><span>EMMYHENZ V4</span><b class="mc-tag">PREMIUM</b></div><div class="mc-sim"></div><div class="mc-name">' + esc(d.name || '') + '</div>' +
           '<div class="mc-bot"><div><small>MEMBER</small><b>' + esc(d.memberId || '') + '</b></div><div style="text-align:right"><small>VALID THRU</small><b>' + valid + '</b></div></div></div>' +
           '<div class="card" style="margin-top:14px"><div class="ptime"><span>Premium ends ' + EH.date(d.until) + '</span><b>' + d.daysLeft + ' day' + (d.daysLeft === 1 ? '' : 's') + ' left</b></div><div class="pbar"><i style="width:' + pct + '%"></i></div></div>' +
           '<div class="ptiles">' + tile('heart', 'Channel Reacts', d.react) + tile('poll', 'Poll Votes', d.vote) + '</div>' +
@@ -76,7 +76,7 @@
   };
   function resetIn(t) { var ms = Math.max(60000, t - Date.now()), h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000); return h ? h + 'h ' + m + 'm' : m + ' min'; }
   function freeCard(d) {
-    return '<div class="mcard off"><div class="mc-top"><span>KINGMD V4</span><b class="mc-tag">FREE</b></div><div class="mc-sim"></div><div class="mc-name">' + esc((d && d.name) || (EH.user && EH.user.username) || 'Guest') + '</div>' +
+    return '<div class="mcard off"><div class="mc-top"><span>EMMYHENZ V4</span><b class="mc-tag">FREE</b></div><div class="mc-sim"></div><div class="mc-name">' + esc((d && d.name) || (EH.user && EH.user.username) || 'Guest') + '</div>' +
       '<div class="mc-bot"><div><small>MEMBER</small><b>' + esc((d && d.memberId) || '—') + '</b></div><div style="text-align:right"><small>PLAN</small><b>FREE</b></div></div></div>';
   }
   function wire(box, s) {

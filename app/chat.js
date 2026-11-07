@@ -137,7 +137,7 @@
     function saveImg(url, id) {
       var dl = String(url).split('?')[0] + '?dl=1';
       fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
-        var f = new File([b], 'KINGMD-' + id + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type });
+        var f = new File([b], 'emmyhenz-' + id + '.' + ((b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')), { type: b.type });
         if (navigator.canShare && navigator.canShare({ files: [f] })) return navigator.share({ files: [f] }).catch(function () {});
         var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 800); EH.toast('Image saved', 'ok');
       }).catch(function () { window.open(dl, '_blank'); });

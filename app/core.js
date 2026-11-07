@@ -1,4 +1,4 @@
-/* KINGMD V4 app — core: icons, helpers, account, router, sheets, toasts, ads, login */
+/* EMMYHENZ V4 app — core: icons, helpers, account, router, sheets, toasts, ads, login */
 (function () {
   'use strict';
   var EH = window.EH = {};
@@ -302,7 +302,7 @@
   EH.frame = function (scr, o) {
     o = o || {}; var bar = '';
     if (o.bar === 'brand') {
-      bar = '<div class="bar"><div class="logo"><img src="/logo.png" alt=""></div><div class="brand"><b>KINGMD</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
+      bar = '<div class="bar"><div class="logo"><img src="/logo.png" alt=""></div><div class="brand"><b>EMMYHENZ</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
     } else if (o.bar === 'push') {
       var ico = o.logo ? '<span class="bico lg"><img src="/logo.png" alt=""></span>' : o.icon ? '<span class="bico" style="--a:' + (o.ia || '#ff6aa8') + ';--b:' + (o.ib || '#e11d63') + '">' + EH.ic(o.icon) + '</span>' : '';
       bar = '<div class="bar"><button class="back tap" data-back aria-label="Back">' + EH.ic('chevL') + '</button>' + ico + '<div class="ttl">' + EH.esc(o.title || '') + (o.verified ? ' ' + EH.vBadge(15) : '') + (o.sub ? '<small>' + EH.esc(o.sub) + '</small>' : '') + '</div><div class="acts">' + (o.acts || '') + '</div></div>';
@@ -412,9 +412,9 @@
   EH.on('user', function () { setTimeout(function () { EH.paintChatBadge(); chatUnreadPoll(); }, 50); });
 
   /* ───── ads: app-style "Sponsored" cards (same ads as the site, switched on in Admin; never shown to Premium) ───── */
-  var AD = { banner: '716df4b36bb8e53b55119220188f3082', bannerSrc: '', popunder: '', socialbar: '' };
+  var AD = { banner: '716df4b36bb8e53b55119220188f3082', bannerSrc: 'https://bauval.org/22/', popunder: 'https://abscloud.org/1/76e511066027517a8b6f133af73cbde2', socialbar: 'https://bauval.org/14/9444d82377843351ba154901f47cae03' };
   var adsCfg = null, adsReady = null, adSeq = 0, adMsg = false;
-  EH.adCard = function () { return ''; }; // KINGMD V4: advertisements disabled
+  EH.adCard = function () { return '<div class="adc" data-adc hidden></div>'; };
   var statusP = null, statusAt = 0;
   EH.status = function (fresh) {   // /api/pages/status, shared by ads + the app switches
     if (!statusP || fresh || Date.now() - statusAt > 45000) { statusAt = Date.now(); statusP = EH.api('/api/pages/status', { auth: false, timeout: 8000 }).then(function (r) { var d = r.d && r.d.success ? r.d : null; if (d) EH.emit('status', d); return d; }); }
@@ -457,7 +457,17 @@
   }
   var adFixT = null;
   function watchAdTop() { if (adFixT) return; var n = 0; adFixT = setInterval(function () { if (document.hidden) return; fixAdTop(); if (++n > 400) { clearInterval(adFixT); adFixT = null; } }, 1000); }
-  EH.mountAds = function () {}; // KINGMD V4: advertisements disabled
+  EH.mountAds = function (root) {
+    var slots = $$('[data-adc]', root || document).filter(function (s) { return !s.dataset.mounted; }); if (!slots.length) return;
+    Promise.all([loadAds(), EH.meReady()]).then(function () {
+      if (EH.user && EH.user.isPremium) return;
+      if (adsCfg.banner) slots.forEach(mountBanner);
+      if (adsCfg.popunder || adsCfg.socialbar) watchAdTop();
+      if (adsCfg.popunder) adScript('popunder', AD.popunder);
+      if (adsCfg.socialbar) adScript('socialbar', AD.socialbar);
+    });
+  };
+  EH.on('user', function (u) { if (u && u.isPremium) $$('[data-adc]').forEach(function (s) { s.hidden = true; s.innerHTML = ''; delete s.dataset.mounted; }); });
 
   /* ───── app switches from the admin: "Disable app" and "Use site for app" ───── */
   var offEl = null;

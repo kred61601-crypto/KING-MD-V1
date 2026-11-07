@@ -54,10 +54,7 @@
 body:not([data-scr="chat"]) .body :not(i):not(.coin):not(.live):not(.dot):not(.av):not(.av *):not(.sw):not(.sw *):not(.whl):not(.whl *):not(svg):not(svg *),
 body:not([data-scr="chat"]) .sheet,body:not([data-scr="chat"]) .sheet :not(i):not(.coin):not(.live):not(.dot):not(.av):not(.av *):not(.sw):not(.sw *):not(.whl):not(.whl *):not(svg):not(svg *){border-radius:7px!important}
 
-/* "Ask KINGMD AI" row */
+/* "Ask EMMYHENZ AI" row */
 .ai-row{background:rgba(124,43,255,.1);border-color:rgba(124,43,255,.32)}
 .ai-row .admic{background:linear-gradient(145deg,#a78bfa,#7c3aed)}
 .ai-row .admgo{color:#a78bfa;background:rgba(124,43,255,.16)}
-
-/* KINGMD V4: hide legacy advertisement slots */
-.adc,[data-adc],.eh-ad,.eh-ad-wait,.eh-adfix{display:none!important}
