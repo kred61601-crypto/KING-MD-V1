@@ -1,0 +1,38 @@
+{
+  "name": "KINGMD V4",
+  "short_name": "KINGMD",
+  "description": "KINGMD V4 (KINGMD Bot) — deploy your own free WhatsApp bot in seconds, no hosting required.",
+  "id": "/",
+  "start_url": "/app.html",
+  "scope": "/app",
+  "display": "standalone",
+  "background_color": "#030303",
+  "theme_color": "#ff2e93",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

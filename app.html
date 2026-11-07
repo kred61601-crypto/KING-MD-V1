@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#030303">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#030303">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="eh-build" content="fa75e8f847">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="KINGMD">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>KINGMD V4</title>
+<script>try{if(localStorage.getItem('eh_app_site')==='1'){location.replace('/app/s');}}catch(e){}</script>
+<script>try{var t=localStorage.getItem('eh_th')==='light'?'light':'dark',d=document.documentElement;d.setAttribute('data-theme',t);if(t==='light')d.style.background='#f2f3f8';if(/Android/i.test(navigator.userAgent))d.classList.add('droid')}catch(e){}</script>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/app/app.css?v=fa75e8f847">
+<link rel="stylesheet" href="/app/home.css?v=fa75e8f847">
+<link rel="stylesheet" href="/app/screens.css?v=fa75e8f847">
+</head>
+<body>
+
+<!-- splash (shown once each time the app is opened) -->
+<div id="splash" aria-hidden="true">
+  <div class="sp-glow"></div>
+  <div class="sp-logo">
+    <svg class="sp-ring" viewBox="0 0 100 100"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6" stop-opacity="0"/><stop offset=".6" stop-color="#3b82f6"/><stop offset="1" stop-color="#ff2e93"/></linearGradient></defs><circle cx="50" cy="50" r="47" fill="none" stroke="url(#rg)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="190 106"/></svg>
+    <svg class="sp-ring b" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="none" stroke="#6d8dff" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="60 236"/></svg>
+    <img src="/logo.png" alt="" width="112" height="112">
+  </div>
+  <div class="sp-name">KINGMD</div>
+  <div class="sp-sub">V4</div>
+  <div class="sp-dots"><i></i><i></i><i></i></div>
+</div>
+
+<div id="app">
+  <div class="lead"></div>
+  <div id="stack"></div>
+
+  <nav class="tabs off" aria-label="Main">
+    <div class="tabs-in">
+      <a class="tab" data-tab="home"><svg class="i"><use href="#i-home"/></svg><span>Home</span></a>
+      <a class="tab" data-tab="settings"><svg class="i"><use href="#i-sliders"/></svg><span>Settings</span></a>
+      <a class="tab dep" data-tab="deploy"><span class="dep-b"><svg class="i"><use href="#i-rocket"/></svg></span><span>Deploy</span></a>
+      <a class="tab" data-go="chat"><svg class="i"><use href="#i-chat"/></svg><span>Community</span></a>
+      <a class="tab" data-tab="profile"><svg class="i"><use href="#i-user"/></svg><span>Profile</span></a>
+    </div>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="/app/core.js?v=fa75e8f847"></script>
+<script src="/app/season.js?v=fa75e8f847"></script>
+<script src="/app/install.js?v=fa75e8f847"></script>
+<script src="/app/home.js?v=fa75e8f847"></script>
+<script src="/app/premium.js?v=fa75e8f847"></script>
+<script src="/app/deploy.js?v=fa75e8f847"></script>
+<script src="/app/profile.js?v=fa75e8f847"></script>
+<script src="/app/settings.js?v=fa75e8f847"></script>
+<script src="/app/services.js?v=fa75e8f847"></script>
+<script src="/app/spin.js?v=fa75e8f847"></script>
+<script src="/app/chat.js?v=fa75e8f847"></script>
+<script src="/app/assistant.js?v=fa75e8f847"></script>
+<script src="/app/content.js?v=fa75e8f847"></script>
+<script src="/app/pages.js?v=fa75e8f847"></script>
+<script src="/app/onboard.js?v=fa75e8f847"></script>
+<script>EH.boot();</script>
+</body>
+</html>
