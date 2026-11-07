@@ -1,0 +1,63 @@
+/* home screen */
+.hi{padding:6px 2px 16px}
+.hi small{display:block;font-size:14px;color:var(--t2);font-weight:600}
+.hi h1{font-size:31px;line-height:1.12;font-weight:800;letter-spacing:-.02em;margin-top:3px;word-break:break-word}
+.hero{position:relative;border-radius:28px;padding:52px 18px 18px;overflow:hidden;color:#fff;background:linear-gradient(135deg,var(--p) 0%,#7c2bff 100%);background:linear-gradient(135deg,var(--p) 0%,color-mix(in srgb,var(--p) 40%,#6d28d9) 100%)}
+.hero::before{content:"";position:absolute;width:230px;height:230px;right:-70px;top:-90px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.26),transparent 68%);pointer-events:none}
+.pchip{position:absolute;top:13px;right:13px;z-index:2;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px 0 10px;border-radius:99px;font-size:11.5px;font-weight:900;letter-spacing:.09em;color:#3a2600;background:linear-gradient(135deg,#ffe9a3,#f5b417)}
+.pchip svg{font-size:14px}
+.pchip.free{color:#fff;background:rgba(0,0,0,.26);border:1px solid rgba(255,255,255,.4)}
+.pchip.free svg{color:#ffd96a}
+.h-top{position:relative;display:flex;align-items:center;gap:14px}
+.h-ico{position:relative;width:62px;height:62px;border-radius:21px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-size:29px;flex:none}
+.h-top h2{font-size:22px;font-weight:800;letter-spacing:-.015em;line-height:1.15}
+.h-top p{font-size:13px;line-height:1.45;margin-top:5px;color:rgba(255,255,255,.9)}
+.cta{position:relative;margin-top:18px;width:100%;height:56px;border-radius:19px;background:#fff;color:#1a0a22;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}
+.cta svg{font-size:21px;color:var(--p)}
+.hst{position:relative;margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hst div{padding:11px 6px 10px;border-radius:17px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.14);text-align:center}
+.hst b{display:block;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;min-height:24px;color:#fff}
+.hst span{display:block;margin-top:2px;font-size:11px;font-weight:600;color:rgba(255,255,255,.8)}
+.net{position:relative;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;font-weight:600;color:rgba(255,255,255,.85)}
+.qa{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 8px}
+.qa a{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:11.5px;font-weight:700;color:var(--t1);text-align:center;line-height:1.2}
+.qa .ic{position:relative;width:58px;height:58px;border-radius:19px;display:flex;align-items:center;justify-content:center;font-size:25px;color:var(--b);background:var(--fill);background:color-mix(in srgb,var(--b) 15%,transparent)}
+.qa .ic .dot{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border-radius:50%;background:#ef4444;border:2px solid var(--bg)}
+.rail{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.rail::-webkit-scrollbar{display:none}
+.rc{flex:0 0 76%;max-width:330px;scroll-snap-align:center;border-radius:24px;overflow:hidden;background:var(--s2);border:1px solid var(--line)}
+.rc img{width:100%;aspect-ratio:16/9.4;object-fit:cover;background:var(--s3)}
+.rc div{padding:13px 15px 15px}
+.rc b{display:block;font-size:16px;font-weight:800}
+.rc p{margin-top:4px;font-size:12.5px;line-height:1.4;color:var(--t2)}
+.rc em{display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-style:normal;font-size:13px;font-weight:800;color:var(--p)}
+.foot{text-align:center;margin-top:30px;font-size:12px;color:var(--t2);line-height:1.6}
+.foot b{color:var(--t1)}
+.ptr{position:absolute;left:50%;top:calc(var(--sat) + 66px);width:38px;height:38px;margin-left:-19px;border-radius:50%;background:var(--s3);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;z-index:15;opacity:0;transform:translateY(-40px);pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.ptr svg{width:20px;height:20px;color:var(--p)}
+.ptr.go svg{animation:spin .8s linear infinite}
+
+
+.admrow{display:flex;align-items:center;gap:13px;width:100%;margin-top:22px;padding:13px 14px;border-radius:22px;text-align:left;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.38)}
+.admrow.hide{display:none}
+.admic{width:44px;height:44px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;background:linear-gradient(145deg,#fbbf24,#d97706);flex:none}
+.admtx{flex:1;min-width:0}.admtx b{display:block;font-size:16px;font-weight:800}.admtx small{display:block;font-size:12px;color:var(--t2);margin-top:2px}
+.admgo{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;color:#d97706;background:rgba(245,158,11,.16);flex:none}
+
+/* "What users say" */
+.tq{flex:0 0 78%;max-width:320px;scroll-snap-align:center;border-radius:24px;background:var(--s2);border:1px solid var(--line);padding:15px 16px}
+.tq-s{color:#f5b417;font-size:14px;letter-spacing:2px}
+.tq p{margin:8px 0 10px;font-size:13px;line-height:1.5;color:var(--t1);font-style:italic}
+.tq b{font-size:12.5px;font-weight:800}.tq b span{color:var(--t2);font-weight:600}
+
+/* Every screen except Community chat: lightly rounded corners (cards, buttons, panels and the windows opened from them). Dots, switches, coins and avatars stay round. */
+body:not([data-scr="chat"]) .body :not(i):not(.coin):not(.live):not(.dot):not(.av):not(.av *):not(.sw):not(.sw *):not(.whl):not(.whl *):not(svg):not(svg *),
+body:not([data-scr="chat"]) .sheet,body:not([data-scr="chat"]) .sheet :not(i):not(.coin):not(.live):not(.dot):not(.av):not(.av *):not(.sw):not(.sw *):not(.whl):not(.whl *):not(svg):not(svg *){border-radius:7px!important}
+
+/* "Ask KINGMD AI" row */
+.ai-row{background:rgba(124,43,255,.1);border-color:rgba(124,43,255,.32)}
+.ai-row .admic{background:linear-gradient(145deg,#a78bfa,#7c3aed)}
+.ai-row .admgo{color:#a78bfa;background:rgba(124,43,255,.16)}
+
+/* KINGMD V4: hide legacy advertisement slots */
+.adc,[data-adc],.eh-ad,.eh-ad-wait,.eh-adfix{display:none!important}
