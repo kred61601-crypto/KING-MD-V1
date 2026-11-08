@@ -2309,13 +2309,14 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 
 </div>
 
+
 <!-- PROFILE -->
 <div class="page" id="page-profile">
   <div class="wrap">
     <div class="card">
-      <div class="cov" id="profCover"><div class="cov-btn"><button type="button" onclick="document.getElementById('coverFile').click()"><i class="fas fa-camera"></i> Cover</button><button type="button" id="profCoverRm" style="display:none" onclick="A.removeCover()" title="Remove cover"><i class="fas fa-trash"></i></button></div><input type="file" id="coverFile" accept="image/*" style="display:none" onchange="A.uploadCover(this)"></div>
+      <div class="cov" id="profCover"><img id="profCoverImg" src="" style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0"><div class="cov-btn"><button type="button" onclick="document.getElementById('coverFile').click()"><i class="fas fa-camera"></i> Cover</button><button type="button" id="profCoverRm" style="display:none" onclick="A.removeCover()" title="Remove cover"><i class="fas fa-trash"></i></button></div><input type="file" id="coverFile" accept="image/*" style="display:none" onchange="A.uploadCover(this)"></div>
       <div class="prof-head ov">
-        <div class="av-wrap"><div class="av" id="profAv"><i class="fas fa-user"></i></div><button class="av-cam" onclick="document.getElementById('photoFile').click()"><i class="fas fa-camera"></i></button><input type="file" id="photoFile" accept="image/*" style="display:none" onchange="A.uploadPhoto(this)"></div>
+        <div class="av-wrap"><div class="av" id="profAv"><img id="profAvImg" src="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%"><i class="fas fa-user" id="profAvIcon"></i></div><button class="av-cam" onclick="document.getElementById('photoFile').click()"><i class="fas fa-camera"></i></button><input type="file" id="photoFile" accept="image/*" style="display:none" onchange="A.uploadPhoto(this)"></div>
         <div class="prof-info"><div class="u-nm"><span id="profName">–</span><button class="u-edit" onclick="A.openEditProfile()" title="Edit name &amp; username"><i class="fas fa-pencil-alt"></i></button></div><div class="u-handle" id="profHandle"></div><div class="prof-badge-row" style="margin-top:.4rem"><span id="profVerified" style="display:none" class="badge b-blue"></span><span id="profProBadge" style="display:none;cursor:pointer" class="badge b-gold" onclick="A.openPremiumCard()" title="View your Premium"></span><span id="profAdmin" style="display:none" class="badge b-y"><i class="fas fa-shield-alt"></i> Admin</span></div></div>
       </div>
       <div class="u-about" id="profBio" style="margin:.7rem 0 0">No bio yet.</div>
@@ -2387,6 +2388,58 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   <button class="btn bs" type="button" style="padding:.45rem .95rem;font-size:.8rem;margin-bottom:.8rem" onclick="A.userBack()"><i class="fas fa-arrow-left"></i> Back</button>
   <div id="userPageBody"></div>
 </div></div>
+<script>
+// FIX: DP + Cover now save permanently - inside this same block, no other file needed
+(function(){
+  function showSaved(){
+    var u = (window.A && A.user) || {};
+    var key = u.username || u._id || localStorage.getItem('king_last_user') || 'guest';
+    var av = u.avatar || localStorage.getItem('king_dp_'+key) || localStorage.getItem('king_dp');
+    var cov = u.cover || localStorage.getItem('king_cover_'+key) || localStorage.getItem('king_cover');
+    var avImg = document.getElementById('profAvImg'), avIcon = document.getElementById('profAvIcon');
+    if(av && avImg){ avImg.src = av; avImg.style.display='block'; if(avIcon) avIcon.style.display='none'; }
+    var covImg = document.getElementById('profCoverImg');
+    if(cov && covImg){ covImg.src = cov; covImg.style.display='block'; var rm=document.getElementById('profCoverRm'); if(rm) rm.style.display='block'; }
+  }
+  function saveFile(input, type){
+    var file = input.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var url = e.target.result; // base64 - survives logout/refresh, unlike createObjectURL
+      var u = (window.A && A.user) || {};
+      var key = u.username || u._id || localStorage.getItem('king_last_user') || 'guest';
+      try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, url); localStorage.setItem(type==='photo' ? 'king_dp' : 'king_cover', url); }catch(err){ alert('Image too big, use smaller image'); return; }
+      if(type==='photo'){ if(!A.user) A.user={}; A.user.avatar=url; } else { if(!A.user) A.user={}; A.user.cover=url; }
+      showSaved();
+      // Also try server if your backend has it - if not, localStorage already saved it
+      try{
+        var fd = new FormData(); fd.append(type==='photo' ? 'photo' : 'cover', file);
+        var token = localStorage.getItem('king_token')||localStorage.getItem('token')||'';
+        fetch(type==='photo' ? '/api/profile/photo' : '/api/profile/cover', { method:'POST', headers:{ 'Authorization':'Bearer '+token }, body: fd }).then(function(r){ return r.json().catch(function(){return {};}); }).then(function(d){ if(d && (d.avatar||d.cover)){ var k = d.avatar||d.cover; try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, k); }catch(e){} if(A.user){ if(type==='photo') A.user.avatar=k; else A.user.cover=k; } showSaved(); } }).catch(function(){});
+      }catch(e){}
+    };
+    reader.readAsDataURL(file);
+    input.value='';
+  }
+  if(!window.A) window.A = {};
+  var oldPhoto = A.uploadPhoto, oldCover = A.uploadCover;
+  A.uploadPhoto = function(input){ saveFile(input, 'photo'); };
+  A.uploadCover = function(input){ saveFile(input, 'cover'); };
+  A.removeCover = function(){
+    var u = (window.A && A.user) || {}; var key = u.username || u._id || localStorage.getItem('king_last_user') || 'guest';
+    localStorage.removeItem('king_cover_'+key); localStorage.removeItem('king_cover');
+    if(A.user) A.user.cover='';
+    var c=document.getElementById('profCoverImg'); if(c) c.style.display='none';
+    var rm=document.getElementById('profCoverRm'); if(rm) rm.style.display='none';
+    try{ var token=localStorage.getItem('king_token')||localStorage.getItem('token')||''; fetch('/api/profile/cover',{method:'DELETE',headers:{'Authorization':'Bearer '+token}}).catch(function(){}); }catch(e){}
+  };
+  var oldShow = A.showProfile;
+  A.showProfile = function(){ if(oldShow) oldShow.apply(this, arguments); setTimeout(showSaved, 50); };
+  document.addEventListener('DOMContentLoaded', showSaved);
+  setInterval(showSaved, 1000);
+  window.addEventListener('pageshow', showSaved);
+})();
+</script>
 
 <!-- CHANNEL GROWTH SERVICES: Channel React and Poll Voting listed on one shareable page -->
 <div class="page" id="page-services"><div class="wrap" style="max-width:680px">
