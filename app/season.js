@@ -41,7 +41,7 @@
       fx: [{ kind: 'twinkle', glyphs: ['✦', '★', '✧', '☾'], n: [8, 16], sz: [11, 21], dur: [3.5, 7], color: '#fde68a', glow: 'rgba(251,191,36,.9)' }],
       hat: svg('<path d="M42 5A23 23 0 1 0 42 49 18 18 0 1 1 42 5Z" fill="#fbbf24"/><path d="M47 16L48.9 21 54 22.2 49.9 25.4 51.2 30.6 47 27.6 42.8 30.6 44.1 25.4 40 22.2 45.1 21Z" fill="#fde68a"/>'),
       edge: bunting(['#10b981', '#fbbf24', '#ffffff']) },
-    independence: { name: 'Independence Day', icon: '🇰🇪', title: 'Happy Independence Day!', hi: '🇰🇪 Happy Independence Day! God bless Nigeria.', p: '#16a34a', p2: '#15803d', rgb: '22,163,74',
+    independence: { name: 'Independence Day', icon: '🇳🇬', title: 'Happy Independence Day!', hi: '🇳🇬 Happy Independence Day! God bless Nigeria.', p: '#16a34a', p2: '#15803d', rgb: '22,163,74',
       fx: [{ kind: 'fall', colors: ['#16a34a', '#ffffff', '#16a34a', '#4ade80'], n: [10, 20], dur: [8, 15] }],
       hat: svg('<rect x="9" y="4" width="3" height="46" rx="1.5" fill="#d1d5db"/><rect x="12" y="6" width="10" height="20" fill="#16a34a"/><rect x="22" y="6" width="10" height="20" fill="#fff"/><rect x="32" y="6" width="10" height="20" fill="#16a34a"/>'),
       edge: bunting(['#16a34a', '#ffffff', '#16a34a']) }
