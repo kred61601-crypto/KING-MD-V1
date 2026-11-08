@@ -19,8 +19,6 @@ app.use(express.static(__dirname));
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || '';
-// FIX 1: On Render, set DATA_DIR=/data and add a Persistent Disk mounted at /data
-// If you don't, users.json is wiped on every restart = "Incorrect password" even when right
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -30,13 +28,33 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// ===== ADMIN CONFIG - YOUR EMAIL + NUMBER =====
+const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
+const ADMIN_PHONES = ['254726476468', '+254726476468', '0726476468', '726476468'];
+function normalizePhone(p){
+  let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
+  if(s.startsWith('0')) s = '254' + s.slice(1);
+  if(s.startsWith('254')) return s;
+  return s;
+}
+function isAdminEmail(email){ return ADMIN_EMAILS.includes(String(email||'').toLowerCase().trim()); }
+function isAdminPhone(phone){ return ADMIN_PHONES.includes(normalizePhone(phone)) || ADMIN_PHONES.includes(String(phone||'').trim()); }
+function isOwner(email, phone){ return isAdminEmail(email) || isAdminPhone(phone); }
+
 function loadUsers() {
   try { const d = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); return Array.isArray(d) ? d : []; }
   catch (_) { return []; }
 }
 let users = loadUsers();
-console.log('LOADED USERS:', users.length, 'from', USERS_FILE);
-let messages = [{ _id: 'welcome1', username: 'KING MD', text: 'Welcome to KING MD V4 Community! 👑', createdAt: new Date().toISOString(), reactions: [], pinned: true, isAdmin: true }];
+// Auto-fix old accounts: if your email/phone is owner, make them admin on startup
+users.forEach(u=>{
+  if(isOwner(u.email, u.phone)){
+    u.isAdmin = true; u.isVerified = true;
+  }
+  if(!u.avatar && u.photo) u.avatar = u.photo;
+  if(!u.cover) u.cover = '';
+});
+let messages = [{ _id: 'welcome1', username: 'KING MD', text: 'Welcome to KING MD V4 Community! 👑', createdAt: new Date().toISOString(), reactions: [], pinned: true, isAdmin: true, isVerified: true }];
 function saveUsers() {
   const tmp = USERS_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(users, null, 2), { mode: 0o600 });
@@ -46,17 +64,19 @@ function publicUser(u) {
   if (!u) return null;
   const x = { ...u };
   delete x.password; delete x.providerId; delete x.email;
-  // FIX 2: frontend expects avatar/cover, server uses photo - give both so DP never breaks
   x.avatar = u.avatar || u.photo || '';
   x.photo = u.photo || u.avatar || '';
   x.cover = u.cover || '';
+  // BLUE TICK: admin always verified
+  x.isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone));
+  x.isVerified = !!(u.isVerified || x.isAdmin);
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
   return x;
 }
 function tokenFor(u) {
-  return jwt.sign({ id: u.id, username: u.username, isAdmin: !!u.isAdmin }, SECRET, { expiresIn: '30d' });
+  return jwt.sign({ id: u.id, username: u.username, isAdmin: !!u.isAdmin, isVerified: !!(u.isVerified || u.isAdmin) }, SECRET, { expiresIn: '30d' });
 }
 function auth(req, res, next) {
   const h = req.headers.authorization || '';
@@ -81,15 +101,16 @@ function oauth(provider) {
 }
 const pending = new Map();
 const onboarding = new Map();
-const resetTokens = new Map(); // email -> { token, at }
+const resetTokens = new Map();
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4', users: users.length, dataDir: DATA_DIR }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4', users: users.length }));
 
 // Email + password accounts (no Google/GitHub OAuth setup required).
 app.post('/api/auth/register', async (req, res) => {
   try {
     const b = req.body || {}, email = String(b.email || '').trim().toLowerCase();
     const password = String(b.password || ''), name = String(b.name || '').trim();
+    const phone = normalizePhone(b.phone || b.number || b.whatsapp || '');
     if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ success:false, error:'Enter a valid email address.' });
     if (password.length < 8) return res.status(400).json({ success:false, error:'Password must be at least 8 characters.' });
     if (name.length < 2 || name.length > 60) return res.status(400).json({ success:false, error:'Enter your name (2–60 characters).' });
@@ -98,35 +119,48 @@ app.post('/api/auth/register', async (req, res) => {
     let base = (email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,15) || 'kinguser');
     if (base.length < 3) base = 'user' + base;
     let username = base, n = 1; while (findUsername(username)) { username = (base.slice(0,16) + n++).slice(0,20); }
-    const u = { id: crypto.randomUUID(), username, email, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin:false, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
+    const owner = isOwner(email, phone);
+    const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
     users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins:3 });
   } catch (e) { console.error('Registration error:', e); res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
 });
 app.post('/api/auth/login', async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), password = String(b.password || '');
-  console.log('LOGIN ATTEMPT:', email, 'users in memory:', users.length);
+  const phone = normalizePhone(b.phone || '');
   const u = users.find(x => (x.email || '').toLowerCase() === email);
-  if (!u) { console.log('LOGIN FAIL: no user for', email); return res.status(401).json({ success:false, error:'Incorrect email or password.' }); }
-  if (!u.password) return res.status(401).json({ success:false, error:'This account was created with Google/GitHub. Use that button to sign in, or use Forgot Password.' });
-  let ok = false;
-  try { ok = await bcrypt.compare(password, u.password); } catch(e){ ok = false; }
-  if (!ok) { console.log('LOGIN FAIL: wrong password for', email); return res.status(401).json({ success:false, error:'Incorrect email or password.' }); }
+  if (!u || !u.password || !(await bcrypt.compare(password, u.password))) return res.status(401).json({ success:false, error:'Incorrect email or password.' });
+  // Auto-promote owner on login - fixes old account even if created before admin code
+  if(isOwner(u.email, u.phone || phone)){
+    u.isAdmin = true; u.isVerified = true;
+    if(phone && !u.phone) u.phone = phone;
+    saveUsers();
+  }
   res.json({ success:true, token:tokenFor(u), user:publicUser(u) });
 });
-// FIX 3: Check if email exists - so user knows if account was wiped
+// Make existing account admin by email OR number
+app.post('/api/make-me-admin', async (req,res)=>{
+  const b = req.body||{};
+  const email = String(b.email||'').trim().toLowerCase();
+  const phone = normalizePhone(b.phone || b.number || '');
+  let u = null;
+  if(email) u = users.find(x=>(x.email||'').toLowerCase()===email);
+  if(!u && phone) u = users.find(x=> normalizePhone(x.phone||'')===phone);
+  if(!u) return res.json({ success:false, error:'Account not found. Create account first with email affiliateguru547@gmail.com' });
+  if(!isOwner(u.email, u.phone || phone) && email!=='affiliateguru547@gmail.com' && phone!=='254726476468') return res.json({ success:false, error:'Only owner can be admin' });
+  u.isAdmin = true; u.isVerified = true; if(phone) u.phone = phone; saveUsers();
+  res.json({ success:true, message: (u.email||u.username) + ' is now ADMIN 👑 + Blue Tick ✔️', user: publicUser(u) });
+});
 app.get('/api/auth/check-email', (req,res)=>{
   const email = String(req.query.email||'').trim().toLowerCase();
   const exists = users.some(u=>(u.email||'').toLowerCase()===email);
   res.json({ success:true, exists });
 });
-// FIX 4: Forgot / Reset Password - no email needed, reset by email + new password
 app.post('/api/auth/forgot-password', async (req,res)=>{
   const email = String((req.body||{}).email||'').trim().toLowerCase();
   const u = users.find(x=>(x.email||'').toLowerCase()===email);
   if(!u) return res.json({ success:false, error:'No account with that email. Please create a new account.' });
   const token = crypto.randomBytes(32).toString('hex');
   resetTokens.set(token, { email, at: Date.now() });
-  // For now return token to frontend to show reset form - in production send by email
   res.json({ success:true, resetToken: token, message:'Reset code created' });
 });
 app.post('/api/auth/reset-password', async (req,res)=>{
@@ -200,6 +234,7 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
     if (u) {
       u.provider = provider; u.providerId = String(profile.id);
       if (!u.photo && picture) { u.photo = picture; u.avatar = picture; }
+      if(isOwner(email, u.phone)){ u.isAdmin = true; u.isVerified = true; }
       saveUsers();
       const code = crypto.randomBytes(32).toString('hex');
       pending.set(code, { token: tokenFor(u), at: Date.now() });
@@ -254,9 +289,10 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
   const photoChoice = req.body.photoChoice || 'none';
   let photo = photoChoice === 'provider' ? x.picture : '';
   if (photoChoice === 'upload' && req.file) photo = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
-  const u = { id: crypto.randomUUID(), username, email: x.email, provider: x.provider, providerId: x.providerId,
+  const owner = isOwner(x.email, req.body.phone || '');
+  const u = { id: crypto.randomUUID(), username, email: x.email, phone: normalizePhone(req.body.phone||''), provider: x.provider, providerId: x.providerId,
     firstName, lastName, name: firstName + ' ' + lastName, photo, avatar: photo, cover:'', bio: '', accentColor: req.body.accentColor || 'pink',
-    isAdmin: false, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
+    isAdmin: owner, isVerified: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
     hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
   users.push(u); saveUsers(); onboarding.delete(key);
   res.json({ success: true, token: tokenFor(u), signupBonusCoins: 3, numberLinked: false });
@@ -281,7 +317,6 @@ app.post('/api/profile/photo', requireUser, upload.single('photo'), (req, res) =
   req.account.photo = url; req.account.avatar = url; saveUsers();
   res.json({ success: true, photo: url, avatar: url });
 });
-// FIX 5: Cover was missing - this is why cover didn't save
 app.post('/api/profile/cover', requireUser, upload.single('cover'), (req, res) => {
   if (!req.file) return res.json({ success: false, error: 'Choose an image first.' });
   req.account.cover = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64'); saveUsers();
@@ -324,7 +359,7 @@ app.get('/api/community/live', (req, res) => res.json({ success: true, online: 1
 app.post('/api/community/typing', (req, res) => res.json({ success: true }));
 app.post('/api/community/message', requireUser, (req, res) => {
   const b = req.body || {}; if (!b.text && !b.image && !b.sticker) return res.json({ success: false, error: 'Empty message' });
-  const m = { _id: crypto.randomUUID(), username: req.account.username, text: b.text || null, image: b.image || null, sticker: b.sticker || null, reactions: [], pinned: false, isAdmin: !!req.account.isAdmin, createdAt: new Date().toISOString() };
+  const m = { _id: crypto.randomUUID(), username: req.account.username, text: b.text || null, image: b.image || null, sticker: b.sticker || null, reactions: [], pinned: false, isAdmin: !!req.account.isAdmin, isVerified: !!(req.account.isVerified || req.account.isAdmin), createdAt: new Date().toISOString() };
   messages.push(m); res.json({ success: true, message: m });
 });
 app.post('/api/community/react', requireUser, (req, res) => {
