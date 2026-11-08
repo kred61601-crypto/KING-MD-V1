@@ -19,6 +19,8 @@ app.use(express.static(__dirname));
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || '';
+// FIX 1: On Render, set DATA_DIR=/data and add a Persistent Disk mounted at /data
+// If you don't, users.json is wiped on every restart = "Incorrect password" even when right
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -33,6 +35,7 @@ function loadUsers() {
   catch (_) { return []; }
 }
 let users = loadUsers();
+console.log('LOADED USERS:', users.length, 'from', USERS_FILE);
 let messages = [{ _id: 'welcome1', username: 'KING MD', text: 'Welcome to KING MD V4 Community! 👑', createdAt: new Date().toISOString(), reactions: [], pinned: true, isAdmin: true }];
 function saveUsers() {
   const tmp = USERS_FILE + '.tmp';
@@ -43,6 +46,10 @@ function publicUser(u) {
   if (!u) return null;
   const x = { ...u };
   delete x.password; delete x.providerId; delete x.email;
+  // FIX 2: frontend expects avatar/cover, server uses photo - give both so DP never breaks
+  x.avatar = u.avatar || u.photo || '';
+  x.photo = u.photo || u.avatar || '';
+  x.cover = u.cover || '';
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
@@ -74,8 +81,9 @@ function oauth(provider) {
 }
 const pending = new Map();
 const onboarding = new Map();
+const resetTokens = new Map(); // email -> { token, at }
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4', users: users.length, dataDir: DATA_DIR }));
 
 // Email + password accounts (no Google/GitHub OAuth setup required).
 app.post('/api/auth/register', async (req, res) => {
@@ -90,15 +98,47 @@ app.post('/api/auth/register', async (req, res) => {
     let base = (email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,15) || 'kinguser');
     if (base.length < 3) base = 'user' + base;
     let username = base, n = 1; while (findUsername(username)) { username = (base.slice(0,16) + n++).slice(0,20); }
-    const u = { id: crypto.randomUUID(), username, email, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', bio:'', accentColor:'pink', isAdmin:false, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
+    const u = { id: crypto.randomUUID(), username, email, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin:false, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
     users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins:3 });
   } catch (e) { console.error('Registration error:', e); res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
 });
 app.post('/api/auth/login', async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), password = String(b.password || '');
+  console.log('LOGIN ATTEMPT:', email, 'users in memory:', users.length);
   const u = users.find(x => (x.email || '').toLowerCase() === email);
-  if (!u || !u.password || !(await bcrypt.compare(password, u.password))) return res.status(401).json({ success:false, error:'Incorrect email or password.' });
+  if (!u) { console.log('LOGIN FAIL: no user for', email); return res.status(401).json({ success:false, error:'Incorrect email or password.' }); }
+  if (!u.password) return res.status(401).json({ success:false, error:'This account was created with Google/GitHub. Use that button to sign in, or use Forgot Password.' });
+  let ok = false;
+  try { ok = await bcrypt.compare(password, u.password); } catch(e){ ok = false; }
+  if (!ok) { console.log('LOGIN FAIL: wrong password for', email); return res.status(401).json({ success:false, error:'Incorrect email or password.' }); }
   res.json({ success:true, token:tokenFor(u), user:publicUser(u) });
+});
+// FIX 3: Check if email exists - so user knows if account was wiped
+app.get('/api/auth/check-email', (req,res)=>{
+  const email = String(req.query.email||'').trim().toLowerCase();
+  const exists = users.some(u=>(u.email||'').toLowerCase()===email);
+  res.json({ success:true, exists });
+});
+// FIX 4: Forgot / Reset Password - no email needed, reset by email + new password
+app.post('/api/auth/forgot-password', async (req,res)=>{
+  const email = String((req.body||{}).email||'').trim().toLowerCase();
+  const u = users.find(x=>(x.email||'').toLowerCase()===email);
+  if(!u) return res.json({ success:false, error:'No account with that email. Please create a new account.' });
+  const token = crypto.randomBytes(32).toString('hex');
+  resetTokens.set(token, { email, at: Date.now() });
+  // For now return token to frontend to show reset form - in production send by email
+  res.json({ success:true, resetToken: token, message:'Reset code created' });
+});
+app.post('/api/auth/reset-password', async (req,res)=>{
+  const { resetToken, newPassword } = req.body||{};
+  const item = resetTokens.get(String(resetToken||''));
+  if(!item || Date.now()-item.at > 15*60*1000) return res.json({ success:false, error:'Reset code expired. Try again.' });
+  if(!newPassword || String(newPassword).length < 8) return res.json({ success:false, error:'New password must be at least 8 characters.' });
+  const u = users.find(x=>(x.email||'').toLowerCase()===item.email);
+  if(!u) return res.json({ success:false, error:'Account not found.' });
+  u.password = await bcrypt.hash(String(newPassword), 12);
+  saveUsers(); resetTokens.delete(String(resetToken));
+  res.json({ success:true, message:'Password reset. Now sign in with new password.' });
 });
 app.get('/api/auth/:provider/start', (req, res) => {
   const provider = String(req.params.provider || '').toLowerCase();
@@ -159,7 +199,7 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
     let u = users.find(x => x.email && x.email.toLowerCase() === email);
     if (u) {
       u.provider = provider; u.providerId = String(profile.id);
-      if (!u.photo && picture) u.photo = picture;
+      if (!u.photo && picture) { u.photo = picture; u.avatar = picture; }
       saveUsers();
       const code = crypto.randomBytes(32).toString('hex');
       pending.set(code, { token: tokenFor(u), at: Date.now() });
@@ -215,7 +255,7 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
   let photo = photoChoice === 'provider' ? x.picture : '';
   if (photoChoice === 'upload' && req.file) photo = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
   const u = { id: crypto.randomUUID(), username, email: x.email, provider: x.provider, providerId: x.providerId,
-    firstName, lastName, name: firstName + ' ' + lastName, photo, bio: '', accentColor: req.body.accentColor || 'pink',
+    firstName, lastName, name: firstName + ' ' + lastName, photo, avatar: photo, cover:'', bio: '', accentColor: req.body.accentColor || 'pink',
     isAdmin: false, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
     hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
   users.push(u); saveUsers(); onboarding.delete(key);
@@ -237,8 +277,18 @@ app.post('/api/profile/accent', requireUser, (req, res) => { req.account.accentC
 app.post('/api/profile/privacy', requireUser, (req, res) => { Object.keys(req.body || {}).forEach(k => { if (['hideBalance','hideFollowers','hideFollowing','hideLikes'].includes(k)) req.account[k] = !!req.body[k]; }); saveUsers(); res.json({ success: true }); });
 app.post('/api/profile/photo', requireUser, upload.single('photo'), (req, res) => {
   if (!req.file) return res.json({ success: false, error: 'Choose an image first.' });
-  req.account.photo = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64'); saveUsers();
-  res.json({ success: true, photo: req.account.photo });
+  const url = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
+  req.account.photo = url; req.account.avatar = url; saveUsers();
+  res.json({ success: true, photo: url, avatar: url });
+});
+// FIX 5: Cover was missing - this is why cover didn't save
+app.post('/api/profile/cover', requireUser, upload.single('cover'), (req, res) => {
+  if (!req.file) return res.json({ success: false, error: 'Choose an image first.' });
+  req.account.cover = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64'); saveUsers();
+  res.json({ success: true, cover: req.account.cover });
+});
+app.delete('/api/profile/cover', requireUser, (req, res) => {
+  req.account.cover = ''; saveUsers(); res.json({ success: true });
 });
 app.get('/api/users/search', (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
