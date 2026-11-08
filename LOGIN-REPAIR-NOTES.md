@@ -1,17 +1,26 @@
-# KING MD email/password login repair
+# KING MD login diagnosis
 
-The existing KING MD V4 visual design and app screens have been retained. Both the main website login modal and the installed-app sign-in sheet now offer email/password sign-in and account creation.
+## What was checked
+- The supplied archive contains browser-side HTML/CSS/JavaScript and assets only.
+- It does not contain a backend application, server entry point, package.json, or Render deployment configuration.
+- The frontend starts OAuth login at:
+  - GET /api/auth/google/start?returnTo=app
+  - GET /api/auth/github/start?returnTo=app
+  - POST /api/auth/exchange
+- The frontend also expects authenticated API endpoints such as GET /api/me.
 
-## Account behavior
-- Create an account using full name, email address and a password of at least 8 characters.
-- Email addresses are unique; duplicate registrations are rejected.
-- Passwords are hashed with bcryptjs before storage.
-- Login issues a signed 30-day token; `/api/me` returns the signed-in user's profile.
-- The existing profile editing endpoints remain protected by the account token.
-- No Google/GitHub client IDs, secrets, or OAuth callback setup are required.
+## Important: the screenshot's /api/ Not Found is not a complete login test
+Opening `https://YOUR-SITE/api/` in a browser asks for the API root. A server can correctly return 404 there while its individual `/api/...` routes work. The screenshot alone does not prove that login routes are broken.
 
-## Render deployment
-The included `render.yaml` configures the Node service, health check, generated `JWT_SECRET`, and a persistent disk mounted at `/var/data` for account storage. Deploy this ZIP/repository as the Render web service. The disk is important: without persistent storage, account records may be lost when the service restarts or is redeployed.
+## Why this ZIP cannot contain a complete login repair
+OAuth login must be completed by the backend. The server must implement the routes above, redirect to Google/GitHub, validate the OAuth callback/state, exchange the authorization code, create or retrieve the user, and issue the app token. This also requires valid provider client IDs/secrets and the site's database/session configuration. Those secrets must be set as private Render environment variables and must not be placed in frontend JavaScript or this ZIP.
 
-## Notes
-The account backend stores user records in `DATA_DIR/users.json`. The local test environment used for this repair did not have npm dependencies installed, so a live HTTP integration test could not be completed here. Render will install the declared dependencies using `npm install`.
+## Render checks needed
+1. Open the Render service that serves `king-md-v1-dxjd.onrender.com` and check its deploy logs.
+2. Confirm the deployed backend actually registers `/api/auth/google/start`, `/api/auth/github/start`, `/api/auth/exchange`, and `/api/me`.
+3. Confirm Google/GitHub OAuth callback URLs exactly match the callback URLs configured in each provider console.
+4. Confirm the required OAuth credentials and database/session environment variables are present in Render.
+5. Test the login buttons from the site homepage, not by opening `/api/` directly.
+
+## Files required for a real repair
+The backend/server source ZIP or repository is required. The supplied `KING MD.zip` is a frontend-only package, so changing its frontend files cannot create missing server-side OAuth routes.
