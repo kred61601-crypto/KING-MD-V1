@@ -28,17 +28,19 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ===== ADMIN CONFIG - YOUR EMAIL + NUMBER =====
+// ===== ADMIN CONFIG - YOUR EMAIL + NUMBER - PUBLIC BLUE TICK =====
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468', '+254726476468', '0726476468', '726476468'];
 function normalizePhone(p){
   let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
   if(s.startsWith('0')) s = '254' + s.slice(1);
-  if(s.startsWith('254')) return s;
   return s;
 }
 function isAdminEmail(email){ return ADMIN_EMAILS.includes(String(email||'').toLowerCase().trim()); }
-function isAdminPhone(phone){ return ADMIN_PHONES.includes(normalizePhone(phone)) || ADMIN_PHONES.includes(String(phone||'').trim()); }
+function isAdminPhone(phone){ 
+  const n = normalizePhone(phone);
+  return ADMIN_PHONES.includes(n) || ADMIN_PHONES.includes(String(phone||'').trim());
+}
 function isOwner(email, phone){ return isAdminEmail(email) || isAdminPhone(phone); }
 
 function loadUsers() {
@@ -46,7 +48,7 @@ function loadUsers() {
   catch (_) { return []; }
 }
 let users = loadUsers();
-// Auto-fix old accounts: if your email/phone is owner, make them admin on startup
+// Auto-fix old accounts on startup: owner always admin + verified
 users.forEach(u=>{
   if(isOwner(u.email, u.phone)){
     u.isAdmin = true; u.isVerified = true;
@@ -60,16 +62,19 @@ function saveUsers() {
   fs.writeFileSync(tmp, JSON.stringify(users, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, USERS_FILE);
 }
+
+// ===== PUBLIC USER - BLUE TICK IS PUBLIC, EVERYONE CAN SEE IT =====
 function publicUser(u) {
   if (!u) return null;
   const x = { ...u };
-  delete x.password; delete x.providerId; delete x.email;
+  delete x.password; delete x.providerId; delete x.email; delete x.phone;
   x.avatar = u.avatar || u.photo || '';
   x.photo = u.photo || u.avatar || '';
   x.cover = u.cover || '';
-  // BLUE TICK: admin always verified
+  // PUBLIC: admin always verified, visible to everyone
   x.isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone));
   x.isVerified = !!(u.isVerified || x.isAdmin);
+  x.verified = x.isVerified;
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
@@ -103,7 +108,7 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4', users: users.length }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 
 // Email + password accounts (no Google/GitHub OAuth setup required).
 app.post('/api/auth/register', async (req, res) => {
@@ -129,7 +134,7 @@ app.post('/api/auth/login', async (req, res) => {
   const phone = normalizePhone(b.phone || '');
   const u = users.find(x => (x.email || '').toLowerCase() === email);
   if (!u || !u.password || !(await bcrypt.compare(password, u.password))) return res.status(401).json({ success:false, error:'Incorrect email or password.' });
-  // Auto-promote owner on login - fixes old account even if created before admin code
+  // Auto-promote owner on login - fixes old account
   if(isOwner(u.email, u.phone || phone)){
     u.isAdmin = true; u.isVerified = true;
     if(phone && !u.phone) u.phone = phone;
