@@ -162,7 +162,7 @@
       b.innerHTML =
         (prem ? '<div class="card" style="border-color:rgba(245,180,23,.4);margin-bottom:12px;font-size:13.5px;color:#f5b417">' + ic('crown') + ' Premium until <b>' + (d.premiumUntil ? EH.date(d.premiumUntil) : '—') + '</b></div>' + (d.outdated ? '<div class="card" style="margin-bottom:12px;font-size:13px;color:var(--t2)">Your bot\'s server is being updated. These settings will be editable again soon.</div>' : '')
           : '<div class="card" style="border-color:rgba(245,180,23,.4);margin-bottom:12px"><b>' + ic('lock') + ' +' + esc(mb.number) + ' is not Premium</b><div class="sub" style="margin:6px 0 12px">These settings are locked for this bot number. Upgrade it to unlock them. Your own account stays as it is.</div><button class="btn gold block tap" data-bup>' + ic('crown') + ' Upgrade +' + esc(mb.number) + ' to Premium</button></div>') +
-        '<div class="grp">' + sw('pOwn', 'Use my WhatsApp name as bot name', 'Shows as <b>' + esc(own) + '</b>', prem && d.useOwnName !== false) + sw('pWm', 'Hide the bottom watermark', 'Removes the EmmyHenz link and credit at the bottom of every reply', prem && d.hideWatermark) +
+        '<div class="grp">' + sw('pOwn', 'Use my WhatsApp name as bot name', 'Shows as <b>' + esc(own) + '</b>', prem && d.useOwnName !== false) + sw('pWm', 'Hide the bottom watermark', 'Removes the KING MD link and credit at the bottom of every reply', prem && d.hideWatermark) +
           sw('pHd', 'Hide the top watermark', d.hideHeader === undefined ? 'Available once your bot\'s server is updated.' : 'Removes the heading with the bot name at the top of every reply', prem && d.hideHeader, d.hideHeader === undefined ? ' disabled' : dis) + sw('pGh', 'Ghost mode 👻', 'Turns your WhatsApp read receipts off — nobody sees blue ticks', d.ghostMode) + '</div>' +
         '<div style="height:16px"></div>' +
         fld('Bot name', 'Leave empty to use the option above', '<input class="inp" id="pName" maxlength="40" placeholder="e.g. Henry Bot" value="' + esc(d.botName || '') + '"' + dis + '>') +
@@ -189,7 +189,7 @@
     function service(kind, el) {
       var on = el.checked, name = kind === 'react' ? 'Channel React' : 'Poll Vote', cmd = kind === 'react' ? '.chreact' : '.pollvote';
       if (!d.premium) { el.checked = !on; return EH.upgradeBot(); }
-      if (!EH.token) { el.checked = !on; EH.toast('Sign in to your account first — your bot uses that account'); return EH.login('Your bot uses your EMMYHENZ account for ' + name + '.'); }
+      if (!EH.token) { el.checked = !on; EH.toast('Sign in to your account first — your bot uses that account'); return EH.login('Your bot uses your KING MD account for ' + name + '.'); }
       var go = function () { el.disabled = true; EH.api('/api/managebot/bot-service', { method: 'POST', body: { server: mb.server, token: mb.token, number: mb.number, kind: kind, on: on } }).then(function (r) { el.disabled = false; var x = r.d; if (!x.success) { el.checked = !on; return EH.toast(x.error || 'Failed', 'er'); } d.channelReact = !!x.react; d.pollVote = !!x.vote; EH.toast(on ? name + ' is on — use ' + cmd + ' in your bot' : name + ' is off', 'ok'); }); };
       if (on) EH.confirm({ title: 'Turn on ' + name + '?', text: 'You can then use ' + cmd + ' in your bot (only you, the owner). Each use counts like in the app: your Premium free ' + (kind === 'react' ? 'reacts' : 'votes') + ' first, then 1 EH coin.', ok: 'Turn on' }).then(function (y) { if (y) go(); else el.checked = false; }); else go();
     }

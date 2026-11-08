@@ -15,7 +15,7 @@
 
     function paint(d) {
       b.innerHTML =
-        '<div class="bl-hero rise" style="padding-bottom:12px"><div class="bl-logo"><img src="/logo.png" alt=""></div><h2>Welcome to EMMYHENZ V4</h2><p>Finish creating your account.</p><div class="chip" style="margin-top:10px;max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.email || '') + '</span></div></div>' +
+        '<div class="bl-hero rise" style="padding-bottom:12px"><div class="bl-logo"><img src="/logo.png" alt=""></div><h2>Welcome to KING MD V4</h2><p>Finish creating your account.</p><div class="chip" style="margin-top:10px;max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(d.email || '') + '</span></div></div>' +
         '<form data-form autocomplete="off">' +
         '<div class="btns"><label class="fld"><span>First name</span><input class="inp" data-f value="' + esc(d.suggestedFirstName || '') + '" placeholder="First name"></label><label class="fld"><span>Last name</span><input class="inp" data-l value="' + esc(d.suggestedLastName || '') + '" placeholder="Last name"></label></div>' +
         '<label class="fld"><span>Username</span><input class="inp" data-un maxlength="20" placeholder="3-20 letters, numbers or _" autocapitalize="none" autocomplete="off"></label><div class="note" data-us style="margin:-6px 4px 6px"></div><div class="chips" data-sug style="margin:0 2px 14px"></div>' +

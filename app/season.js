@@ -17,7 +17,7 @@
 
   /* p = main colour, p2 = second colour of the gradients (buttons, hero), hex = the big badge colour on the Home card */
   var S = {
-    christmas: { name: 'Christmas', icon: '🎄', title: 'Merry Christmas!', hi: '🎄 Merry Christmas from EMMYHENZ V4!', p: '#dc2626', p2: '#16a34a', rgb: '220,38,38',
+    christmas: { name: 'Christmas', icon: '🎄', title: 'Merry Christmas!', hi: '🎄 Merry Christmas from KING MD V4!', p: '#dc2626', p2: '#16a34a', rgb: '220,38,38',
       fx: [{ kind: 'fall', glyphs: ['❄', '❅', '❆'], n: [9, 20], sz: [10, 19], dur: [9, 17], color: '#e0f2fe', glow: 'rgba(56,189,248,.9)' }],
       hat: svg('<path d="M8 44C10 22 24 8 44 8c10 0 14 8 12 16-2 8 0 14 2 20Z" fill="#dc2626"/><path d="M10 40C14 28 22 18 34 12" stroke="#f87171" stroke-width="3" fill="none" opacity=".7"/><rect x="3" y="39" width="58" height="12" rx="6" fill="#fff"/><circle cx="50" cy="9" r="6.5" fill="#fff"/>'),
       edge: edge('<path d="M0 2Q14 11 28 2T56 2" stroke="#374151" stroke-width="1.3" fill="none"/><g><circle cx="14" cy="9" r="3.4" fill="#ef4444"/><circle cx="42" cy="9" r="3.4" fill="#22c55e"/><circle cx="28" cy="4.6" r="3.2" fill="#fbbf24"/><circle cx="1" cy="4.4" r="3.2" fill="#38bdf8"/><circle cx="55" cy="4.4" r="3.2" fill="#38bdf8"/></g><g fill="#fff" opacity=".6"><circle cx="13" cy="8" r="1"/><circle cx="41" cy="8" r="1"/><circle cx="27" cy="3.6" r="1"/></g>') },
@@ -33,11 +33,11 @@
       fx: [{ kind: 'fall', glyphs: ['🌸', '🌼'], n: [5, 10], sz: [13, 21], dur: [11, 19], glow: 'rgba(0,0,0,0)' }, { kind: 'rise', glyphs: ['🥚', '🐣'], n: [2, 4], sz: [18, 25], dur: [12, 20], glow: 'rgba(0,0,0,0)' }],
       hat: svg('<ellipse cx="21" cy="24" rx="7.5" ry="20" transform="rotate(-12 21 24)" fill="#fff" stroke="#e5e7eb" stroke-width="1"/><ellipse cx="21" cy="25" rx="3.6" ry="14" transform="rotate(-12 21 25)" fill="#f9a8d4"/><ellipse cx="43" cy="24" rx="7.5" ry="20" transform="rotate(12 43 24)" fill="#fff" stroke="#e5e7eb" stroke-width="1"/><ellipse cx="43" cy="25" rx="3.6" ry="14" transform="rotate(12 43 25)" fill="#f9a8d4"/>'),
       edge: bunting(['#f9a8d4', '#fde68a', '#86efac', '#c4b5fd']) },
-    valentine: { name: "Valentine's Day", icon: '💖', title: "Happy Valentine's Day!", hi: "💖 Happy Valentine's Day from EMMYHENZ V4!", p: '#e11d48', p2: '#ec4899', rgb: '225,29,72',
+    valentine: { name: "Valentine's Day", icon: '💖', title: "Happy Valentine's Day!", hi: "💖 Happy Valentine's Day from KING MD V4!", p: '#e11d48', p2: '#ec4899', rgb: '225,29,72',
       fx: [{ kind: 'rise', glyphs: ['❤', '💖', '💗', '💕'], n: [6, 13], sz: [14, 25], dur: [9, 17], color: '#fb7185', glow: 'rgba(244,63,94,.7)' }],
       hat: svg('<path d="M32 49C5 30 7 7 25 7c5 0 7 3 7 6 0-3 2-6 7-6 18 0 20 23-7 42Z" fill="#f43f5e"/><path d="M16 14C13 17 14 23 18 28" stroke="#fda4af" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>'),
       edge: edge('<path d="M10 3C4 7 6 12 10 14.5 14 12 16 7 10 3Z" fill="#f43f5e" transform="translate(-1 -2.5) scale(.9)"/><path d="M38 3C32 7 34 12 38 14.5 42 12 44 7 38 3Z" fill="#fb7185" transform="translate(-1 -2.5) scale(.9)"/><circle cx="24" cy="4" r="1.2" fill="#fda4af"/><circle cx="52" cy="6" r="1.2" fill="#fda4af"/>') },
-    eid: { name: 'Eid', icon: '🌙', title: 'Eid Mubarak!', hi: '🌙 Eid Mubarak from EMMYHENZ V4!', p: '#10b981', p2: '#d97706', rgb: '16,185,129',
+    eid: { name: 'Eid', icon: '🌙', title: 'Eid Mubarak!', hi: '🌙 Eid Mubarak from KING MD V4!', p: '#10b981', p2: '#d97706', rgb: '16,185,129',
       fx: [{ kind: 'twinkle', glyphs: ['✦', '★', '✧', '☾'], n: [8, 16], sz: [11, 21], dur: [3.5, 7], color: '#fde68a', glow: 'rgba(251,191,36,.9)' }],
       hat: svg('<path d="M42 5A23 23 0 1 0 42 49 18 18 0 1 1 42 5Z" fill="#fbbf24"/><path d="M47 16L48.9 21 54 22.2 49.9 25.4 51.2 30.6 47 27.6 42.8 30.6 44.1 25.4 40 22.2 45.1 21Z" fill="#fde68a"/>'),
       edge: bunting(['#10b981', '#fbbf24', '#ffffff']) },
@@ -102,7 +102,7 @@
     var X = cur && S[cur]; if (!X) return '';
     var art = cur === 'christmas' ? tree() : cur === 'newyear' ? bells() : '<span class="sxc-em">' + X.icon + '</span>';
     return '<section class="sxc rise" style="--i:1"><div class="sxc-art' + (cur === 'christmas' || cur === 'newyear' ? ' own' : '') + '">' + art + '</div>' +
-      '<div class="sxc-tx"><b>' + EH.esc(X.title) + '</b><small>From all of us at EMMYHENZ V4</small></div><i class="sxc-sh"></i></section>';
+      '<div class="sxc-tx"><b>' + EH.esc(X.title) + '</b><small>From all of us at KING MD V4</small></div><i class="sxc-sh"></i></section>';
   };
 
   function apply(id, cache) {

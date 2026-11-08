@@ -112,9 +112,9 @@
 
   /* ───── FAQ ───── */
   EH.screen('faq', { mount: function (scr) {
-    var f = EH.frame(scr, { bar: 'push', title: 'FAQ', sub: 'Everything about EMMYHENZ V4' }), b = f.body;
+    var f = EH.frame(scr, { bar: 'push', title: 'FAQ', sub: 'Everything about KING MD V4' }), b = f.body;
     b.innerHTML = '<div class="grp rise">' + C.faq.map(function (q, i) { return '<div class="faq' + (i === 0 ? ' open' : '') + '"><button class="faq-q tap" type="button"><span>' + q[0] + '</span>' + ic('chevD') + '</button><div class="faq-a">' + q[1] + '</div></div>'; }).join('') + '</div>' +
-      '<div class="card" style="text-align:center;margin-top:16px"><div class="sub" style="margin-bottom:12px">Still have questions?</div><a class="btn block tap" href="https://t.me/real_emmyhenz" target="_blank" rel="noopener">' + ic('send') + ' Contact us on Telegram</a></div>' + EH.adCard();
+      '<div class="card" style="text-align:center;margin-top:16px"><div class="sub" style="margin-bottom:12px">Still have questions?</div><a class="btn block tap" href="https://t.me/real_KING MD" target="_blank" rel="noopener">' + ic('send') + ' Contact us on Telegram</a></div>' + EH.adCard();
     $$('.faq-q', b).forEach(function (q) { q.onclick = function () { q.parentNode.classList.toggle('open'); }; }); EH.mountAds(scr); return {};
   } });
 
@@ -134,7 +134,7 @@
 
   /* ───── Change log ───── */
   EH.screen('changelog', { mount: function (scr) {
-    var f = EH.frame(scr, { bar: 'push', title: 'Change log', sub: 'Every update to EMMYHENZ V4' }), b = f.body, kind = 'all', data = null;
+    var f = EH.frame(scr, { bar: 'push', title: 'Change log', sub: 'Every update to KING MD V4' }), b = f.body, kind = 'all', data = null;
     b.innerHTML = '<div class="seg" data-k><button data-k="all" class="on">All</button><button data-k="bot">Bot</button><button data-k="site">Site</button></div><div data-list style="margin-top:14px"><div class="spinner"></div></div>';
     EH.api('/changelog.json', { auth: false }).then(function (r) { var l = Array.isArray(r.d) ? r.d : []; return EH.api('/api/announcements', { auth: false }).then(function (a) { var adm = ((a.d && a.d.changelog) || []).map(function (c) { return { at: c.date, kind: 'news', title: c.title, version: c.version, body: c.body }; }); return l.concat(adm); }).catch(function () { return l; }); }).then(function (l) { data = l.sort(function (x, y) { return new Date(y.at) - new Date(x.at); }); EH.ls.set('eh_cl_seen', String(data[0] ? new Date(data[0].at).getTime() : Date.now())); paint(); });
     $$('[data-k] button', b).forEach(function (x) { x.onclick = function () { kind = x.dataset.k; $$('[data-k] button', b).forEach(function (y) { y.classList.toggle('on', y === x); }); paint(); }; });

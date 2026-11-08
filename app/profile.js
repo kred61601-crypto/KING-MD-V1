@@ -210,13 +210,13 @@
   EH.screen('profile', { tab: true, mount: function (scr) {
     scr.innerHTML = '<div class="body pfb tabpad"></div>'; var body = $('.body', scr), first = true, last = '';
     function guest() {
-      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join EMMYHENZ V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, EH coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
+      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join KING MD V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, EH coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
         '<div class="sec"><h3>Appearance</h3></div>' + appearance(null) + '<div class="sec"><h3>More</h3></div><div class="grp">' + links() + '</div></div>';
       wireTheme();
     }
     function links() {
       var r = function (go, icn, a, b, t, s) { return '<div class="row tap" data-go="' + go + '"><div class="ri" style="--a:' + a + ';--b:' + b + '">' + ic(icn) + '</div><div class="rt"><b>' + t + '</b><small>' + s + '</small></div>' + ic('chevR', 'chev') + '</div>'; };
-      return r('terms', 'doc', '#94a3b8', '#475569', 'Terms & Conditions', 'How EMMYHENZ V4 works') + r('privacy', 'shield', '#94a3b8', '#475569', 'Privacy Policy', 'What we collect and why') + r('faq', 'help', '#94a3b8', '#475569', 'FAQ', 'Answers to common questions') + r('changelog', 'clock', '#94a3b8', '#475569', 'Change Log', 'Every update to EMMYHENZ V4');
+      return r('terms', 'doc', '#94a3b8', '#475569', 'Terms & Conditions', 'How KING MD V4 works') + r('privacy', 'shield', '#94a3b8', '#475569', 'Privacy Policy', 'What we collect and why') + r('faq', 'help', '#94a3b8', '#475569', 'FAQ', 'Answers to common questions') + r('changelog', 'clock', '#94a3b8', '#475569', 'Change Log', 'Every update to KING MD V4');
     }
     function appearance(u) {
       var sw = u ? Object.keys(EH.ACCENTS).map(function (k) { var prem = k === 'gold' || k === 'aurora', bg = k === 'aurora' ? 'linear-gradient(135deg,#7c3aed,#db2777 55%,#f59e0b)' : k === 'gold' ? 'linear-gradient(135deg,#b8860b,#ffe27a 50%,#f0b429)' : EH.ACCENTS[k];

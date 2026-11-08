@@ -1,4 +1,4 @@
-/* EMMYHENZ V4 app — core: icons, helpers, account, router, sheets, toasts, ads, login */
+/* KING MD V4 app — core: icons, helpers, account, router, sheets, toasts, ads, login */
 (function () {
   'use strict';
   var EH = window.EH = {};
@@ -302,7 +302,7 @@
   EH.frame = function (scr, o) {
     o = o || {}; var bar = '';
     if (o.bar === 'brand') {
-      bar = '<div class="bar"><div class="logo"><img src="/logo.png" alt=""></div><div class="brand"><b>EMMYHENZ</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
+      bar = '<div class="bar"><div class="logo"><img src="/logo.png" alt=""></div><div class="brand"><b>KING MD</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
     } else if (o.bar === 'push') {
       var ico = o.logo ? '<span class="bico lg"><img src="/logo.png" alt=""></span>' : o.icon ? '<span class="bico" style="--a:' + (o.ia || '#ff6aa8') + ';--b:' + (o.ib || '#e11d63') + '">' + EH.ic(o.icon) + '</span>' : '';
       bar = '<div class="bar"><button class="back tap" data-back aria-label="Back">' + EH.ic('chevL') + '</button>' + ico + '<div class="ttl">' + EH.esc(o.title || '') + (o.verified ? ' ' + EH.vBadge(15) : '') + (o.sub ? '<small>' + EH.esc(o.sub) + '</small>' : '') + '</div><div class="acts">' + (o.acts || '') + '</div></div>';
