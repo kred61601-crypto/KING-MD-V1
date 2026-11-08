@@ -1,4 +1,5 @@
 // KING MD V4 — authentication/profile backend for the existing frontend
+// Node 18+. OAuth secrets belong in Render Environment, never in browser code.
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -18,10 +19,6 @@ app.use(express.static(__dirname));
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || '';
-
-// === PUT YOUR NEW GROQ KEY HERE - NO ENVIRONMENT NEEDED ===
-const GROQ_KEY = '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';
-
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -79,6 +76,8 @@ const pending = new Map();
 const onboarding = new Map();
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
+
+// Email + password accounts (no Google/GitHub OAuth setup required).
 app.post('/api/auth/register', async (req, res) => {
   try {
     const b = req.body || {}, email = String(b.email || '').trim().toLowerCase();
@@ -189,6 +188,8 @@ app.post('/api/auth/exchange', (req, res) => {
 });
 app.post('/api/logout', (req, res) => res.json({ success: true }));
 app.get('/api/me', requireUser, (req, res) => res.json({ success: true, user: publicUser(req.account) }));
+
+// Existing frontend's first-time account setup flow
 app.get('/api/onboarding/info', (req, res) => {
   const x = onboarding.get(String(req.query.token || ''));
   if (!x || Date.now() - x.at > 30 * 60 * 1000) return res.status(401).json({ success: false, error: 'Your sign-up session expired. Please sign in again.' });
@@ -220,6 +221,8 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
   users.push(u); saveUsers(); onboarding.delete(key);
   res.json({ success: true, token: tokenFor(u), signupBonusCoins: 3, numberLinked: false });
 });
+
+// Profile and user directory used by the supplied app/profile.js
 app.post('/api/profile/edit', requireUser, (req, res) => {
   const u = req.account, b = req.body || {}, nm = String(b.username || u.username).trim();
   if (!slugOK(nm)) return res.json({ success: false, error: 'Username must be 3–20 letters, numbers or underscores.' });
@@ -261,6 +264,8 @@ app.post('/api/users/:username/like', requireUser, (req, res) => {
   if (!target) return res.json({ success: false, error: 'User not found.' });
   target.likes = (target.likes || 0) + 1; saveUsers(); res.json({ success: true });
 });
+
+// Minimal community endpoints retained from the supplied starter backend
 app.get('/api/community/status', (req, res) => res.json({ success: true, enabled: true, locked: false }));
 app.get('/api/community/messages', (req, res) => res.json({ success: true, messages: messages.slice(-40), pinnedCount: 1, hasMore: false }));
 app.get('/api/community/since', (req, res) => res.json({ success: true, messages: messages.filter(m => new Date(m.createdAt).getTime() > (Number(req.query.after) || 0)) }));
@@ -279,56 +284,13 @@ app.post('/api/community/react', requireUser, (req, res) => {
 });
 app.get('/api/community/stickers', (req, res) => res.json({ success: true, stickers: [{ id: 'thanks', name: 'Thank you' }, { id: 'ok', name: 'Okay' }, { id: 'lol', name: 'LOL' }] }));
 
-// === KING MD AI - ChatGPT style, ONLY logged-in users ===
-app.post('/api/ai/chat', requireUser, async (req, res) => {
-  const b = req.body || {};
-  const userMsg = String(b.message || b.prompt || b.text || '').trim();
-  const history = Array.isArray(b.history) ? b.history.slice(-10) : [];
-  if (!userMsg) return res.json({ success: false, error: 'Empty message' });
-
-  const fallback = () => {
-    const q = userMsg.toLowerCase();
-    let reply = 'I am KING MD V4 AI. Ask me how to pair your bot, deploy it, or fix an error!';
-    if (q.includes('pair') || q.includes('link')) reply = 'To pair: Go to Deploy a Bot > Enter WhatsApp number > Get Pairing Code > WhatsApp > Linked Devices > Link with code.';
-    else if (q.includes('deploy')) reply = 'To deploy: Go to Deploy a Bot, choose plan, enter number, tap Deploy.';
-    else if (q.includes('hello') || q.includes('hi')) reply = 'Hello King! 👑 Welcome to KING MD V4. How can I help?';
-    return reply;
-  };
-
-  if (!GROQ_KEY || GROQ_KEY === 'PUT_YOUR_NEW_KEY_HERE') {
-    const reply = fallback();
-    return res.json({ success: true, reply, response: reply, offline: true });
-  }
-
-  try {
-    const cleanHistory = history.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + GROQ_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: 'You are KING MD V4 AI, a helpful friendly assistant for the KING MD WhatsApp bot website. You answer ANY question like ChatGPT - jokes, homework, coding, life, bot help, everything. Be short, fun, helpful, use simple English. If asked about KING MD bot: pairing code is in Deploy a Bot > enter number > Get Pairing Code > WhatsApp > Linked Devices > Link with code.' },
-          ...cleanHistory,
-          { role: 'user', content: userMsg }
-        ],
-        temperature: 0.7,
-        max_tokens: 600
-      })
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      console.error('Groq error:', data?.error?.message || r.status);
-      const reply = fallback();
-      return res.json({ success: true, reply, response: reply, offline: true });
-    }
-    const reply = data.choices?.[0]?.message?.content?.trim() || fallback();
-    res.json({ success: true, reply, response: reply });
-  } catch (e) {
-    console.error('AI chat error:', e.message);
-    const reply = fallback();
-    res.json({ success: true, reply, response: reply, offline: true });
-  }
+app.post('/api/ai/chat', (req, res) => {
+  const q = String((req.body || {}).message || (req.body || {}).prompt || '').toLowerCase();
+  let reply = 'I am KING MD V4 AI. Ask me how to pair your bot, deploy it, or fix an error!';
+  if (q.includes('pair') || q.includes('link')) reply = 'To pair: Go to Deploy a Bot > Enter WhatsApp number > Get Pairing Code > WhatsApp > Linked Devices > Link with code.';
+  else if (q.includes('deploy')) reply = 'To deploy: Go to Deploy a Bot, choose plan, enter number, tap Deploy.';
+  else if (q.includes('hello') || q.includes('hi')) reply = 'Hello King! 👑 Welcome to KING MD V4. How can I help?';
+  res.json({ success: true, reply, response: reply });
 });
 app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
