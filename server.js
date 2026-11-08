@@ -29,12 +29,13 @@ const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ===== YOUR ADMIN - EMAIL + NUMBER + USERNAME =====
+// PUT YOUR REAL ONES HERE ONLY - DO NOT SHARE THIS FILE PUBLICLY
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
-const ADMIN_PHONES = ['254726476468', '+254726476468', '0726476468', '726476468'];
-const ADMIN_USERNAMES = ['affiliateguru54', 'affiliateguru547', 'denzel1968', 'denzel', 'denzeladmin', 'kingmd', 'king_md'];
+const ADMIN_PHONES = ['254726476468'];
+const ADMIN_USERNAMES = ['denzel1968'];
 function normalizePhone(p){
   let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
-  if(s.startsWith('0')) s = '254' + s.slice(1);
+  if(s.startsWith('0')) s = '254726476468' + s.slice(1);
   return s;
 }
 function isOwner(email, phone, username){
@@ -156,7 +157,7 @@ app.post('/api/make-me-admin', async (req,res)=>{
   if(email) u = users.find(x=>(x.email||'').toLowerCase()===email);
   if(!u && phone) u = users.find(x=> normalizePhone(x.phone||'')===phone);
   if(!u) return res.json({ success:false, error:'Account not found.' });
-  if(!isOwner(u.email, u.phone || phone, u.username) && email!=='affiliateguru547@gmail.com' && phone!=='254726476468') return res.json({ success:false, error:'Only owner can be admin' });
+  if(!isOwner(u.email, u.phone || phone, u.username)) return res.json({ success:false, error:'Only owner can be admin' });
   u.isAdmin = true; u.isVerified = true; if(phone) u.phone = phone; saveUsers();
   res.json({ success:true, message:'Now ADMIN + Blue Tick', user: publicUser(u) });
 });
