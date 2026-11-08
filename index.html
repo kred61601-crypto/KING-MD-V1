@@ -2215,7 +2215,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       </div>
       <div id="loginWarn" class="warn-box" style="display:none"><i class="fas fa-exclamation-triangle"></i><span>You've used your free slot. <a href="#" onclick="A.openM('login')" style="color:var(--p)">Sign in</a> for more space.</span></div>
       <form id="pairForm">
-        <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 2349012345678"></div>
+        <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 254726476468"></div>
         <div class="fg" id="pairVerifyRow" style="display:none"><label class="fl">Security Check</label><div class="cf-wrap" id="pairVerifyBox"></div></div>
         <div class="pbar" id="pairBar" style="display:none"><div class="pfill" id="pairFill"></div></div>
         <div style="font-size:.72rem;color:var(--t2);text-align:center;margin-bottom:.7rem">By continuing you accept our <a href="#" onclick="A.go('privacy');return false" style="color:var(--p);font-weight:600">Privacy Policy</a> and <a href="#" onclick="A.go('terms');return false" style="color:var(--p);font-weight:600">Terms &amp; Conditions</a>.</div>
@@ -2789,7 +2789,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
           <div class="ctitle"><i class="fas fa-crown" style="color:#f5b417"></i> Grant Premium to a Bot</div>
           <div class="ms" style="margin-bottom:.8rem">Type the bot's WhatsApp number. That bot gets premium (own name, picture, channel, premium commands, private .ping) and the account that owns it gets unlimited Reactions. Sold at a flat ₦1,500/month — the week unit below is just for a manual/complimentary grant of less than a month.</div>
           <div class="ctl-grid">
-            <input type="tel" id="premNumber" class="fi span2" placeholder="Bot number e.g. 2349012345678">
+            <input type="tel" id="premNumber" class="fi span2" placeholder="Bot number e.g. 254726476468">
             <input type="number" id="premMonths" class="fi" value="1" min="1" max="52" title="How many">
             <select id="premUnit" class="fi"><option value="week">week(s)</option><option value="month" selected>month(s)</option></select>
             <button class="btn bp span2" id="premGrantBtn" onclick="A.adminGrantPremium()"><i class="fas fa-crown"></i> Grant</button>
@@ -2809,7 +2809,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
           <div class="ctitle"><i class="fas fa-ban" style="color:var(--er)"></i> Hold a Number</div>
           <div class="ms" style="margin-bottom:.8rem">A number on hold can no longer deploy a bot — it gets "Your number is on hold" instead. Paste the number from Premium/Sessions, add a note for yourself, and tick the box to also remove the bot it already has.</div>
           <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-            <input type="tel" id="freezeNumber" class="fi" placeholder="Number e.g. 2349012345678" style="flex:2;min-width:180px">
+            <input type="tel" id="freezeNumber" class="fi" placeholder="Number e.g. 254726476468" style="flex:2;min-width:180px">
             <input type="text" id="freezeReason" class="fi" maxlength="120" placeholder="Reason (only you see it)" style="flex:2;min-width:160px">
           </div>
           <label style="display:flex;align-items:center;gap:.5rem;margin:.7rem 0;font-size:.84rem;color:var(--t1);cursor:pointer"><input type="checkbox" id="freezeAlsoDelete"> Also delete its bot right now</label>
@@ -2984,7 +2984,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   <div class="prem-crown"><i class="fas fa-crown"></i></div>
   <div class="mt" style="text-align:center">Are you a premium user?</div>
   <div class="ms" style="text-align:center" id="pnMsg">Enter the bot number you have premium on. If it is premium, it is linked to this account and the Premium perks switch on.</div>
-  <input class="fi" id="pnNumber" inputmode="numeric" placeholder="e.g. 2349012345678" style="margin:.4rem 0 .7rem;text-align:center" onkeydown="if(event.key==='Enter')A.premNumCheck()">
+  <input class="fi" id="pnNumber" inputmode="numeric" placeholder="e.g. 254726476468" style="margin:.4rem 0 .7rem;text-align:center" onkeydown="if(event.key==='Enter')A.premNumCheck()">
   <div id="pnResult"></div>
   <button class="btn bp bfw" id="pnBtn" onclick="A.premNumCheck()"><i class="fas fa-magnifying-glass"></i> Check my number</button>
   <button class="rw-later" onclick="A.openHowLink()"><i class="fas fa-circle-play"></i> See how linking works</button>
@@ -3144,7 +3144,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div style="font-weight:700;font-size:.86rem;margin-bottom:.15rem"><i class="fas fa-crown" style="color:#f5b417"></i> <span id="cvPremTitle">Are you a premium user?</span></div>
         <div style="font-size:.76rem;color:var(--t2);margin-bottom:.55rem" id="cvPremSub">Enter your premium bot number to unlock unlimited Channel Poll Voting.</div>
         <div style="display:flex;gap:.45rem" id="cvPremForm">
-          <input type="tel" id="cvPremNumber" class="fi" placeholder="e.g. 2349012345678" inputmode="numeric" style="flex:1">
+          <input type="tel" id="cvPremNumber" class="fi" placeholder="e.g. 254726476468" inputmode="numeric" style="flex:1">
           <button type="button" class="btn bp" id="cvPremBtn" onclick="A.cvUnlock()">Unlock</button>
         </div>
       </div>
@@ -3197,7 +3197,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div style="font-weight:700;font-size:.86rem;margin-bottom:.15rem"><i class="fas fa-crown" style="color:#f5b417"></i> <span id="crPremTitle">Are you a premium user?</span></div>
         <div style="font-size:.76rem;color:var(--t2);margin-bottom:.55rem" id="crPremSub">Enter your premium bot number to unlock unlimited Reactions.</div>
         <div style="display:flex;gap:.45rem" id="crPremForm">
-          <input type="tel" id="crPremNumber" class="fi" placeholder="e.g. 2349012345678" inputmode="numeric" style="flex:1">
+          <input type="tel" id="crPremNumber" class="fi" placeholder="e.g. 254726476468" inputmode="numeric" style="flex:1">
           <button type="button" class="btn bp" id="crPremBtn" onclick="A.crCheckPremium()">Unlock</button>
         </div>
       </div>
@@ -3340,7 +3340,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   <button class="btn bs bfw" id="arDelBtn" onclick="A.arDelete()" style="display:none;margin-top:.5rem;color:var(--er)"><i class="fas fa-trash"></i> Remove channel</button>
 </div></div>
 
-<div class="modal" id="m-redeemCoin"><div class="mc"><button class="mc-close" onclick="A.closeM('redeemCoin')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-ticket-alt"></i> Redeem Coin Code</div><div class="ms">Enter your purchased code below</div><div class="fg"><input type="text" id="coinRedeemCode" class="fi" placeholder="e.g. EMMY2025" style="text-transform:uppercase"></div><button class="btn bp bfw" onclick="A.redeemCoinCode()"><i class="fas fa-gift"></i> Redeem</button></div></div>
+<div class="modal" id="m-redeemCoin"><div class="mc"><button class="mc-close" onclick="A.closeM('redeemCoin')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-ticket-alt"></i> Redeem Coin Code</div><div class="ms">Enter your purchased code below</div><div class="fg"><input type="text" id="coinRedeemCode" class="fi" placeholder="e.g. Denzel2025" style="text-transform:uppercase"></div><button class="btn bp bfw" onclick="A.redeemCoinCode()"><i class="fas fa-gift"></i> Redeem</button></div></div>
 
 <div class="modal" id="m-premCard"><div class="mc pc2m">
   <button class="mc-close" onclick="A.closeM('premCard')"><i class="fas fa-times"></i></button>
@@ -3370,7 +3370,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   <div style="text-align:center;margin:-.3rem 0 .8rem"><button type="button" class="how-vid" onclick="A.openHowVideo('premium-pay')"><i class="fas fa-circle-play"></i> See how paying works</button></div>
   <div class="pp-banner" id="ppRenewBox" style="display:none"></div>
   <div class="pp-banner" id="ppGiftNote" style="display:none"><i class="fas fa-gift"></i> <b>Buying for someone else.</b> Enter the WhatsApp number of the person you are buying for. It will <b>not</b> be linked to your account. After paying you get a receipt showing <b>their number is now Premium</b> — screenshot it and send it to them.</div>
-  <div class="fg" id="ppNumRow"><label class="fl" id="ppNumLbl">Bot number to make Premium</label><div class="pp-numwrap" id="ppNumWrap"><input type="tel" id="ppNumber" class="fi" inputmode="numeric" placeholder="e.g. 2349012345678" onfocus="this.select()"><span class="pp-spin"></span></div></div>
+  <div class="fg" id="ppNumRow"><label class="fl" id="ppNumLbl">Bot number to make Premium</label><div class="pp-numwrap" id="ppNumWrap"><input type="tel" id="ppNumber" class="fi" inputmode="numeric" placeholder="e.g. 254726476468" onfocus="this.select()"><span class="pp-spin"></span></div></div>
   <div class="fg"><label class="fl">Your country</label><select id="ppCountry" class="fi" onchange="A.ppUpdate()"></select></div>
   <div class="fg"><label class="fl">For how long</label><div class="pp-months" id="ppMonths"></div></div>
   <div class="pp-total"><b id="ppTotal">—</b><span id="ppFor"></span></div>
@@ -3506,7 +3506,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   </div>
   <div class="fg">
     <label class="fl">Bot Number (optional)</label>
-    <input type="tel" id="onbNumber" class="fi" placeholder="e.g. 2349012345678 — your WhatsApp bot number" inputmode="numeric" oninput="A.checkOnboardNumber(this.value)">
+    <input type="tel" id="onbNumber" class="fi" placeholder="e.g. 254726476468 — your WhatsApp bot number" inputmode="numeric" oninput="A.checkOnboardNumber(this.value)">
     <div class="uname-status" id="onbNumberStatus"></div>
     <div style="font-size:.7rem;color:var(--t2);margin-top:.25rem;line-height:1.4">Link it now and Premium works on this account straight away if the number is premium. You can unbind it any time from your profile.</div>
   </div>
@@ -3557,7 +3557,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 
 <div class="modal" id="m-gift"><div class="mc"><button class="mc-close" onclick="A.closeM('gift')"><i class="fas fa-times"></i></button><div class="mt">🎁 Gift Coins</div><div class="ms">Send coins to another user — they can accept or decline. Declined gifts are refunded to you.</div><div class="fg"><label class="fl">Recipient Username</label><input type="text" id="giftUser" class="fi" placeholder="username (no @)"></div><div class="fg"><label class="fl">Amount of Coins to Gift</label><div style="display:flex;gap:.5rem;flex-wrap:wrap" id="giftAmtBtns"><button type="button" class="btn bs gift-amt" data-amt="5" onclick="A.selectGiftAmt(5,this)">5 🪙</button><button type="button" class="btn bs gift-amt" data-amt="10" onclick="A.selectGiftAmt(10,this)">10 🪙</button><button type="button" class="btn bs gift-amt" data-amt="20" onclick="A.selectGiftAmt(20,this)">20 🪙</button><button type="button" class="btn bs gift-amt" data-amt="50" onclick="A.selectGiftAmt(50,this)">50 🪙</button></div><input type="number" id="giftAmt" class="fi" placeholder="Or enter custom amount" style="margin-top:.5rem;max-width:180px" min="1"></div><div class="fg"><label class="fl">Message (optional)</label><input type="text" id="giftMsg" class="fi" placeholder="e.g. Thanks for the help!" maxlength="200"></div><button class="btn bp bfw" onclick="A.sendGift(this)"><i class="fas fa-gift"></i> Send Gift</button></div></div>
 
-<div class="modal" id="m-createCode"><div class="mc"><button class="mc-close" onclick="A.closeM('createCode')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-ticket-alt" style="color:var(--p)"></i> Create Redeem Code</div><div class="ms">Generate a code users can redeem for rewards</div><div class="fg"><label class="fl">Type</label><select id="codeType" class="fi" onchange="A.onCodeTypeChange()"><option value="bot_space">Bot Space(s)</option><option value="referral">Referral Credit(s)</option><option value="coins">Coins</option><option value="pro">Premium (value = months)</option><option value="verification">Verification Badge</option></select></div><div class="fg" id="codePlanKeyWrap" style="display:none"><label class="fl">Plan</label><select id="codePlanKey" class="fi"><option value="premium">Premium</option></select></div><div class="fg"><label class="fl" id="codeValueLabel">Value (amount to give)</label><input type="number" id="codeValue" class="fi" placeholder="e.g. 2" min="1" required></div><div class="fg"><label class="fl">Max Uses (how many users can use it)</label><input type="number" id="codeMaxUses" class="fi" placeholder="e.g. 50" min="1" required></div><div class="fg"><label class="fl">Expires in (days) — leave empty for permanent</label><input type="number" id="codeExpiry" class="fi" placeholder="Leave empty = permanent" min="1"></div><div class="fg"><label class="fl">Custom Code (optional — leave empty to auto-generate)</label><input type="text" id="codeCustom" class="fi" placeholder="e.g. EMMY2024" style="text-transform:uppercase"></div><button class="btn bp bfw" onclick="A.createCode()"><i class="fas fa-plus"></i> Create Code</button></div></div>
+<div class="modal" id="m-createCode"><div class="mc"><button class="mc-close" onclick="A.closeM('createCode')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-ticket-alt" style="color:var(--p)"></i> Create Redeem Code</div><div class="ms">Generate a code users can redeem for rewards</div><div class="fg"><label class="fl">Type</label><select id="codeType" class="fi" onchange="A.onCodeTypeChange()"><option value="bot_space">Bot Space(s)</option><option value="referral">Referral Credit(s)</option><option value="coins">Coins</option><option value="pro">Premium (value = months)</option><option value="verification">Verification Badge</option></select></div><div class="fg" id="codePlanKeyWrap" style="display:none"><label class="fl">Plan</label><select id="codePlanKey" class="fi"><option value="premium">Premium</option></select></div><div class="fg"><label class="fl" id="codeValueLabel">Value (amount to give)</label><input type="number" id="codeValue" class="fi" placeholder="e.g. 2" min="1" required></div><div class="fg"><label class="fl">Max Uses (how many users can use it)</label><input type="number" id="codeMaxUses" class="fi" placeholder="e.g. 50" min="1" required></div><div class="fg"><label class="fl">Expires in (days) — leave empty for permanent</label><input type="number" id="codeExpiry" class="fi" placeholder="Leave empty = permanent" min="1"></div><div class="fg"><label class="fl">Custom Code (optional — leave empty to auto-generate)</label><input type="text" id="codeCustom" class="fi" placeholder="e.g. Denzel2024" style="text-transform:uppercase"></div><button class="btn bp bfw" onclick="A.createCode()"><i class="fas fa-plus"></i> Create Code</button></div></div>
 
 <!-- API keys: create / list / endpoints+playground (opened from Profile → API keys) -->
 <div class="modal" id="m-akCreate"><div class="mc ak" style="max-width:440px"><button class="mc-close" onclick="A.closeM('akCreate')"><i class="fas fa-times"></i></button>
@@ -3642,14 +3642,14 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 <div class="modal" id="m-premReplace"><div class="mc ak" style="max-width:400px"><button class="mc-close" onclick="A.closeM('premReplace')"><i class="fas fa-times"></i></button>
   <div class="mt">Replace number</div>
   <div class="ms" id="premReplaceSub" style="margin-bottom:.9rem"></div>
-  <div class="fg"><label class="fl">New bot number (with country code)</label><input type="tel" id="premReplaceTo" class="fi" placeholder="e.g. 2349012345678" inputmode="numeric"></div>
+  <div class="fg"><label class="fl">New bot number (with country code)</label><input type="tel" id="premReplaceTo" class="fi" placeholder="e.g. 254726476468" inputmode="numeric"></div>
   <button class="btn bp bfw" id="premReplaceBtn" onclick="A.confirmPremReplace()"><i class="fas fa-right-left"></i> Replace</button>
 </div></div>
 
 <div class="modal" id="m-addSpaces"><div class="mc"><button class="mc-close" onclick="A.closeM('addSpaces')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-robot" style="color:var(--p)"></i> Add Bot Spaces</div><div class="ms">Manually add bot spaces to <strong id="addSpacesUser"></strong></div><input type="hidden" id="addSpacesUserId"><div class="fg"><label class="fl">Number of Spaces to Add</label><input type="number" id="addSpacesNum" class="fi" placeholder="e.g. 2" min="1" max="10"></div><button class="btn bp bfw" onclick="A.doAddSpaces()"><i class="fas fa-plus"></i> Add Spaces</button></div></div>
 
 <div class="modal" id="m-adminPair"><div class="mc"><button class="mc-close" onclick="A.closeM('adminPair')"><i class="fas fa-times"></i></button><div class="mt"><i class="fas fa-user-shield" style="color:var(--p)"></i> Pair to a Specific Server</div><div class="ms">Bypasses normal routing — pairs directly to the server you pick, for testing. Not used by real users.</div>
-  <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="adminPairPhone" class="fi" placeholder="e.g. 2349012345678"></div>
+  <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="adminPairPhone" class="fi" placeholder="e.g. 254726476468"></div>
   <div class="fg"><label class="fl">Target Server</label><select id="adminPairServer" class="fi"><option value="">Loading…</option></select></div>
   <button class="btn bp bfw" id="adminPairBtn" onclick="A.adminPairSubmit()"><i class="fas fa-bolt"></i> Generate Pairing Code</button>
   <div id="adminPairResult" style="display:none;margin-top:1rem"></div>
@@ -7911,7 +7911,7 @@ const A = {
     const el = document.getElementById('onbNumberStatus'); if (!el) return;
     const n = String(v || '').replace(/\D/g, '');
     if (!n) { el.textContent = ''; el.className = 'uname-status'; return; }
-    if (n.length < 10 || n.length > 15 || n.startsWith('0')) { el.textContent = 'Use the country code, e.g. 2349012345678'; el.className = 'uname-status bad'; this._onbNumberOk = false; return; }
+    if (n.length < 10 || n.length > 15 || n.startsWith('0')) { el.textContent = 'Use the country code, e.g. 254726476468'; el.className = 'uname-status bad'; this._onbNumberOk = false; return; }
     el.textContent = 'Checking…'; el.className = 'uname-status';
     this._onbNumTimer = setTimeout(async () => {
       try {
@@ -8082,7 +8082,7 @@ const A = {
       body.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap"><div style="font-weight:800;font-size:.95rem">+${this._esc(n)} ${this.user.isPremium ? '<span class="badge b-y" style="font-size:.6rem"><i class="fas fa-crown"></i> Premium</span>' : ''}</div><button class="btn bdr" style="padding:.4rem .8rem;font-size:.78rem" onclick="A.unbindNumber()"><i class="fas fa-link-slash"></i> Unbind number</button></div>
         <div style="font-size:.7rem;color:var(--t2);margin-top:.45rem;line-height:1.4">Unbinding lets you (or someone else) link this number to a different account. If this number gave you Premium, the account Premium goes with it.</div>`;
     } else {
-      body.innerHTML = `<div style="display:flex;gap:.45rem"><input type="tel" id="profNumInput" class="fi" placeholder="e.g. 2349012345678" inputmode="numeric" style="flex:1"><button class="btn bp" id="profNumBtn" onclick="A.bindNumber()">Link</button></div><button type="button" onclick="A.openHowLink()" style="background:none;border:none;color:var(--p);font-weight:700;font-size:.78rem;margin-top:.55rem;cursor:pointer;padding:0;font-family:inherit"><i class="fas fa-circle-play"></i> See how linking works</button>`;
+      body.innerHTML = `<div style="display:flex;gap:.45rem"><input type="tel" id="profNumInput" class="fi" placeholder="e.g. 254726476468" inputmode="numeric" style="flex:1"><button class="btn bp" id="profNumBtn" onclick="A.bindNumber()">Link</button></div><button type="button" onclick="A.openHowLink()" style="background:none;border:none;color:var(--p);font-weight:700;font-size:.78rem;margin-top:.55rem;cursor:pointer;padding:0;font-family:inherit"><i class="fas fa-circle-play"></i> See how linking works</button>`;
     }
   },
   async bindNumber() {
@@ -12005,7 +12005,7 @@ const A = {
   // The video is a plain file served by this site (/tutorial.mp4, supports seeking). Nothing is
   // downloaded until the page is opened, and then only the first bit until play is pressed.
   _tutorialSteps: [
-    { t: 'Type your WhatsApp number', d: 'On the home page, enter your number with the country code — no + and no spaces, e.g. 2349012345678. Tick the verify box.' },
+    { t: 'Type your WhatsApp number', d: 'On the home page, enter your number with the country code — no + and no spaces, e.g. 254726476468. Tick the verify box.' },
     { t: 'Tap "Generate Pairing Code"', d: 'You get a short code. Keep this page open — you will type it into WhatsApp next.' },
     { t: 'Open Linked Devices', d: 'In WhatsApp go to Settings → Linked Devices → Link a Device, then choose "Link with phone number instead".' },
     { t: 'Enter the code', d: 'Type the code exactly as shown. WhatsApp says the device is linked and your bot comes online.' },
@@ -12814,7 +12814,7 @@ const A = {
     document.getElementById('ppRenewBox').style.display = renew ? '' : 'none';
     document.getElementById('ppNumLbl').textContent = g ? 'Their WhatsApp number (with country code)' : renew ? 'Your Premium number' : 'Bot number to make Premium';
     inp.readOnly = renew && !!d.number;
-    inp.placeholder = g ? 'Their number, e.g. 2348012345678' : 'e.g. 2349012345678';
+    inp.placeholder = g ? 'Their number, e.g. 254726476468' : 'e.g. 254726476468';
     document.getElementById('ppGiftTxt').textContent = g ? 'Buying for yourself instead?' : 'Buying for someone else?';
     document.getElementById('ppGiftSub').textContent = g ? 'Go back to paying for your own number.' : "Pay for another person's number — it won't be linked to your account.";
     document.getElementById('ppBtn').innerHTML = `<i class="fas fa-lock"></i> ${g ? 'Pay for their Premium' : renew ? 'Renew securely' : 'Pay securely'}`;
@@ -13039,27 +13039,37 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', () =
 // longer carries the bot token.
 let selectedFile = null;
 
-// ── Support chat: KING MD V4 AI answers; "Report to Emmy" opens the report form ──
+// ── Support chat: KING MD V4 AI answers; "Report to Denzel" opens the report form ──
 const _SUP = { sid: null, msgs: [], busy: false, started: false };
 const _SUP_KEY = 'eh_sup_chat';
-const _SUP_GREETING = "Hi! 👋 I'm *KING MD V4 AI*, Emmy's personal assistant. I can help with anything about the site or your bot. What do you need?";
+const _SUP_GREETING = "Hi! 👋 I'm *KING MD V4 AI*, KING MD personal assistant. I can help with anything about the site or your bot. What do you need?";
 const _supSleep = (ms) => new Promise(r => setTimeout(r, ms));
 function _supSave() { try { localStorage.setItem(_SUP_KEY, JSON.stringify({ sid: _SUP.sid, msgs: _SUP.msgs.slice(-40), t: Date.now() })); } catch (_) {} }
 function _supLoad() {
     try {
         const d = JSON.parse(localStorage.getItem(_SUP_KEY) || 'null');
-        if (d && d.sid && Date.now() - d.t < 60 * 60 * 1000) { _SUP.sid = d.sid; _SUP.msgs = Array.isArray(d.msgs) ? d.msgs : []; }
+        if (d && d.sid && d.t && Date.now() - d.t < 60 * 60 * 1000) { _SUP.sid = d.sid; _SUP.msgs = Array.isArray(d.msgs) ? d.msgs : []; }
     } catch (_) {}
 }
 function _supName() {
     const n = document.getElementById('smName')?.innerText;
     return n && n !== 'Guest' ? n : '';
 }
+// OFFLINE FALLBACK - when Render sleeps, still answer
+function _supLocalAnswer(text) {
+    const t = String(text || '').toLowerCase();
+    if (t.includes('pair') || t.includes('code')) return "To get a pairing code:\n1. Go to Home and tap *Pair Bot*\n2. Enter your WhatsApp number with country code (e.g. 254...)\n3. Tap *Get Code*\n4. Open WhatsApp > Linked Devices > Link a Device and enter the code.\nIf no code shows, wait 1 min - Render sometimes sleeps.";
+    if (t.includes('premium') || t.includes('pay') || t.includes('price')) return "Premium gives you:\n• Faster pairing (no queue)\n• Auto-reconnect if bot goes offline\n• Priority support from Denzel\n\nTap *Premium* on Home and follow the M-Pesa steps.";
+    if (t.includes('offline') || t.includes('not working') || t.includes('down')) return "If your bot is offline:\n1. Check internet\n2. Go to Dashboard and tap *Restart Bot*\n3. Wait 2 minutes\n4. If still offline, tap *Report to Denzel* below.\nDo NOT delete session, you will need to pair again.";
+    if (t.includes('command') || t.includes('menu') || t.includes('help')) return "Popular commands:\n• `.menu` - Show all commands\n• `.ping` - Check if bot is alive\n• `.owner` - Contact Denzel\n• `.sticker` - Make sticker from image\n\nType `.menu` in WhatsApp to see all.";
+    if (t.startsWith('hi') || t.startsWith('hey') || t.startsWith('hello')) return "Hey! 👋 I'm here. Ask me about pairing code, Premium, bot offline, or commands - or tap one of the chips above.";
+    return null;
+}
 // *bold*  _italic_  ~strike~  `code`  ```block```  links, and bare commands like .pass (tap to copy). Text only, never HTML.
 const _SUP_RE = /(?<cb>```[\s\S]+?```)|`(?<ic>[^`\n]+)`|\*(?<b>[^*\n]+)\*|(?<ip>^|[\s(])_(?<i>[^_\n]+)_(?=$|[\s.,!?:;)])|~(?<s>[^~\n]+)~|\[(?<lt>[^\]\n]+)\]\((?<lu>https?:\/\/[^)\s]+)\)|(?<u>https?:\/\/[^\s)\]]+[^\s).,!?\]])|(?<cp>^|[\s(])(?<c>\.[a-z][a-z0-9]{1,20})(?=$|[\s.,!?:;)])/gm;
 function _supInline(parent, text, depth) {
     let last = 0, m;
-    const re = new RegExp(_SUP_RE.source, 'gm');   // its own copy: formatting inside *bold* runs this again
+    const re = new RegExp(_SUP_RE.source, 'gm');
     const add = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = txt; parent.appendChild(e); return e; };
     const link = (href, label) => { const a = add('a', '', label); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; };
     while ((m = re.exec(text))) {
@@ -13120,13 +13130,27 @@ function _supTyping() {
     row.querySelector('.sup-b').innerHTML = '<span class="sup-dots"><i></i><i></i><i></i></span><span class="sup-wait"></span>';
     return row;
 }
-function _supPost(url, body) {
-    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-        .then(r => r.json().then(j => { if (!r.ok || !j.success) throw new Error(j.error || 'Something went wrong'); return j; },
-            () => { throw new Error('The assistant could not be reached. Please try again in a moment.'); }));
+// FIXED: Handles HTML response from Render sleeping, retries once, gives real error
+async function _supPost(url, body) {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const txt = await r.text();
+            let j;
+            try { j = JSON.parse(txt); } catch (_) {
+                // Server returned HTML = Render sleeping / crashed / 404
+                throw new Error('Server woke up slowly (Render sleeping). Retrying...');
+            }
+            if (!r.ok || !j.success) throw new Error(j.error || 'Server returned no success (status ' + r.status + ')');
+            return j;
+        } catch (e) {
+            lastErr = e;
+            if (attempt === 0) await _supSleep(2500);
+        }
+    }
+    throw lastErr;
 }
-// The window follows the part of the screen that is actually visible, so when the keyboard opens the header
-// stays on top, the input stays right above the keys and the page behind never moves.
 function _supFit() {
     const m = document.getElementById('supportChatModal');
     if (!m || !m.classList.contains('show')) return;
@@ -13135,7 +13159,6 @@ function _supFit() {
     supKeepBottom();
 }
 function supKeepBottom() { const b = document.getElementById('supMsgs'); if (b) setTimeout(() => { b.scrollTop = b.scrollHeight; }, 60); }
-// Only Premium accounts can switch the AI's model; everyone else stays on Auto (and is shown the Premium window when they try).
 function supPickModel(sel) {
     if (A.user && A.user.isPremium) return;
     sel.value = '';
@@ -13160,9 +13183,8 @@ function openSupportChat() {
         _SUP.msgs.forEach(m => _supBubble(m.r, m.t));
         document.getElementById('supChips').style.display = _SUP.msgs.length ? 'none' : 'flex';
     }
-    // get the assistant ready now, so the first answer is quick
+    // FIXED: Don't block if /api/support/start doesn't exist
     _supPost('/api/support/start', { sid: _SUP.sid }).then(j => { _SUP.sid = j.sid; _supSave(); }).catch(() => {});
-    // on a phone the keyboard would jump up the moment the window opens, so only focus where there is a real keyboard
     if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) setTimeout(() => { try { document.getElementById('supInput').focus(); } catch (_) {} }, 250);
 }
 function closeSupportChat() {
@@ -13193,17 +13215,24 @@ async function supSend(textOverride) {
         _SUP.sid = j.sid;
         const t0 = Date.now();
         while (j.pending) {
-            if (Date.now() - t0 > 120000) throw new Error('The assistant is taking too long. Please try again, or tap "Report to Emmy" below.');
+            if (Date.now() - t0 > 60000) throw new Error('The assistant is taking too long. Please try again, or tap "Report to Denzel" below.');
             await _supSleep(2000);
             j = await _supPost('/api/support/result', { sid: _SUP.sid });
         }
         typing.remove();
         _supBubble('a', j.reply);
         _SUP.msgs.push({ r: 'a', t: j.reply });
-        if (j.escalated) { const n = _supBubble('a', '✅ Emmy has been notified about this.'); n.classList.add('note'); }
+        if (j.escalated) { const n = _supBubble('a', '✅ Denzel has been notified about this.'); n.classList.add('note'); }
     } catch (e) {
         typing.remove();
-        const n = _supBubble('a', e.message || 'The assistant is busy. Please try again.'); n.classList.add('note');
+        // FIXED: Never show "could not be reached" empty - answer offline if we can
+        const fb = _supLocalAnswer(text);
+        if (fb) {
+            _supBubble('a', fb + '\n\n_(Answered offline - server was busy, but I got you)_');
+            _SUP.msgs.push({ r: 'a', t: fb });
+        } else {
+            const n = _supBubble('a', 'Server is busy right now (Render may be sleeping). Try again in 1 min, or tap "Report to Denzel". Error: ' + (e.message || 'unknown')); n.classList.add('note');
+        }
     }
     clearTimeout(t1); clearTimeout(t2);
     _supSave();
@@ -13212,7 +13241,7 @@ async function supSend(textOverride) {
     if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) inp.focus();
 }
 function supToCommunity() { closeSupportChat(); A.go('community'); A.loadChat(); }
-function supReportToEmmy() { closeSupportChat(); openReportModal(); }
+function supReportToDenzel() { closeSupportChat(); openReportModal(); }
 function supNewChat() {
     try { localStorage.removeItem(_SUP_KEY); } catch (_) {}
     _SUP.sid = null; _SUP.msgs = []; _SUP.started = false;
@@ -13356,7 +13385,7 @@ async function submitReportToTelegram(e) {
         });
 
         if (response.ok) {
-            alert('Your report has been sent directly to Emmy! Thank you.');
+            alert('Your report has been sent directly to Denzel! Thank you.');
             closeReportModal();
         } else {
             alert('Failed to send report. Please check back later.');
@@ -13404,7 +13433,7 @@ async function submitReportToTelegram(e) {
       <textarea id="supInput" rows="2" maxlength="600" placeholder="Type a message…" onfocus="supKeepBottom()" oninput="this.style.height='';this.style.height=Math.min(this.scrollHeight,130)+'px'" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();supSend();}"></textarea>
       <button id="supSendBtn" class="sup-send" onclick="supSend()" aria-label="Send"><i class="fas fa-paper-plane"></i></button>
     </div>
-    <div class="sup-foot"><a href="#" onclick="supToCommunity();return false"><i class="fas fa-comments"></i> Get quick answers in Community Chat</a><br>Still not satisfied? <a href="#" onclick="supReportToEmmy();return false">Report to Emmy</a></div>
+    <div class="sup-foot"><a href="#" onclick="supToCommunity();return false"><i class="fas fa-comments"></i> Get quick answers in Community Chat</a><br>Still not satisfied? <a href="#" onclick="supReportToDenzel();return false">Report to Denzel</a></div>
   </div>
 </div>
 
