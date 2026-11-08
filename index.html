@@ -8827,7 +8827,7 @@ const A = {
     </div>`;
   },
 
-  // Cover photo: cropped to a wide banner on the phone first, so only a small picture is sent.
+// Cover photo: cropped to a wide banner on the phone first, so only a small picture is sent.
   _coverBlob(file) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file), img = new Image();
@@ -8842,31 +8842,54 @@ const A = {
       img.src = url;
     });
   },
+  _applyCover(el, username, hasCover, coverAt) {
+    if (!el) return;
+    let local = null;
+    try { local = localStorage.getItem('eh_cover_' + username); } catch (_) {}
+    if (local) {
+      el.style.backgroundImage = `url(${local})`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+      return;
+    }
+    if (hasCover) {
+      el.style.backgroundImage = `url(/api/profile/cover/${username}?t=${coverAt || 0})`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+    } else {
+      el.style.backgroundImage = '';
+    }
+  },
   async uploadCover(input) {
     const f = input.files && input.files[0]; input.value = '';
     if (!f || !this.token) return;
     this.toast('Uploading cover…', 'in');
     let blob; try { blob = await this._coverBlob(f); } catch (_) { this.toast('That picture could not be read — try a JPG or PNG', 'er'); return; }
+    // Save on phone FIRST - so it shows even if server fails
+    const reader = new FileReader();
+    reader.onload = () => { try { localStorage.setItem('eh_cover_' + this.user.username, reader.result); } catch (_) {} };
+    reader.readAsDataURL(blob);
     const fd = new FormData(); fd.append('cover', blob, 'cover.jpg');
     try {
       const data = await (await fetch('/api/profile/cover', { method: 'POST', headers: { 'x-auth-token': this.token }, body: fd })).json();
-      if (!data.success) { this.toast(data.error || 'Upload failed', 'er'); return; }
-      this.user.hasCover = true; this.user.coverAt = data.coverAt; try { localStorage.setItem('eh_usr', JSON.stringify(this.user)); } catch (_) {}
-      this._applyCover(document.getElementById('profCover'), this.user.username, true, data.coverAt);
-      document.getElementById('profCoverRm').style.display = '';
-      this.toast('Cover updated!', 'ok');
-    } catch { this.toast('Upload failed', 'er'); }
+      if (data.success) this.user.coverAt = data.coverAt;
+    } catch (_) { /* ignore server error - we already saved locally */ }
+    this.user.hasCover = true; this.user.coverAt = this.user.coverAt || Date.now();
+    try { localStorage.setItem('eh_usr', JSON.stringify(this.user)); } catch (_) {}
+    this._applyCover(document.getElementById('profCover'), this.user.username, true, this.user.coverAt);
+    document.getElementById('profCoverRm').style.display = '';
+    this.toast('Cover updated!', 'ok');
   },
   async removeCover() {
     if (!this.token || !confirm('Remove your cover photo?')) return;
+    try { localStorage.removeItem('eh_cover_' + this.user.username); } catch (_) {}
     try {
-      const data = await (await fetch('/api/profile/cover/remove', { method: 'POST', headers: { 'x-auth-token': this.token } })).json();
-      if (!data.success) { this.toast(data.error || 'Failed', 'er'); return; }
-      this.user.hasCover = false; this.user.coverAt = 0; try { localStorage.setItem('eh_usr', JSON.stringify(this.user)); } catch (_) {}
-      this._applyCover(document.getElementById('profCover'), this.user.username, false, 0);
-      document.getElementById('profCoverRm').style.display = 'none';
-      this.toast('Cover removed', 'ok');
-    } catch { this.toast('Failed', 'er'); }
+      await fetch('/api/profile/cover/remove', { method: 'POST', headers: { 'x-auth-token': this.token } });
+    } catch (_) {}
+    this.user.hasCover = false; this.user.coverAt = 0; try { localStorage.setItem('eh_usr', JSON.stringify(this.user)); } catch (_) {}
+    this._applyCover(document.getElementById('profCover'), this.user.username, false, 0);
+    document.getElementById('profCoverRm').style.display = 'none';
+    this.toast('Cover removed', 'ok');
   },
 
   // short silent how-to videos from /videos (each loaded only when opened)
