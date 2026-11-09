@@ -123,6 +123,39 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
+// ===== WHATSAPP PAIRING BRIDGE =====
+// The public site proxies pairing requests to the separate bot-engine service.
+const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
+const pairTokens = new Map();
+app.get('/api/pair-token', (req, res) => {
+  const token = crypto.randomBytes(24).toString('hex');
+  pairTokens.set(token, Date.now() + 5 * 60 * 1000);
+  for (const [k, expiry] of pairTokens) if (expiry < Date.now()) pairTokens.delete(k);
+  res.json({ success: true, token });
+});
+app.post('/request-pairing', async (req, res) => {
+  const body = req.body || {};
+  const token = String(body.pairToken || '');
+  const expiry = pairTokens.get(token);
+  if (!expiry || expiry < Date.now()) { pairTokens.delete(token); return res.status(403).json({ success:false, error:'Pairing request expired. Refresh and try again.' }); }
+  pairTokens.delete(token);
+  const phoneNumber = String(body.phoneNumber || '').replace(/\D/g, '');
+  if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
+  try {
+    const upstream = await fetch(ENGINE_URL + '/api/pair', {
+      method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY },
+      body: JSON.stringify({ phoneNumber }) , signal: AbortSignal.timeout(90000)
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
+    res.json({ success:true, pairingCode:data.pairingCode, serverInfo:{ serverUsed:'KING MD Engine' } });
+  } catch (error) {
+    console.error('Pairing engine request failed:', error.message);
+    res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
+  }
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 
 // ===== AUTH =====
