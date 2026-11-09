@@ -1,5 +1,6 @@
 // KING MD V4 — FULL FIXED server.js - Admin + Public Blue Tick ✔️
-// No word "Verified" - frontend only draws blue tick next to name
+// APP SIDE - This file does NOT connect to WhatsApp directly.
+// It only forwards pairing to the Engine.
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -29,7 +30,6 @@ const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ===== OWNER ACCOUNT =====
-// PUT YOUR REAL ONES HERE ONLY - DO NOT SHARE THIS FILE PUBLICLY
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468'];
 function normalizePhone(p){
@@ -57,7 +57,6 @@ function loadUsers() {
   catch (_) { return []; }
 }
 let users = loadUsers();
-// Auto-fix old accounts on startup
 users.forEach(u=>{
   if(isOwner(u.email, u.phone)){
     u.isAdmin = true; u.isVerified = true; u.isPremium = true;
@@ -75,7 +74,6 @@ function saveUsers() {
   fs.renameSync(tmp, USERS_FILE);
 }
 
-// ===== PUBLIC USER - BLUE TICK PUBLIC, EVERYONE CAN SEE IT =====
 function publicUser(u) {
   if (!u) return null;
   const x = { ...u };
@@ -123,8 +121,9 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
-// ===== WHATSAPP PAIRING BRIDGE =====
-// The public site proxies pairing requests to the separate bot-engine service.
+// ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
+// DO NOT put sessions/Safari here. This file has no Baileys.
+// It only forwards to Engine.
 const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
 const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
 const pairTokens = new Map();
@@ -394,7 +393,7 @@ app.post('/api/users/:username/like', requireUser, (req, res) => {
   target.likes = (target.likes || 0) + 1; saveUsers(); res.json({ success: true });
 });
 
-// ===== COMMUNITY CHAT - FIXED ADMIN - ONLY ONE CHAT SYSTEM =====
+// ===== COMMUNITY CHAT =====
 app.get('/api/community/status', (req, res) => res.json({ success: true, enabled: true, locked: false, lockedAdminOnly: false }));
 app.get('/api/community/messages', (req, res) => {
   const before = Number(req.query.before) || Date.now();
