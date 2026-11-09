@@ -28,24 +28,28 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ===== YOUR ADMIN - EMAIL + NUMBER + USERNAME =====
+// ===== OWNER ACCOUNT =====
 // PUT YOUR REAL ONES HERE ONLY - DO NOT SHARE THIS FILE PUBLICLY
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468'];
-const ADMIN_USERNAMES = ['denzel1968'];
 function normalizePhone(p){
   let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
-  if(s.startsWith('0')) s = '254726476468' + s.slice(1);
+  if(s.startsWith('0')) s = '254' + s.slice(1);
   return s;
 }
-function isOwner(email, phone, username){
+function isOwner(email, phone){
   const e = String(email||'').toLowerCase().trim();
   const ph = normalizePhone(phone||'');
-  const u = String(username||'').toLowerCase().trim();
   if(ADMIN_EMAILS.includes(e)) return true;
   if(ADMIN_PHONES.includes(ph) || ADMIN_PHONES.includes(String(phone||'').trim())) return true;
-  if(ADMIN_USERNAMES.includes(u)) return true;
   return false;
+}
+function isPremiumUser(u){
+  if(!u) return false;
+  if(isOwner(u.email, u.phone)) return true;
+  const until = Date.parse(u.premiumUntil || u.proPlanUntil || '');
+  if(Number.isFinite(until)) return until > Date.now();
+  return u.isPremium === true || u.proPlan === true;
 }
 
 function loadUsers() {
@@ -55,8 +59,8 @@ function loadUsers() {
 let users = loadUsers();
 // Auto-fix old accounts on startup
 users.forEach(u=>{
-  if(isOwner(u.email, u.phone, u.username)){
-    u.isAdmin = true; u.isVerified = true;
+  if(isOwner(u.email, u.phone)){
+    u.isAdmin = true; u.isVerified = true; u.isPremium = true;
   }
   if(!u.avatar && u.photo) u.avatar = u.photo;
   if(!u.cover) u.cover = '';
@@ -79,9 +83,10 @@ function publicUser(u) {
   x.avatar = u.avatar || u.photo || '';
   x.photo = u.photo || u.avatar || '';
   x.cover = u.cover || '';
-  // Public blue tick: admin always gets tick, visible to everyone
-  x.isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone, u.username));
-  x.isVerified = !!(u.isVerified || x.isAdmin);
+  x.isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone));
+  x.isPremium = isPremiumUser(u);
+  x.proPlan = x.isPremium;
+  x.isVerified = !!(x.isAdmin || x.isPremium);
   x.verified = x.isVerified;
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
@@ -89,7 +94,9 @@ function publicUser(u) {
   return x;
 }
 function tokenFor(u) {
-  return jwt.sign({ id: u.id, username: u.username, isAdmin: !!u.isAdmin, isVerified: !!(u.isVerified || u.isAdmin) }, SECRET, { expiresIn: '30d' });
+  const isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone));
+  const isPremium = isPremiumUser(u);
+  return jwt.sign({ id: u.id, username: u.username, isAdmin, isPremium, isVerified: isAdmin || isPremium }, SECRET, { expiresIn: '30d' });
 }
 function auth(req, res, next) {
   const h = req.headers.authorization || '';
@@ -132,8 +139,8 @@ app.post('/api/auth/register', async (req, res) => {
     let base = (email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,15) || 'kinguser');
     if (base.length < 3) base = 'user' + base;
     let username = base, n = 1; while (findUsername(username)) { username = (base.slice(0,16) + n++).slice(0,20); }
-    const owner = isOwner(email, phone, username);
-    const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
+    const owner = isOwner(email, phone);
+    const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, isPremium: owner, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
     users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins:3 });
   } catch (e) { console.error('Registration error:', e); res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
 });
@@ -142,23 +149,17 @@ app.post('/api/auth/login', async (req, res) => {
   const phone = normalizePhone(b.phone || '');
   const u = users.find(x => (x.email || '').toLowerCase() === email);
   if (!u || !u.password || !(await bcrypt.compare(password, u.password))) return res.status(401).json({ success:false, error:'Incorrect email or password.' });
-  if(isOwner(u.email, u.phone || phone, u.username)){
-    u.isAdmin = true; u.isVerified = true;
+  if(isOwner(u.email, u.phone || phone)){
+    u.isAdmin = true; u.isVerified = true; u.isPremium = true;
     if(phone && !u.phone) u.phone = phone;
     saveUsers();
   }
   res.json({ success:true, token:tokenFor(u), user:publicUser(u) });
 });
-app.post('/api/make-me-admin', async (req,res)=>{
-  const b = req.body||{};
-  const email = String(b.email||'').trim().toLowerCase();
-  const phone = normalizePhone(b.phone || b.number || '');
-  let u = null;
-  if(email) u = users.find(x=>(x.email||'').toLowerCase()===email);
-  if(!u && phone) u = users.find(x=> normalizePhone(x.phone||'')===phone);
-  if(!u) return res.json({ success:false, error:'Account not found.' });
-  if(!isOwner(u.email, u.phone || phone, u.username)) return res.json({ success:false, error:'Only owner can be admin' });
-  u.isAdmin = true; u.isVerified = true; if(phone) u.phone = phone; saveUsers();
+app.post('/api/make-me-admin', requireUser, async (req,res)=>{
+  const u = req.account;
+  if(!isOwner(u.email, u.phone)) return res.status(403).json({ success:false, error:'Only the owner account can be admin.' });
+  u.isAdmin = true; u.isVerified = true; u.isPremium = true; saveUsers();
   res.json({ success:true, message:'Now ADMIN + Blue Tick', user: publicUser(u) });
 });
 app.get('/api/auth/check-email', (req,res)=>{
@@ -244,7 +245,7 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
     if (u) {
       u.provider = provider; u.providerId = String(profile.id);
       if (!u.photo && picture) { u.photo = picture; u.avatar = picture; }
-      if(isOwner(email, u.phone, u.username)){ u.isAdmin = true; u.isVerified = true; }
+      if(isOwner(email, u.phone)){ u.isAdmin = true; u.isVerified = true; u.isPremium = true; }
       saveUsers();
       const code = crypto.randomBytes(32).toString('hex');
       pending.set(code, { token: tokenFor(u), at: Date.now() });
@@ -299,10 +300,10 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
   const photoChoice = req.body.photoChoice || 'none';
   let photo = photoChoice === 'provider' ? x.picture : '';
   if (photoChoice === 'upload' && req.file) photo = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
-  const owner = isOwner(x.email, req.body.phone || '', username);
+  const owner = isOwner(x.email, req.body.phone || '');
   const u = { id: crypto.randomUUID(), username, email: x.email, phone: normalizePhone(req.body.phone||''), provider: x.provider, providerId: x.providerId,
     firstName, lastName, name: firstName + ' ' + lastName, photo, avatar: photo, cover:'', bio: '', accentColor: req.body.accentColor || 'pink',
-    isAdmin: owner, isVerified: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
+    isAdmin: owner, isVerified: owner, isPremium: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
     hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
   users.push(u); saveUsers(); onboarding.delete(key);
   res.json({ success: true, token: tokenFor(u), signupBonusCoins: 3, numberLinked: false });
@@ -367,7 +368,13 @@ app.get('/api/community/messages', (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 40, 40);
   let list = communityMessages.filter(m => new Date(m.createdAt).getTime() < before).slice(-limit);
   list = list.map(m => {
-    if(isOwner('', '', m.username)){ m.isAdmin = true; m.isVerified = true; m.verified = true; }
+    const account = findUsername(m.username);
+    if(account){
+      const isAdmin = !!(account.isAdmin || isOwner(account.email, account.phone));
+      const isPremium = isPremiumUser(account);
+      m.isAdmin = isAdmin; m.isPremium = isPremium; m.proPlan = isPremium;
+      m.isVerified = isAdmin || isPremium; m.verified = m.isVerified;
+    }
     return m;
   });
   res.json({ success: true, messages: list, pinnedCount: communityMessages.filter(m=>m.pinned).length, hasMore: false });
@@ -391,9 +398,10 @@ app.post('/api/community/message', requireUser, (req, res) => {
   if(b.text){ const mm = b.text.match(/@([A-Za-z0-9_]{3,20})/g); if(mm) mm.forEach(x=>mentions.push(x.slice(1))); }
   let replyObj = null;
   if(b.replyTo){ const orig = communityMessages.find(m=>m._id===b.replyTo); if(orig) replyObj = { username: orig.username, text: orig.text || '[media]' }; }
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone, req.account.username));
-  const isVerified = !!(req.account.isVerified || isAdmin);
-  const m = { _id: crypto.randomUUID(), username: req.account.username, photo: req.account.avatar || req.account.photo || null, text: b.text || null, image: b.image || null, sticker: b.sticker || null, mentions, replyTo: replyObj, reactions: [], pinned: false, edited: false, isAdmin, isVerified, verified: isVerified, createdAt: new Date().toISOString() };
+  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
+  const isPremium = isPremiumUser(req.account);
+  const isVerified = isAdmin || isPremium;
+  const m = { _id: crypto.randomUUID(), username: req.account.username, photo: req.account.avatar || req.account.photo || null, text: b.text || null, image: b.image || null, sticker: b.sticker || null, mentions, replyTo: replyObj, reactions: [], pinned: false, edited: false, isAdmin, isPremium, proPlan: isPremium, isVerified, verified: isVerified, createdAt: new Date().toISOString() };
   communityMessages.push(m);
   if(communityMessages.length > 500) communityMessages.splice(0, communityMessages.length - 500);
   onlineUsers.set(req.account.username, Date.now());
@@ -411,20 +419,20 @@ app.put('/api/community/message/:id', requireUser, (req, res) => {
 });
 app.delete('/api/community/message/:id', requireUser, (req, res) => {
   const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx===-1) return res.json({ success: false });
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone, req.account.username));
+  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
   if(communityMessages[idx].username !== req.account.username && !isAdmin) return res.json({ success: false, error: 'Not allowed' });
   communityMessages.splice(idx, 1); res.json({ success: true });
 });
 app.post('/api/community/read', (req, res) => res.json({ success: true }));
 app.get('/api/community/stickers', (req, res) => res.json({ success: true, stickers: [{ id: 'thanks', name: 'Thank you', src: '/stickers/thanks.svg?v=1' }, { id: 'ok', name: 'Okay', src: '/stickers/ok.svg?v=1' }, { id: 'lol', name: 'LOL', src: '/stickers/lol.svg?v=1' }, { id: 'sorry', name: 'Sorry', src: '/stickers/sorry.svg?v=1' }, { id: 'congrats', name: 'Congrats', src: '/stickers/congrats.svg?v=1' }] }));
 app.post('/api/admin/community/pin/:id', requireUser, (req, res) => {
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone, req.account.username));
+  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
   if(!isAdmin) return res.json({ success: false, error: 'Admin only' });
   const m = communityMessages.find(x => x._id === req.params.id); if(!m) return res.json({ success: false });
   m.pinned = !m.pinned; res.json({ success: true, pinned: m.pinned });
 });
 app.delete('/api/admin/community/message/:id', requireUser, (req, res) => {
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone, req.account.username));
+  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
   if(!isAdmin) return res.json({ success: false, error: 'Admin only' });
   const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx!==-1) communityMessages.splice(idx,1);
   res.json({ success: true });

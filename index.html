@@ -2401,24 +2401,63 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
     var covImg = document.getElementById('profCoverImg');
     if(cov && covImg){ covImg.src = cov; covImg.style.display='block'; var rm=document.getElementById('profCoverRm'); if(rm) rm.style.display='block'; }
   }
+  function coverBlob(file){
+    return new Promise(function(resolve,reject){
+      var src = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){
+        URL.revokeObjectURL(src);
+        var w = 1280, h = 480, scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+        var dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+        var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        if(!ctx) return reject(new Error('Image processing is unavailable'));
+        ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        canvas.toBlob(function(blob){ blob ? resolve(blob) : reject(new Error('Image could not be compressed')); }, 'image/jpeg', .78);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(src); reject(new Error('Image could not be opened')); };
+      img.src = src;
+    });
+  }
   function saveFile(input, type){
     var file = input.files[0]; if(!file) return;
-    var reader = new FileReader();
-    reader.onload = function(e){
-      var url = e.target.result; // base64 - survives logout/refresh, unlike createObjectURL
-      var u = (window.A && A.user) || {};
-      var key = u.username || u._id || localStorage.getItem('king_last_user') || 'guest';
-      try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, url); localStorage.setItem(type==='photo' ? 'king_dp' : 'king_cover', url); }catch(err){ alert('Image too big, use smaller image'); return; }
-      if(type==='photo'){ if(!A.user) A.user={}; A.user.avatar=url; } else { if(!A.user) A.user={}; A.user.cover=url; }
-      showSaved();
-      // Also try server if your backend has it - if not, localStorage already saved it
-      try{
-        var fd = new FormData(); fd.append(type==='photo' ? 'photo' : 'cover', file);
-        var token = localStorage.getItem('king_token')||localStorage.getItem('token')||'';
-        fetch(type==='photo' ? '/api/profile/photo' : '/api/profile/cover', { method:'POST', headers:{ 'Authorization':'Bearer '+token }, body: fd }).then(function(r){ return r.json().catch(function(){return {};}); }).then(function(d){ if(d && (d.avatar||d.cover)){ var k = d.avatar||d.cover; try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, k); }catch(e){} if(A.user){ if(type==='photo') A.user.avatar=k; else A.user.cover=k; } showSaved(); } }).catch(function(){});
-      }catch(e){}
-    };
-    reader.readAsDataURL(file);
+    var prepare = type === 'cover' ? coverBlob(file) : Promise.resolve(file);
+    prepare.then(function(uploadFile){
+      var reader = new FileReader();
+      reader.onload = function(e){
+        var url = e.target.result; // cache a smaller copy; server storage is authoritative when signed in
+        var u = (window.A && A.user) || {};
+        var key = u.username || u._id || localStorage.getItem('king_last_user') || 'guest';
+        if(!A.user) A.user = {};
+        if(type === 'photo') A.user.avatar = url; else A.user.cover = url;
+        try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, url); localStorage.setItem(type==='photo' ? 'king_dp' : 'king_cover', url); }catch(err){}
+        showSaved();
+        try{
+          var fd = new FormData();
+          fd.append(type==='photo' ? 'photo' : 'cover', uploadFile, type === 'cover' ? 'cover.jpg' : (file.name || 'photo'));
+          var token = localStorage.getItem('king_token')||localStorage.getItem('token')||'';
+          fetch(type==='photo' ? '/api/profile/photo' : '/api/profile/cover', { method:'POST', headers:{ 'Authorization':'Bearer '+token }, body: fd })
+            .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ return { ok:r.ok, data:d }; }); })
+            .then(function(result){
+              var d = result.data || {}, k = d.avatar || d.cover;
+              if(!result.ok || !d.success || !k){
+                var msg = d.error || (!token ? 'Sign in to upload a profile image.' : 'Upload failed. Check your connection and try again.');
+                if(A.toast) A.toast(msg, 'er'); else alert(msg);
+                return;
+              }
+              try{ localStorage.setItem(type==='photo' ? 'king_dp_'+key : 'king_cover_'+key, k); }catch(e){}
+              if(A.user){ if(type==='photo') A.user.avatar=k; else A.user.cover=k; }
+              showSaved();
+              if(A.toast) A.toast(type === 'cover' ? 'Cover photo uploaded.' : 'Profile photo uploaded.', 'ok');
+            })
+            .catch(function(){ if(A.toast) A.toast('Upload failed. Check your connection and try again.', 'er'); });
+        }catch(e){ if(A.toast) A.toast('Upload failed. Please try again.', 'er'); }
+      };
+      reader.onerror = function(){ if(A.toast) A.toast('The selected image could not be read.', 'er'); };
+      reader.readAsDataURL(uploadFile);
+    }).catch(function(){
+      if(A.toast) A.toast('This image could not be processed. Try a JPG or PNG.', 'er');
+      else alert('This image could not be processed. Try a JPG or PNG.');
+    });
     input.value='';
   }
   if(!window.A) window.A = {};
@@ -3289,7 +3328,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
     </div>
     <div class="card" style="display:flex;gap:.6rem;align-items:flex-start;margin-top:.7rem">
       <i class="fas fa-circle-info" style="color:#f5b417;margin-top:.15rem"></i>
-      <div style="font-size:.82rem;color:var(--t2);line-height:1.45"><strong style="color:var(--t0)">We've updated our pricing.</strong><br>Premium has moved from ₦300/week · ₦1,000/month to a fixed <strong style="color:#f5b417">KSH250/month</strong>. The old price was too low to keep the service running — thanks for understanding! 🙏</div>
+      <div style="font-size:.82rem;color:var(--t2);line-height:1.45"><strong style="color:var(--t0)">Premium pricing</strong><br>Premium is <strong style="color:#f5b417">KSH250 per month</strong>. The payment page shows the available checkout currency and amount.</div>
     </div>
   </div>
 </div>
@@ -3303,7 +3342,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div class="sf-logo"><img src="/logo.png" alt=""><span>KING MD V4</span></div>
         <p>Deploy KING MD V4 free, plus Reactions automation, AI tools and a live community — all on one account. Built by KING MD.</p>
         <div class="sf-socials">
-          <a href="https://whatsapp.com/channel/0029Vb9AcCa0rGiD0eJYsQ1n" target="_blank" rel="noopener" title="WhatsApp Channel"><i class="fab fa-whatsapp"></i></a>
+          <a href="https://whatsapp.com/channel/0029VbCwmFXDzgT4FzZm6d28" target="_blank" rel="noopener" title="WhatsApp Channel"><i class="fab fa-whatsapp"></i></a>
           <a href="https://t.me/KING MDtech" target="_blank" rel="noopener" title="Telegram"><i class="fab fa-telegram"></i></a>
           <a href="https://youtube.com/@KING MDTECHINFO" target="_blank" rel="noopener" title="YouTube"><i class="fab fa-youtube"></i></a>
           <a href="https://github.com/KING MD" target="_blank" rel="noopener" title="GitHub"><i class="fab fa-github"></i></a>
