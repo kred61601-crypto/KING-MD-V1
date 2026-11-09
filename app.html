@@ -40,17 +40,33 @@
   <div class="lead"></div>
   <div id="stack"></div>
 
-  <nav class="tabs off" aria-label="Main">
+  <!-- FIXED: removed "off" so nav is visible, fixed Community data-go -> data-tab -->
+  <nav class="tabs" aria-label="Main">
     <div class="tabs-in">
       <a class="tab" data-tab="home"><svg class="i"><use href="#i-home"/></svg><span>Home</span></a>
       <a class="tab" data-tab="settings"><svg class="i"><use href="#i-sliders"/></svg><span>Settings</span></a>
       <a class="tab dep" data-tab="deploy"><span class="dep-b"><svg class="i"><use href="#i-rocket"/></svg></span><span>Deploy</span></a>
-      <a class="tab" data-go="chat"><svg class="i"><use href="#i-chat"/></svg><span>Community</span></a>
+      <a class="tab" data-tab="chat"><svg class="i"><use href="#i-chat"/></svg><span>Community</span></a>
       <a class="tab" data-tab="profile"><svg class="i"><use href="#i-user"/></svg><span>Profile</span></a>
     </div>
   </nav>
 
   <div class="toast" id="toast"></div>
+</div>
+
+<!-- BLUE TICK POPUP - LIKE KING MD-->
+<div id="tickPopup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#111;color:#fff;border-radius:20px;padding:28px 22px;max-width:400px;width:100%;text-align:center;position:relative;">
+    <button onclick="closeTickPopup()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;">✕</button>
+    <div style="width:90px;height:90px;margin:0 auto;background:#0a84ff22;border:2px solid #1DA1F2;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+      <svg width="70" height="70" viewBox="0 0 24 24" fill="#1DA1F2"><path d="M12 1.8l2.4 2.1 3.2-.3 1 3 2.9 1.4-1 3 1 3-2.9 1.4-1 3-3.2-.3L12 22.2l-2.4-2.1-3.2.3-1-3L2.5 16l1-3-1-3 2.9-1.4 1-3 3.2.3L12 1.8z"/><path d="M10.6 15.6l5.2-5.2-1.4-1.4-3.8 3.8-1.8-1.8-1.4 1.4 3.2 3.2z" fill="#fff"/></svg>
+    </div>
+    <h2 style="margin:16px 0 8px;">Verification</h2>
+    <p style="color:#aaa;line-height:1.6;font-size:15px;">The blue seal is a <b style="color:#1DA1F2;">Premium feature.</b> It only shows this account has Premium verification — it is not a guarantee or endorsement of the person.</p>
+    <p style="color:#888;margin-top:16px;">Get Premium to get verification.</p>
+    <button onclick="goPremium()" style="width:100%;margin-top:16px;background:#2a2a2a;color:#ff4da6;border:none;padding:14px;border-radius:12px;font-weight:800;font-size:16px;cursor:pointer;">👑 Upgrade to Premium</button>
+    <div id="tickPopupExtra" style="font-size:13px;color:#888;margin-top:10px;"></div>
+  </div>
 </div>
 
 <script src="/app/core.js?v=fa75e8f847"></script>
@@ -69,5 +85,51 @@
 <script src="/app/pages.js?v=fa75e8f847"></script>
 <script src="/app/onboard.js?v=fa75e8f847"></script>
 <script>EH.boot();</script>
+
+<script>
+// ===== FIXED TABS + BLUE TICK POPUP + AUTO REACT BOT =====
+function openTickPopup(username, isVerified){
+  const popup = document.getElementById('tickPopup');
+  popup.style.display = 'flex';
+  const extra = document.getElementById('tickPopupExtra');
+  extra.innerHTML = isVerified ? '@' + username + ' has Premium verification ✔️' : 'You don\'t have verification yet';
+}
+function closeTickPopup(){ document.getElementById('tickPopup').style.display='none'; }
+function goPremium(){
+  closeTickPopup();
+  if(window.EH && EH.go) return EH.go('premium');
+  window.location.href = '/premium.html';
+}
+document.getElementById('tickPopup').addEventListener('click', e=>{
+  if(e.target.id === 'tickPopup') closeTickPopup();
+});
+
+// Force tabs to work on phone touch + click
+document.addEventListener('DOMContentLoaded', ()=>{
+  const nav = document.querySelector('nav.tabs');
+  if(nav) nav.classList.remove('off');
+  document.querySelectorAll('.tab').forEach(tab=>{
+    const go = (e)=>{
+      const name = tab.getAttribute('data-tab') || tab.getAttribute('data-go');
+      if(!name) return;
+      // Let EH handle it first
+      if(window.EH && EH.go){
+        try{ EH.go(name); return; }catch(err){}
+      }
+      // Fallback: show screen manually
+      document.querySelectorAll('#stack > div').forEach(d=> d.style.display='none');
+      let screen = document.getElementById('screen-' + name) || document.querySelector('[data-screen="' + name + '"]');
+      if(screen) screen.style.display='block';
+    };
+    tab.addEventListener('click', go);
+  });
+});
+
+// Helper to make blue tick clickable anywhere
+function blueTick(username, isVerified){
+  if(!isVerified) return '';
+  return '<span onclick="openTickPopup(\'' + username + '\', true)" style="cursor:pointer;color:#1DA1F2;font-weight:900;">✔️</span>';
+}
+</script>
 </body>
 </html>
