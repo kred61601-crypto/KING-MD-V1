@@ -3342,7 +3342,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div class="sf-logo"><img src="/logo.png" alt=""><span>KING MD V4</span></div>
         <p>Deploy KING MD V4 free, plus Reactions automation, AI tools and a live community — all on one account. Built by KING MD.</p>
         <div class="sf-socials">
-          <a href="https://chat.whatsapp.com/LMCvG5RtKNzBLWvHk2DghU" target="_blank" rel="noopener" title="WhatsApp Channel"><i class="fab fa-whatsapp"></i></a>
+          <a href="https://whatsapp.com/channel/0029VbCwmFXDzgT4FzZm6d28" target="_blank" rel="noopener" title="WhatsApp Channel"><i class="fab fa-whatsapp"></i></a>
           <a href="https://t.me/KING MDtech" target="_blank" rel="noopener" title="Telegram"><i class="fab fa-telegram"></i></a>
           <a href="https://youtube.com/@KING MDTECHINFO" target="_blank" rel="noopener" title="YouTube"><i class="fab fa-youtube"></i></a>
           <a href="https://github.com/KING MD" target="_blank" rel="noopener" title="GitHub"><i class="fab fa-github"></i></a>
@@ -7466,7 +7466,7 @@ const A = {
   // Guest limit — every account gets GUEST_FREE_SPACES free spaces whether
   // logged in or not (matches the server's own GUEST_FREE_SPACES check in
   // POST /request-pairing, and a logged-in account's own default).
-  if (!this.user && this.localSess.filter(s => s.status === 'active').length >= this.GUEST_FREE_SPACES) {
+  if (!this.user && this.localSess.length >= this.GUEST_FREE_SPACES) {
     document.getElementById('loginWarn').style.display = 'flex';
     return;
   }
@@ -7475,7 +7475,7 @@ const A = {
   // immediately (delete bots OR buy space), instead of hitting the server.
   if (this.user) {
     const total = this.user.botSpaces || this.GUEST_FREE_SPACES;
-    const used  = Math.max(this.user.usedSpaces || 0, this.localSess.filter(s => s.status === 'active').length);
+    const used  = Math.max(this.user.usedSpaces || 0, this.localSess.length);
     if (used >= total) {
       this._showSpaceFull();
       return;
@@ -7539,7 +7539,8 @@ const A = {
         document.getElementById('loginWarn').style.display = 'none';
 
         // Save session to localStorage — works for both guest and logged-in
-        const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: this._devId() };
+        // A generated pairing code is NOT a connected bot. Keep it pending until the engine confirms WhatsApp's connection.
+        const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'pending', deviceId: this._devId() };
         const idx = this.localSess.findIndex(s => s.phoneNumber === phone);
         if (idx >= 0) this.localSess[idx] = sess; else this.localSess.push(sess);
         localStorage.setItem('eh_sess', JSON.stringify(this.localSess));
@@ -7554,7 +7555,7 @@ const A = {
         document.getElementById('pairForm').reset();
 
         successAudio.currentTime = 0; successAudio.play().catch(() => {});
-        let msg = `Pairing code generated! Server: ${data.serverInfo?.serverUsed || '?'}`;
+        let msg = `Pairing code generated. Enter it in WhatsApp to finish linking. Server: ${data.serverInfo?.serverUsed || '?'}`;
         if (data.duplicatesRemoved > 0) msg += ` (${data.duplicatesRemoved} duplicate(s) removed)`;
         this.toast(msg, 'ok');
       } else {

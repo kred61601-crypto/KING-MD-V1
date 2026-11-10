@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: king-md-website
+    name: king-md-v7
     runtime: node
     plan: starter
     buildCommand: npm install
@@ -10,3 +10,10 @@ services:
       name: king-md-user-data
       mountPath: /var/data
       sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATA_DIR
+        value: /var/data
+      - key: JWT_SECRET
+        generateValue: true
