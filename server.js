@@ -22,12 +22,31 @@ const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
+const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
 }
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 fs.mkdirSync(DATA_DIR, { recursive: true });
+function loadJsonFile(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return fallback; } }
+function saveJsonFile(file, value) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(tmp, file); }
+let botRecords = loadJsonFile(BOTS_FILE, []); if (!Array.isArray(botRecords)) botRecords = [];
+const notificationList = user => Array.isArray(user.notifications) ? user.notifications : [];
+function addUserNotification(user, type, title, body, meta) {
+  if (!Array.isArray(user.notifications)) user.notifications = [];
+  user.notifications.unshift({ _id: crypto.randomBytes(9).toString('hex'), type, title, body, meta: meta || {}, read: false, createdAt: new Date().toISOString() });
+  user.notifications = user.notifications.slice(0, 100);
+  user.unreadNotifs = user.notifications.filter(n => !n.read).length;
+}
+async function engineFetch(route, options) {
+  const base = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+  const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) { const error = new Error(data.error || 'WhatsApp engine request failed'); error.status = response.status || 502; throw error; }
+  return data;
+}
 
 // ===== OWNER ACCOUNT =====
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
@@ -89,6 +108,8 @@ function publicUser(u) {
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
+  x.botSpaces = Number(u.botSpaces || (x.isPremium ? 6 : 3));
+  x.usedSpaces = botRecords.filter(b => b.ownerId === u.id).length;
   return x;
 }
 function tokenFor(u) {
@@ -125,7 +146,6 @@ const resetTokens = new Map();
 // DO NOT put sessions/Safari here. This file has no Baileys.
 // It only forwards to Engine.
 const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
-const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -141,14 +161,35 @@ app.post('/request-pairing', async (req, res) => {
   pairTokens.delete(token);
   const phoneNumber = String(body.phoneNumber || '').replace(/\D/g, '');
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
+  const account = currentUser(req);
+  if (account) {
+    const alreadyOwned = botRecords.some(b => b.ownerId === account.id && b.number === phoneNumber);
+    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? 6 : 3)));
+    const used = botRecords.filter(b => b.ownerId === account.id).length;
+    if (!alreadyOwned && used >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
+  }
   try {
     const upstream = await fetch(ENGINE_URL + '/api/pair', {
       method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY },
       body: JSON.stringify({ phoneNumber }) , signal: AbortSignal.timeout(90000)
     });
     const data = await upstream.json().catch(() => ({}));
+    if (upstream.status === 409 && data.code === 'ALREADY_CONNECTED') {
+      if (req.user && req.user.id) {
+        const existing = botRecords.find(b => b.ownerId === req.user.id && b.number === phoneNumber);
+        const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'online', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+        if (existing) Object.assign(existing, record); else botRecords.push(record); saveJsonFile(BOTS_FILE, botRecords);
+      }
+      return res.json({ success: true, alreadyConnected: true, state: 'online', serverInfo: { serverUsed: 'KING MD Engine' } });
+    }
     if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
-    res.json({ success:true, pairingCode:data.pairingCode, serverInfo:{ serverUsed:'KING MD Engine' } });
+    if (req.user && req.user.id) {
+      const existing = botRecords.find(b => b.ownerId === req.user.id && b.number === phoneNumber);
+      const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+      if (existing) Object.assign(existing, record); else botRecords.push(record);
+      saveJsonFile(BOTS_FILE, botRecords);
+    }
+    res.json({ success:true, pairingCode:data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
     res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
@@ -482,6 +523,129 @@ app.post('/api/ai/chat', (req, res) => {
   res.json({ success: true, reply, response: reply });
 });
 app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
+
+
+// ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
+app.get('/api/my-bots', requireUser, async (req, res) => {
+  const mine = botRecords.filter(b => b.ownerId === req.account.id);
+  let states = {};
+  if (mine.length) {
+    try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = d.bots || {}; }
+    catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
+  }
+  const bots = mine.map(b => ({ number: b.number, state: states[b.number] || b.state || 'offline', createdAt: b.createdAt, updatedAt: b.updatedAt }));
+  res.json({ success: true, bots, total: bots.length });
+});
+app.post('/api/bots/status', async (req, res) => {
+  const nums = Array.isArray(req.body && req.body.numbers) ? req.body.numbers.map(normalizePhone).filter(n => /^\d{8,15}$/.test(n)).slice(0, 30) : [];
+  if (!nums.length) return res.json({ success: true, bots: {} });
+  try {
+    const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
+    const account = currentUser(req);
+    if (account) {
+      botRecords.filter(b => b.ownerId === account.id && nums.includes(b.number)).forEach(b => {
+        const nextState = (d.bots || {})[b.number] || 'offline';
+        if (b.state !== nextState && (nextState === 'online' || nextState === 'offline')) {
+          addUserNotification(account, 'bot_status', nextState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (nextState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: nextState });
+        }
+        b.state = nextState; b.updatedAt = new Date().toISOString();
+      });
+      saveJsonFile(BOTS_FILE, botRecords); saveUsers();
+    }
+    res.json({ success: true, bots: d.bots || {} });
+  } catch (e) { res.status(502).json({ success: false, error: e.message || 'Engine status unavailable', bots: {} }); }
+});
+app.delete('/session/:phone', requireUser, async (req, res) => {
+  const number = normalizePhone(req.params.phone);
+  const record = botRecords.find(b => b.ownerId === req.account.id && b.number === number);
+  if (!record) return res.status(404).json({ success: false, error: 'This bot is not linked to your account.' });
+  try {
+    await engineFetch('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
+    botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && b.number === number));
+    saveJsonFile(BOTS_FILE, botRecords);
+    res.json({ success: true, serversDeleted: ['KING MD Engine'] });
+  } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
+});
+
+// ===== BOT SPACE PURCHASES / DEPLOYMENT COUNTS =====
+app.post('/api/spaces/buy', requireUser, (req, res) => {
+  const cost = 15, balance = Number(req.account.coins || 0);
+  if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' });
+  req.account.coins = balance - cost;
+  req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? 6 : 3))) + 1;
+  saveUsers(); res.json({ success: true, coinsLeft: req.account.coins, botSpaces: req.account.botSpaces });
+});
+app.post('/api/db-full/report', requireUser, (req, res) => {
+  const owner = users.find(u => isOwner(u.email, u.phone));
+  if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id });
+  saveUsers(); res.json({ success: true });
+});
+app.get('/api/stats/deploys', (_req, res) => res.json({ success: true, total: botRecords.length, active: botRecords.filter(b => b.state === 'online').length }));
+
+// ===== NOTIFICATIONS =====
+app.post('/api/admin/notifications', requireUser, (req, res) => {
+  if (!(req.account.isAdmin || isOwner(req.account.email, req.account.phone))) return res.status(403).json({ success: false, error: 'Admin only' });
+  const body = req.body || {}, title = String(body.title || '').slice(0, 100), message = String(body.body || body.message || '').slice(0, 500);
+  if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required.' });
+  const target = body.userId ? users.filter(u => u.id === String(body.userId)) : users;
+  target.forEach(u => addUserNotification(u, String(body.type || 'broadcast').slice(0, 40), title, message, body.meta || {}));
+  saveUsers(); res.json({ success: true, sent: target.length });
+});
+app.get('/api/notifications', requireUser, (req, res) => {
+  const items = notificationList(req.account).slice().sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+  res.json({ success: true, notifications: items, unread: items.filter(n => !n.read).length });
+});
+app.post('/api/notifications/read', requireUser, (req, res) => {
+  req.account.notifications = notificationList(req.account).map(n => ({ ...n, read: true }));
+  req.account.unreadNotifs = 0; saveUsers(); res.json({ success: true });
+});
+app.delete('/api/notifications/:id', requireUser, (req, res) => {
+  req.account.notifications = notificationList(req.account).filter(n => String(n._id) !== String(req.params.id));
+  req.account.unreadNotifs = req.account.notifications.filter(n => !n.read).length; saveUsers(); res.json({ success: true });
+});
+
+// ===== APP CONFIG / CHANNEL REACT =====
+app.get('/api/pages/status', (_req, res) => res.json({ success: true, pages: {}, turnstileSiteKey: null, maintenance: false }));
+app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
+  const number = normalizePhone(req.body && req.body.number);
+  if (!/^\d{8,15}$/.test(number)) return res.status(400).json({ success: false, error: 'Enter a valid WhatsApp number.' });
+  if (!isPremiumUser(req.account)) return res.json({ success: false, notPremium: true, error: 'This account does not have Premium.' });
+  if (!(req.body && req.body.confirm)) return res.json({ success: true, until: req.account.premiumUntil || null, current: req.account.boundNumber || null, needsReplace: !!(req.account.boundNumber && req.account.boundNumber !== number) });
+  req.account.boundNumber = number; saveUsers(); res.json({ success: true, until: req.account.premiumUntil || null });
+});
+app.get('/api/channel-react/status', requireUser, (req, res) => {
+  const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
+  const usage = req.account.channelReactUsage || {};
+  const used = usage.day === today ? Number(usage.used || 0) : 0;
+  const limit = premium ? 10 : 1;
+  res.json({ success: true, premium, dailyLimit: limit, dailyUsed: used, freeLimit: premium ? 10 : 1, refillPrice: 15, remaining: Math.max(0, limit - used) });
+});
+app.post('/api/channel-react', requireUser, async (req, res) => {
+  const body = req.body || {}, premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
+  const usage = req.account.channelReactUsage || {};
+  const used = usage.day === today ? Number(usage.used || 0) : 0;
+  const limit = premium ? 10 : 1;
+  const requested = Math.max(1, Math.min(Number(body.amount) || 1, limit - used));
+  if (used >= limit) return res.status(429).json({ success: false, error: 'Your daily Channel React limit has been used.', cooldown: true });
+  const numbers = botRecords.filter(b => b.ownerId === req.account.id).map(b => b.number);
+  if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot before using Channel React.' });
+  try {
+    const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link: body.link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
+    const sent = Number(d.reactionsSent || 0);
+    if (sent) { req.account.channelReactUsage = { day: today, used: used + sent }; saveUsers(); }
+    res.json({ ...d, success: !!d.success, premium, dailyUsed: used + sent, nextAt: new Date(Date.now() + 60000).toISOString() });
+  } catch (e) { res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed.' }); }
+});
+
+// Payment endpoints deliberately stay disabled until a real Daraja/Korapay merchant
+// integration is configured. A phone number alone cannot verify an M-Pesa payment.
+app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
+  success: true, paymentsOff: true, maxMonths: 2, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || null,
+  mpesaNumber: '+254726476468', options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1, methods: ['mobile_money'] }]
+}));
+app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet. Automatic payment verification requires Safaricom Daraja credentials and a registered shortcode.' }));
+app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: true, paymentLive: false, paymentsOff: true, options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1 }], packages: [], custom: { minCoins: 10, ratePerCoin: 1 } }));
+app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet; Daraja merchant credentials are required.' }));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.use((err, req, res, next) => {
