@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
+const PAIR_CONFIG = require('./pairing.config');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -19,14 +20,11 @@ app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
-const JWT_SECRET = process.env.JWT_SECRET || '';
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const JWT_SECRET = PAIR_CONFIG.JWT_SECRET;
+const DATA_DIR = fs.existsSync('/var/data') ? '/var/data' : path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
-}
-const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
+const SECRET = JWT_SECRET;
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ===== OWNER ACCOUNT =====
@@ -124,8 +122,8 @@ const resetTokens = new Map();
 // ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
 // DO NOT put sessions/Safari here. This file has no Baileys.
 // It only forwards to Engine.
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
-const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || '';
+const ENGINE_URL = PAIR_CONFIG.ENGINE_URL.replace(/\/+$/, '');
+const PAIR_BRIDGE_KEY = PAIR_CONFIG.PAIR_BRIDGE_KEY;
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -141,7 +139,6 @@ app.post('/request-pairing', async (req, res) => {
   pairTokens.delete(token);
   const phoneNumber = String(body.phoneNumber || '').replace(/\D/g, '');
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
-  if (!PAIR_BRIDGE_KEY) return res.status(503).json({ success:false, error:'Pairing bridge is not configured. Set PAIR_BRIDGE_KEY on the website service.' });
   try {
     const upstream = await fetch(ENGINE_URL + '/api/pair', {
       method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY },
@@ -156,23 +153,12 @@ app.post('/request-pairing', async (req, res) => {
   }
 });
 
-
-// Proxy pairing-session status to the WhatsApp engine (never expose its bridge key to browsers).
 app.post('/api/bots/status', async (req, res) => {
-  if (!PAIR_BRIDGE_KEY) return res.status(503).json({ success: false, error: 'Pairing bridge is not configured.' });
   try {
-    const upstream = await fetch(ENGINE_URL + '/api/bots/status', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
-      body: JSON.stringify({ numbers: Array.isArray(req.body?.numbers) ? req.body.numbers : [] }),
-      signal: AbortSignal.timeout(15000)
-    });
+    const upstream = await fetch(ENGINE_URL + '/api/bots/status', { method:'POST', headers:{'content-type':'application/json','x-pair-bridge-key':PAIR_BRIDGE_KEY}, body:JSON.stringify(req.body || {}), signal:AbortSignal.timeout(15000) });
     const data = await upstream.json().catch(() => ({}));
-    return res.status(upstream.status).json(data);
-  } catch (error) {
-    console.error('Pairing status request failed:', error.message);
-    return res.status(502).json({ success: false, error: 'Could not reach the WhatsApp engine.' });
-  }
+    res.status(upstream.status).json(data);
+  } catch (e) { res.status(502).json({ success:false, connected:false, status:'offline', error:'Engine is unavailable.' }); }
 });
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
