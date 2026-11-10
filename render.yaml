@@ -17,3 +17,7 @@ services:
         value: /var/data
       - key: JWT_SECRET
         generateValue: true
+      - key: ENGINE_URL
+        sync: false
+      - key: PAIR_BRIDGE_KEY
+        sync: false
