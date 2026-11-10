@@ -125,7 +125,7 @@ const resetTokens = new Map();
 // DO NOT put sessions/Safari here. This file has no Baileys.
 // It only forwards to Engine.
 const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
-const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
+const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || '';
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -141,6 +141,7 @@ app.post('/request-pairing', async (req, res) => {
   pairTokens.delete(token);
   const phoneNumber = String(body.phoneNumber || '').replace(/\D/g, '');
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
+  if (!PAIR_BRIDGE_KEY) return res.status(503).json({ success:false, error:'Pairing bridge is not configured. Set PAIR_BRIDGE_KEY on the website service.' });
   try {
     const upstream = await fetch(ENGINE_URL + '/api/pair', {
       method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY },
@@ -152,6 +153,25 @@ app.post('/request-pairing', async (req, res) => {
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
     res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
+  }
+});
+
+
+// Proxy pairing-session status to the WhatsApp engine (never expose its bridge key to browsers).
+app.post('/api/bots/status', async (req, res) => {
+  if (!PAIR_BRIDGE_KEY) return res.status(503).json({ success: false, error: 'Pairing bridge is not configured.' });
+  try {
+    const upstream = await fetch(ENGINE_URL + '/api/bots/status', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
+      body: JSON.stringify({ numbers: Array.isArray(req.body?.numbers) ? req.body.numbers : [] }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const data = await upstream.json().catch(() => ({}));
+    return res.status(upstream.status).json(data);
+  } catch (error) {
+    console.error('Pairing status request failed:', error.message);
+    return res.status(502).json({ success: false, error: 'Could not reach the WhatsApp engine.' });
   }
 });
 
