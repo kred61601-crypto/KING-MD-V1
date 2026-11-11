@@ -1,6 +1,7 @@
 // KING MD V4 — FULL FIXED server.js - Admin + Public Blue Tick ✔️
 // APP SIDE - This file does NOT connect to WhatsApp directly.
 // It only forwards pairing to the Engine.
+// FIXED: Forwards KINGMDXX (kingCode) from Engine to Frontend 👑
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -186,11 +187,19 @@ app.post('/request-pairing', async (req, res) => {
     if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
     if (req.user && req.user.id) {
       const existing = botRecords.find(b => b.ownerId === req.user.id && b.number === phoneNumber);
-      const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(), kingCode: data.kingCode || data.displayCode || null };
       if (existing) Object.assign(existing, record); else botRecords.push(record);
       saveJsonFile(BOTS_FILE, botRecords);
     }
-    res.json({ success:true, pairingCode:data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
+    // 👑 FIXED: Forward KINGMDXX to frontend! Was dropping kingCode before.
+    res.json({
+      success: true,
+      pairingCode: data.pairingCode, // REAL WhatsApp code - user enters THIS in WhatsApp
+      kingCode: data.kingCode || data.displayCode || null, // KINGMD25 - show BIG on website
+      displayCode: data.kingCode || data.displayCode || data.pairingCode,
+      state: data.state || 'pairing',
+      serverInfo: { serverUsed: 'KING MD Engine' }
+    });
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
     res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
@@ -526,8 +535,6 @@ app.post('/api/ai/chat', (req, res) => {
 app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
 // ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
-// FIXED: Engine returns bots[number] = { state, connected, updatedAt }
-// We must read .state, not use the whole object as state.
 app.get('/api/my-bots', requireUser, async (req, res) => {
   const mine = botRecords.filter(b => b.ownerId === req.account.id);
   let states = {};
@@ -538,7 +545,7 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
   const bots = mine.map(b => {
     const info = states[b.number];
     const liveState = (info && typeof info === 'object' ? info.state : info) || (typeof b.state === 'object' ? b.state.state : b.state) || 'offline';
-    return { number: b.number, state: liveState, connected: !!(info && info.connected), createdAt: b.createdAt, updatedAt: b.updatedAt };
+    return { number: b.number, state: liveState, connected: !!(info && info.connected), createdAt: b.createdAt, updatedAt: b.updatedAt, kingCode: b.kingCode || null };
   });
   res.json({ success: true, bots, total: bots.length });
 });
@@ -548,12 +555,11 @@ app.post('/api/bots/status', async (req, res) => {
   try {
     const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
     const account = currentUser(req);
-    // FIXED: Normalize Engine response to simple { number: { state, connected } } for frontend
     const normalized = {};
     for (const n of nums) {
       const info = (d.bots || {})[n];
       const st = (info && typeof info === 'object' ? info.state : info) || 'offline';
-      normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null };
+      normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null, kingCode: (info && info.kingCode) || null };
     }
     if (account) {
       botRecords.filter(b => b.ownerId === account.id && nums.includes(b.number)).forEach(b => {
