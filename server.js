@@ -1,4 +1,5 @@
 // KING MD V4 — FULL FIXED server.js - Admin + Public Blue Tick ✔️
+// FIXED: /api/stats was missing + /sessions serversLeft was hardcoded 0 + broken clearall route fixed
 // APP SIDE - This file does NOT connect to WhatsApp directly.
 // It only forwards pairing to the Engine.
 const express = require('express');
@@ -30,6 +31,16 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
 }
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
+
+// ===== KING MD - GLOBAL SLOTS FIX 👑 =====
+// 1 Engine = 15 bots max (like we talked about). Change to 50 if you upgrade to big VPS.
+const TOTAL_SERVERS = Number(process.env.TOTAL_SERVERS || 1);
+const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
+const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
+// Per-user slots: Free 3, Premium 6
+const FREE_SLOTS = 3;
+const PREMIUM_SLOTS = 6;
+
 fs.mkdirSync(DATA_DIR, { recursive: true });
 function loadJsonFile(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return fallback; } }
 function saveJsonFile(file, value) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(tmp, file); }
@@ -88,7 +99,6 @@ let users = loadUsers();
 users.forEach(u=>{
   if(isOwner(u.email, u.phone)){
     u.isAdmin = true; u.isVerified = true; u.isPremium = true;
-    // One-time owner balance grant; do not refill on every server restart.
     if (!u.adminCoinGrantVersion) { u.coins = 9999; u.adminCoinGrantVersion = 1; }
   }
   if(!Array.isArray(u.followers)) u.followers = [];
@@ -122,7 +132,7 @@ function publicUser(u) {
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
-  x.botSpaces = Number(u.botSpaces || (x.isPremium ? 6 : 3));
+  x.botSpaces = Number(u.botSpaces || (x.isPremium ? PREMIUM_SLOTS : FREE_SLOTS));
   x.usedSpaces = botRecords.filter(b => b.ownerId === u.id).length;
   return x;
 }
@@ -157,8 +167,6 @@ const onboarding = new Map();
 const resetTokens = new Map();
 
 // ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
-// DO NOT put sessions/Safari here. This file has no Baileys.
-// It only forwards to Engine.
 const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
@@ -178,7 +186,7 @@ app.post('/request-pairing', async (req, res) => {
   const account = currentUser(req);
   if (account) {
     const alreadyOwned = botRecords.some(b => b.ownerId === account.id && b.number === phoneNumber);
-    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? 6 : 3)));
+    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
     const used = botRecords.filter(b => b.ownerId === account.id).length;
     if (!alreadyOwned && used >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
   }
@@ -560,8 +568,6 @@ app.post('/api/ai/chat', (req, res) => {
 app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
 // ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
-// FIXED: Engine returns bots[number] = { state, connected, updatedAt }
-// We must read .state, not use the whole object as state.
 app.get('/api/my-bots', requireUser, async (req, res) => {
   const mine = botRecords.filter(b => b.ownerId === req.account.id);
   let states = {};
@@ -595,7 +601,6 @@ app.post('/api/bots/status', async (req, res) => {
   try {
     const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
     const account = currentUser(req);
-    // FIXED: Normalize Engine response to simple { number: { state, connected } } for frontend
     const normalized = {};
     for (const n of nums) {
       const info = (d.bots || {})[n];
@@ -628,7 +633,6 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
-
 // ===== COMPATIBILITY API: public fleet stats + admin monitoring =====
 async function readFleetStatus() {
   const numbers = [...new Set(botRecords.map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
@@ -649,8 +653,28 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+
+// ===== FIXED: PUBLIC STATS FOR TOP CARDS 👑 =====
+// Your frontend top cards call this. Before it didn't exist, so frontend showed 0/0.
+// Now: botsPaired = real count from bots.json (fallback if Engine sleeps), servers = 1, availableSlots = TOTAL_SLOTS - botsPaired
+function calcStats() {
+  const total = botRecords.length;
+  const online = botRecords.filter(b => normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state) === 'online').length;
+  const botsPaired = total; // total paired, even if one is temporarily offline - matches "My Bot Sessions 1/6"
+  const availableSlots = Math.max(0, TOTAL_SLOTS - total);
+  const serversLeft = availableSlots; // alias frontend may use
+  return { botsPaired, total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft, slots: availableSlots, slotsLeft: availableSlots };
+}
+app.get('/api/stats', (req, res) => {
+  res.json({ success: true, ...calcStats() });
+});
+// Alias - some frontends call /api/fleet or /api/public-stats
+app.get('/api/fleet', (req, res) => res.json({ success: true, ...calcStats() }));
+app.get('/api/public-stats', (req, res) => res.json({ success: true, ...calcStats() }));
+
 app.get('/sessions', async (req, res) => {
   const started = Date.now();
+  const stats = calcStats();
   try {
     const fleet = await readFleetStatus();
     botRecords.forEach(b => { if (fleet.bots[b.number]) b.state = fleet.bots[b.number].state; });
@@ -662,13 +686,14 @@ app.get('/sessions', async (req, res) => {
     }));
     const alive = sessions.filter(x => x.connected).length;
     const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
-    res.json({ success: true, total: sessions.length,
-      serverStats: { detectedServers: 1, serversLeft: 0, loadingServers: 0, readyServers: 1 },
+    // FIXED: was hardcoded serversLeft: 0 - now real value
+    res.json({ success: true, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots,
+      serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: TOTAL_SERVERS },
       ...(admin ? { sessions, totalAlive: alive } : {}) });
   } catch (e) {
     const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
     const sessions = botRecords.map(b => ({ number: b.number, phoneNumber: b.number, connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId }));
-    res.status(502).json({ success: false, total: botRecords.length, serverStats: { detectedServers: 1, serversLeft: 0, loadingServers: 0, readyServers: 0 },
+    res.status(502).json({ success: false, total: botRecords.length, botsPaired: botRecords.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
       ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started });
   }
 });
@@ -679,7 +704,7 @@ app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
     const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive;
     sessions.forEach(b => { const rec = botRecords.find(x => x.ownerId === b.ownerId && x.number === b.number); if (rec) rec.state = b.state; });
     saveJsonFile(BOTS_FILE, botRecords);
-    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: 1, totalServers: 1,
+    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS,
       perServer: [{ server: 'KING MD Engine', healthy: true, alive, dead, ms: fleet.ms }] });
   } catch (e) {
     res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message });
@@ -742,13 +767,13 @@ app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
   res.json({ success: true, notifications: all.slice(0, 500) });
 });
+// FIXED: This route was broken - saveUsers() was outside, causing syntax crash
 app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => {
   users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; });
-app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => {
-  users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; });
   saveUsers(); res.json({ success: true });
 });
-
+app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => {
+  users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; });
   saveUsers(); res.json({ success: true });
 });
 app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => {
@@ -763,7 +788,7 @@ app.post('/api/spaces/buy', requireUser, (req, res) => {
   const cost = 15, balance = Number(req.account.coins || 0);
   if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' });
   req.account.coins = balance - cost;
-  req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? 6 : 3))) + 1;
+  req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? PREMIUM_SLOTS : FREE_SLOTS))) + 1;
   saveUsers(); res.json({ success: true, coinsLeft: req.account.coins, botSpaces: req.account.botSpaces });
 });
 app.post('/api/db-full/report', requireUser, (req, res) => {
@@ -784,7 +809,9 @@ app.get('/api/stats/deploys', (_req, res) => {
   });
   res.json({ success: true, month: monthKey, today, monthDays,
     totals: { today: todayTotal, month: monthTotal, allTime: botRecords.length },
-    total: botRecords.length, active: botRecords.filter(b => normalizeBotState(b.state) === 'online').length });
+    total: botRecords.length, active: botRecords.filter(b => normalizeBotState(b.state) === 'online').length,
+    // FIXED: also include global stats here so any frontend using this endpoint gets correct slots
+    ...calcStats() });
 });
 
 // ===== NOTIFICATIONS =====
