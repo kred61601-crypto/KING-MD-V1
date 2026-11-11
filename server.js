@@ -1,7 +1,7 @@
-// KING MD V4 — FULL FIXED server.js - Admin + Public Blue Tick ✔️
-// FIXED: /api/stats was missing + /sessions serversLeft was hardcoded 0 + broken clearall route fixed
-// APP SIDE - This file does NOT connect to WhatsApp directly.
-// It only forwards pairing to the Engine.
+// KING MD V4 — FULL FIXED server.js - Bot Count + Channel React For Everyone + Coins 👑
+// FIXED 1: Bot count = UNIQUE numbers only (no more 6 for same number!)
+// FIXED 2: Channel React works for EVERY user with their OWN bot + coins, not just owner!
+// APP SIDE - This file does NOT connect to WhatsApp directly. It only forwards pairing to Engine.
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -24,7 +24,6 @@ const JWT_SECRET = process.env.JWT_SECRET || '';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
-// FIXED: Use env first so App and Engine always match. Fallback to same default as bridge.js
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
@@ -32,12 +31,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 
-// ===== KING MD - GLOBAL SLOTS FIX 👑 =====
-// 1 Engine = 15 bots max (like we talked about). Change to 50 if you upgrade to big VPS.
+// ===== KING MD - GLOBAL SLOTS 👑 =====
 const TOTAL_SERVERS = Number(process.env.TOTAL_SERVERS || 1);
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
-// Per-user slots: Free 3, Premium 6
 const FREE_SLOTS = 3;
 const PREMIUM_SLOTS = 6;
 
@@ -45,6 +42,54 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 function loadJsonFile(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return fallback; } }
 function saveJsonFile(file, value) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(tmp, file); }
 let botRecords = loadJsonFile(BOTS_FILE, []); if (!Array.isArray(botRecords)) botRecords = [];
+
+// ===== FIX 1: DEDUPE BOTS - COUNT UNIQUE NUMBERS ONLY 👑 =====
+// If same number saved 6 times, count as 1! This is why you saw 6 BOTS PAIRED for 1 bot!
+function normalizePhone(p){
+  let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
+  if(s.startsWith('0')) s = '254' + s.slice(1);
+  return s;
+}
+function dedupeBotRecords() {
+  const seen = new Map();
+  for (const b of botRecords) {
+    const num = normalizePhone(b.number || b.phoneNumber || '');
+    if (!num) continue;
+    // Key = number only. Same number = same bot, even if different ownerId (re-registered)
+    // Keep newest, keep first ownerId
+    if (!seen.has(num)) seen.set(num, { ...b, number: num });
+    else {
+      const old = seen.get(num);
+      // Keep newest updatedAt
+      if (new Date(b.updatedAt || b.createdAt || 0) > new Date(old.updatedAt || old.createdAt || 0)) {
+        seen.set(num, { ...old, ...b, number: num, ownerId: old.ownerId || b.ownerId });
+      }
+    }
+  }
+  const cleaned = [...seen.values()];
+  if (cleaned.length !== botRecords.length) {
+    console.log(`[KING MD] Deduped bots: ${botRecords.length} -> ${cleaned.length} unique`);
+    botRecords = cleaned;
+    saveJsonFile(BOTS_FILE, botRecords);
+  }
+  return botRecords;
+}
+dedupeBotRecords();
+// Helper: unique bots
+function uniqueBots(list) {
+  const m = new Map();
+  for (const b of (list || botRecords)) {
+    const num = normalizePhone(b.number || '');
+    if (num && !m.has(num)) m.set(num, b);
+  }
+  return [...m.values()];
+}
+function countBots() {
+  const uniq = uniqueBots();
+  const online = uniq.filter(b => normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state) === 'online').length;
+  return { total: uniq.length, online, offline: uniq.length - online, unique: uniq };
+}
+
 const notificationList = user => Array.isArray(user.notifications) ? user.notifications : [];
 function addUserNotification(user, type, title, body, meta) {
   if (!Array.isArray(user.notifications)) user.notifications = [];
@@ -63,11 +108,6 @@ async function engineFetch(route, options) {
 // ===== OWNER ACCOUNT =====
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468'];
-function normalizePhone(p){
-  let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
-  if(s.startsWith('0')) s = '254' + s.slice(1);
-  return s;
-}
 function normalizeBotState(value, info) {
   const raw = String(value || '').toLowerCase().trim();
   if ((info && typeof info === 'object' && info.connected === true) ||
@@ -133,7 +173,9 @@ function publicUser(u) {
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
   x.botSpaces = Number(u.botSpaces || (x.isPremium ? PREMIUM_SLOTS : FREE_SLOTS));
-  x.usedSpaces = botRecords.filter(b => b.ownerId === u.id).length;
+  // FIXED: usedSpaces = unique numbers for this user, not duplicates
+  x.usedSpaces = uniqueBots(botRecords.filter(b => b.ownerId === u.id)).length;
+  x.coins = Number(u.coins || 0);
   return x;
 }
 function tokenFor(u) {
@@ -181,14 +223,15 @@ app.post('/request-pairing', async (req, res) => {
   const expiry = pairTokens.get(token);
   if (!expiry || expiry < Date.now()) { pairTokens.delete(token); return res.status(403).json({ success:false, error:'Pairing request expired. Refresh and try again.' }); }
   pairTokens.delete(token);
-  const phoneNumber = String(body.phoneNumber || '').replace(/\D/g, '');
+  const phoneNumber = normalizePhone(body.phoneNumber || '');
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
   const account = currentUser(req);
   if (account) {
-    const alreadyOwned = botRecords.some(b => b.ownerId === account.id && b.number === phoneNumber);
+    // FIXED: Count UNIQUE bots for this user, not duplicates
+    const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
+    const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber);
     const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
-    const used = botRecords.filter(b => b.ownerId === account.id).length;
-    if (!alreadyOwned && used >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
+    if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
   }
   try {
     const upstream = await fetch(ENGINE_URL + '/api/pair', {
@@ -198,18 +241,19 @@ app.post('/request-pairing', async (req, res) => {
     const data = await upstream.json().catch(() => ({}));
     if (upstream.status === 409 && data.code === 'ALREADY_CONNECTED') {
       if (req.user && req.user.id) {
-        const existing = botRecords.find(b => b.ownerId === req.user.id && b.number === phoneNumber);
+        const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
         const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'online', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
-        if (existing) Object.assign(existing, record); else botRecords.push(record); saveJsonFile(BOTS_FILE, botRecords);
+        if (existing) Object.assign(existing, record); else botRecords.push(record);
+        dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
       }
       return res.json({ success: true, alreadyConnected: true, state: 'online', serverInfo: { serverUsed: 'KING MD Engine' } });
     }
     if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
     if (req.user && req.user.id) {
-      const existing = botRecords.find(b => b.ownerId === req.user.id && b.number === phoneNumber);
+      const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
       const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
       if (existing) Object.assign(existing, record); else botRecords.push(record);
-      saveJsonFile(BOTS_FILE, botRecords);
+      dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
     res.json({ success:true, pairingCode:data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
   } catch (error) {
@@ -569,7 +613,9 @@ app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
 // ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
 app.get('/api/my-bots', requireUser, async (req, res) => {
-  const mine = botRecords.filter(b => b.ownerId === req.account.id);
+  // FIXED: Dedupe first, then check Engine for UNIQUE numbers only
+  dedupeBotRecords();
+  const mine = uniqueBots(botRecords.filter(b => b.ownerId === req.account.id));
   let states = {};
   if (mine.length) {
     try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = d.bots || {}; }
@@ -577,7 +623,7 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
   }
   let changed = false;
   const bots = mine.map(b => {
-    const info = states[b.number];
+    const info = states[normalizePhone(b.number)];
     const rawState = info && typeof info === 'object' ? info.state : info;
     const liveState = rawState != null || (info && info.connected === true)
       ? normalizeBotState(rawState, info)
@@ -588,15 +634,18 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
         addUserNotification(req.account, 'bot_status', liveState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected',
           '+' + b.number + (liveState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: liveState });
       }
-      b.state = liveState; b.updatedAt = new Date().toISOString(); changed = true;
+      const rec = botRecords.find(x => normalizePhone(x.number) === normalizePhone(b.number));
+      if (rec) { rec.state = liveState; rec.updatedAt = new Date().toISOString(); }
+      changed = true;
     }
-    return { number: b.number, state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt };
+    return { number: normalizePhone(b.number), state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt };
   });
   if (changed) { saveJsonFile(BOTS_FILE, botRecords); saveUsers(); }
-  res.json({ success: true, bots, total: bots.length });
+  // FIXED: total = UNIQUE count for this user
+  res.json({ success: true, bots, total: bots.length, count: bots.length });
 });
 app.post('/api/bots/status', async (req, res) => {
-  const nums = Array.isArray(req.body && req.body.numbers) ? req.body.numbers.map(normalizePhone).filter(n => /^\d{8,15}$/.test(n)).slice(0, 30) : [];
+  const nums = Array.isArray(req.body && req.body.numbers) ? [...new Set(req.body.numbers.map(normalizePhone).filter(n => /^\d{8,15}$/.test(n)))] .slice(0, 30) : [];
   if (!nums.length) return res.json({ success: true, bots: {} });
   try {
     const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
@@ -608,8 +657,8 @@ app.post('/api/bots/status', async (req, res) => {
       normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null };
     }
     if (account) {
-      botRecords.filter(b => b.ownerId === account.id && nums.includes(b.number)).forEach(b => {
-        const nextState = normalized[b.number].state;
+      botRecords.filter(b => nums.includes(normalizePhone(b.number))).forEach(b => {
+        const nextState = normalized[normalizePhone(b.number)].state;
         const oldState = typeof b.state === 'object' ? b.state.state : b.state;
         if (oldState !== nextState && (nextState === 'online' || nextState === 'offline')) {
           addUserNotification(account, 'bot_status', nextState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (nextState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: nextState });
@@ -623,11 +672,11 @@ app.post('/api/bots/status', async (req, res) => {
 });
 app.delete('/session/:phone', requireUser, async (req, res) => {
   const number = normalizePhone(req.params.phone);
-  const record = botRecords.find(b => b.ownerId === req.account.id && b.number === number);
+  const record = botRecords.find(b => b.ownerId === req.account.id && normalizePhone(b.number) === number);
   if (!record) return res.status(404).json({ success: false, error: 'This bot is not linked to your account.' });
   try {
     await engineFetch('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
-    botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && b.number === number));
+    botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && normalizePhone(b.number) === number));
     saveJsonFile(BOTS_FILE, botRecords);
     res.json({ success: true, serversDeleted: ['KING MD Engine'] });
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
@@ -635,7 +684,7 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
 
 // ===== COMPATIBILITY API: public fleet stats + admin monitoring =====
 async function readFleetStatus() {
-  const numbers = [...new Set(botRecords.map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
+  const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
   if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
   const started = Date.now();
   const data = await engineFetch('/api/status?numbers=' + encodeURIComponent(numbers.join(',')));
@@ -654,55 +703,54 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// ===== FIXED: PUBLIC STATS FOR TOP CARDS 👑 =====
-// Your frontend top cards call this. Before it didn't exist, so frontend showed 0/0.
-// Now: botsPaired = real count from bots.json (fallback if Engine sleeps), servers = 1, availableSlots = TOTAL_SLOTS - botsPaired
+// ===== FIXED: PUBLIC STATS - COUNT UNIQUE BOTS ONLY 👑 =====
 function calcStats() {
-  const total = botRecords.length;
-  const online = botRecords.filter(b => normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state) === 'online').length;
-  const botsPaired = total; // total paired, even if one is temporarily offline - matches "My Bot Sessions 1/6"
+  dedupeBotRecords();
+  const { total, online } = countBots(); // total = UNIQUE numbers
+  const botsPaired = total;
   const availableSlots = Math.max(0, TOTAL_SLOTS - total);
-  const serversLeft = availableSlots; // alias frontend may use
-  return { botsPaired, total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft, slots: availableSlots, slotsLeft: availableSlots };
+  return { botsPaired, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
 }
-app.get('/api/stats', (req, res) => {
-  res.json({ success: true, ...calcStats() });
-});
-// Alias - some frontends call /api/fleet or /api/public-stats
+app.get('/api/stats', (req, res) => { res.json({ success: true, ...calcStats() }); });
 app.get('/api/fleet', (req, res) => res.json({ success: true, ...calcStats() }));
 app.get('/api/public-stats', (req, res) => res.json({ success: true, ...calcStats() }));
+// NEW: Admin can clean duplicates manually
+app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) => {
+  const before = botRecords.length;
+  dedupeBotRecords();
+  res.json({ success: true, before, after: botRecords.length, removed: before - botRecords.length, ...calcStats() });
+});
 
 app.get('/sessions', async (req, res) => {
   const started = Date.now();
   const stats = calcStats();
   try {
     const fleet = await readFleetStatus();
-    botRecords.forEach(b => { if (fleet.bots[b.number]) b.state = fleet.bots[b.number].state; });
+    botRecords.forEach(b => { if (fleet.bots[normalizePhone(b.number)]) b.state = fleet.bots[normalizePhone(b.number)].state; });
     saveJsonFile(BOTS_FILE, botRecords);
-    const sessions = botRecords.map(b => ({
-      number: b.number, phoneNumber: b.number, connected: fleet.bots[b.number] ? fleet.bots[b.number].connected : normalizeBotState(b.state) === 'online',
-      state: fleet.bots[b.number] ? fleet.bots[b.number].state : normalizeBotState(b.state), ownerId: b.ownerId,
+    const sessions = uniqueBots().map(b => ({
+      number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].connected : normalizeBotState(b.state) === 'online',
+      state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state), ownerId: b.ownerId,
       createdAt: b.createdAt, updatedAt: b.updatedAt
     }));
     const alive = sessions.filter(x => x.connected).length;
     const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
-    // FIXED: was hardcoded serversLeft: 0 - now real value
     res.json({ success: true, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots,
       serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: TOTAL_SERVERS },
       ...(admin ? { sessions, totalAlive: alive } : {}) });
   } catch (e) {
     const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
-    const sessions = botRecords.map(b => ({ number: b.number, phoneNumber: b.number, connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId }));
-    res.status(502).json({ success: false, total: botRecords.length, botsPaired: botRecords.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
+    const sessions = uniqueBots().map(b => ({ number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId }));
+    res.status(502).json({ success: false, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
       ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started });
   }
 });
 app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
   try {
     const fleet = await readFleetStatus();
-    const sessions = botRecords.map(b => ({ ...b, state: fleet.bots[b.number] ? fleet.bots[b.number].state : normalizeBotState(b.state) }));
+    const sessions = uniqueBots().map(b => ({ ...b, number: normalizePhone(b.number), state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state) }));
     const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive;
-    sessions.forEach(b => { const rec = botRecords.find(x => x.ownerId === b.ownerId && x.number === b.number); if (rec) rec.state = b.state; });
+    sessions.forEach(b => { const rec = botRecords.find(x => normalizePhone(x.number) === b.number); if (rec) rec.state = b.state; });
     saveJsonFile(BOTS_FILE, botRecords);
     res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS,
       perServer: [{ server: 'KING MD Engine', healthy: true, alive, dead, ms: fleet.ms }] });
@@ -713,12 +761,12 @@ app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
 app.post('/api/admin/monitoring/purge-dead', requireUser, adminOnly, async (req, res) => {
   try {
     const fleet = await readFleetStatus();
-    const dead = botRecords.filter(b => !fleet.bots[b.number] || fleet.bots[b.number].state !== 'online');
+    const dead = uniqueBots().filter(b => !fleet.bots[normalizePhone(b.number)] || fleet.bots[normalizePhone(b.number)].state !== 'online');
     for (const b of dead) {
-      try { await engineFetch('/api/session/' + encodeURIComponent(b.number), { method: 'DELETE' }); } catch (_) {}
+      try { await engineFetch('/api/session/' + encodeURIComponent(normalizePhone(b.number)), { method: 'DELETE' }); } catch (_) {}
     }
-    const keys = new Set(dead.map(b => b.ownerId + ':' + b.number));
-    botRecords = botRecords.filter(b => !keys.has(b.ownerId + ':' + b.number));
+    const keys = new Set(dead.map(b => normalizePhone(b.number)));
+    botRecords = botRecords.filter(b => !keys.has(normalizePhone(b.number)));
     saveJsonFile(BOTS_FILE, botRecords);
     res.json({ success: true, purged: dead.length });
   } catch (e) { res.status(502).json({ success: false, error: e.message }); }
@@ -767,7 +815,6 @@ app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
   res.json({ success: true, notifications: all.slice(0, 500) });
 });
-// FIXED: This route was broken - saveUsers() was outside, causing syntax crash
 app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => {
   users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; });
   saveUsers(); res.json({ success: true });
@@ -800,18 +847,17 @@ app.get('/api/stats/deploys', (_req, res) => {
   const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7);
   const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0);
   let todayTotal = 0, monthTotal = 0;
-  botRecords.forEach(b => {
+  uniqueBots().forEach(b => {
     const d = new Date(b.createdAt || b.updatedAt || 0);
     if (!Number.isFinite(d.getTime())) return;
     const day = d.toISOString().slice(0, 10);
     if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; }
     if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; }
   });
+  const uniq = countBots();
   res.json({ success: true, month: monthKey, today, monthDays,
-    totals: { today: todayTotal, month: monthTotal, allTime: botRecords.length },
-    total: botRecords.length, active: botRecords.filter(b => normalizeBotState(b.state) === 'online').length,
-    // FIXED: also include global stats here so any frontend using this endpoint gets correct slots
-    ...calcStats() });
+    totals: { today: todayTotal, month: monthTotal, allTime: uniq.total },
+    total: uniq.total, active: uniq.online, ...calcStats() });
 });
 
 // ===== NOTIFICATIONS =====
@@ -836,7 +882,7 @@ app.delete('/api/notifications/:id', requireUser, (req, res) => {
   req.account.unreadNotifs = req.account.notifications.filter(n => !n.read).length; saveUsers(); res.json({ success: true });
 });
 
-// ===== APP CONFIG / CHANNEL REACT =====
+// ===== APP CONFIG / CHANNEL REACT FOR EVERYONE + COINS 👑 =====
 app.get('/api/pages/status', (_req, res) => res.json({ success: true, pages: {}, turnstileSiteKey: null, maintenance: false }));
 app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   const number = normalizePhone(req.body && req.body.number);
@@ -845,32 +891,77 @@ app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   if (!(req.body && req.body.confirm)) return res.json({ success: true, until: req.account.premiumUntil || null, current: req.account.boundNumber || null, needsReplace: !!(req.account.boundNumber && req.account.boundNumber !== number) });
   req.account.boundNumber = number; saveUsers(); res.json({ success: true, until: req.account.premiumUntil || null });
 });
-app.get('/api/channel-react/status', requireUser, (req, res) => {
+
+// FIXED FOR EVERYONE: Each user uses THEIR OWN bot, not owner's bot!
+// Auto-heal: if bots.json wiped, link by user's profile phone if that phone is live on Engine.
+async function getBotNumbersForEveryone(account) {
+  dedupeBotRecords();
+  let local = uniqueBots(botRecords.filter(b => b.ownerId === account.id)).map(b => normalizePhone(b.number));
+  if (local.length) return local;
+  // Try profile phone
+  const myPhone = normalizePhone(account.phone || account.boundNumber || '');
+  try {
+    const d = await engineFetch('/api/status');
+    const bots = d.bots || d.sessions || {};
+    let live = [];
+    if (Array.isArray(bots)) live = bots.filter(b => b.state === 'online' || b.connected).map(b => normalizePhone(b.number || b.phoneNumber));
+    else live = Object.keys(bots).filter(n => bots[n]?.connected === true || String(bots[n]?.state || '').toLowerCase() === 'online').map(normalizePhone);
+    if (myPhone && live.includes(myPhone)) {
+      console.log('[ChannelReact] Auto-linked', myPhone, 'to', account.username);
+      botRecords.push({ ownerId: account.id, username: account.username || '', number: myPhone, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
+      return [myPhone];
+    }
+    return [];
+  } catch (e) { console.log('[ChannelReact] Engine fail:', e.message); return local; }
+}
+
+app.get('/api/channel-react/status', requireUser, async (req, res) => {
   const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
   const usage = req.account.channelReactUsage || {};
   const used = usage.day === today ? Number(usage.used || 0) : 0;
   const limit = premium ? 10 : 1;
-  res.json({ success: true, premium, dailyLimit: limit, dailyUsed: used, freeLimit: premium ? 10 : 1, refillPrice: 15, remaining: Math.max(0, limit - used) });
+  const numbers = await getBotNumbersForEveryone(req.account);
+  res.json({ success: true, premium, hasBot: numbers.length > 0, botsCount: numbers.length, bots: numbers, coins: Number(req.account.coins || 0), dailyLimit: limit, dailyUsed: used, freeLimit: limit, refillPrice: 15, remaining: Math.max(0, limit - used) });
 });
+
 app.post('/api/channel-react', requireUser, async (req, res) => {
   const body = req.body || {}, premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
   const usage = req.account.channelReactUsage || {};
   const used = usage.day === today ? Number(usage.used || 0) : 0;
   const limit = premium ? 10 : 1;
-  const requested = Math.max(1, Math.min(Number(body.amount) || 1, limit - used));
-  if (used >= limit) return res.status(429).json({ success: false, error: 'Your daily Channel React limit has been used.', cooldown: true });
-  const numbers = botRecords.filter(b => b.ownerId === req.account.id).map(b => b.number);
-  if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot before using Channel React.' });
+  const requested = Math.max(1, Math.min(Number(body.amount) || 1, 10));
+  const link = String(body.link || '').trim();
+  if (!link) return res.status(400).json({ success: false, error: 'Paste a WhatsApp Channel link.' });
+  if (link.includes('chat.whatsapp.com')) return res.status(400).json({ success: false, error: 'That is a GROUP link! Use whatsapp.com/channel/...' });
+  if (!link.includes('whatsapp.com/channel/') && !link.includes('/channel/') && !/0029/.test(link)) return res.status(400).json({ success: false, error: 'Invalid Channel link. Use https://whatsapp.com/channel/...' });
+
+  // FOR EVERYONE: This user's OWN bot
+  const numbers = await getBotNumbersForEveryone(req.account);
+  if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot first. Go to Deploy a Bot > Pair your number, then try again.' });
+
+  // ===== COINS FOR EVERYONE 👑 =====
+  // Free daily first, then coins for extra. Deduct ONLY if success!
+  const freeLeft = Math.max(0, limit - used);
+  const extraNeeded = Math.max(0, requested - freeLeft);
+  const coinCost = extraNeeded * 15;
+  const balance = Number(req.account.coins || 0);
+  if (coinCost > 0 && balance < coinCost) {
+    return res.status(402).json({ success: false, needCoins: true, error: `You used your ${limit} free reacts today. You need ${coinCost} coins for ${extraNeeded} extra reacts. You have ${balance} coins. Buy coins or try tomorrow.` });
+  }
+
   try {
-    const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link: body.link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
-    const sent = Number(d.reactionsSent || 0);
-    if (sent) { req.account.channelReactUsage = { day: today, used: used + sent }; saveUsers(); }
-    res.json({ ...d, success: !!d.success, premium, dailyUsed: used + sent, nextAt: new Date(Date.now() + 60000).toISOString() });
-  } catch (e) { res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed.' }); }
+    const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
+    const sent = Number(d.reactionsSent || d.sent || 0);
+    if (!sent) return res.status(500).json({ success: false, error: 'Engine failed. Make sure YOUR bot follows that Channel first! Open WhatsApp on YOUR bot number > Channels > Follow this channel.' });
+    if (coinCost > 0) req.account.coins = balance - coinCost;
+    req.account.channelReactUsage = { day: today, used: used + sent };
+    saveUsers();
+    res.json({ ...d, success: true, premium, dailyUsed: used + sent, coinsLeft: Number(req.account.coins || 0), coinsSpent: coinCost, nextAt: new Date(Date.now() + 60000).toISOString() });
+  } catch (e) { res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' }); }
 });
 
-// Payment endpoints deliberately stay disabled until a real Daraja/Korapay merchant
-// integration is configured. A phone number alone cannot verify an M-Pesa payment.
+// Payment endpoints deliberately stay disabled until a real Daraja/Korapay merchant integration is configured.
 app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
   success: true, paymentsOff: true, maxMonths: 2, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || null,
   mpesaNumber: '+254726476468', options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1, methods: ['mobile_money'] }]
