@@ -19,11 +19,14 @@ app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
+const PAIRING_CONFIG = require('./pairing.config');
+const ENGINE_URL = (process.env.ENGINE_URL || PAIRING_CONFIG.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || PAIRING_CONFIG.PAIR_BRIDGE_KEY || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
-const PAIR_BRIDGE_KEY = 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
+
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
@@ -41,11 +44,32 @@ function addUserNotification(user, type, title, body, meta) {
   user.unreadNotifs = user.notifications.filter(n => !n.read).length;
 }
 async function engineFetch(route, options) {
-  const base = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+  const base = ENGINE_URL;
   const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.success === false) { const error = new Error(data.error || 'WhatsApp engine request failed'); error.status = response.status || 502; throw error; }
   return data;
+}
+
+// Normalize common engine/Baileys connection labels into the two states
+// used by the KING MD dashboard. Unknown values are preserved for diagnosis.
+function normalizeEngineState(value) {
+  const state = String(value == null ? '' : value).toLowerCase().trim();
+  if (['online', 'connected', 'open', 'active', 'ready', 'logged_in', 'logged-in'].includes(state)) return 'online';
+  if (['pairing', 'connecting', 'qr', 'waiting', 'pending', 'close_wait'].includes(state)) return 'pairing';
+  if (['offline', 'disconnected', 'closed', 'close', 'logged_out', 'logged-out', 'terminated'].includes(state)) return 'offline';
+  return state || 'offline';
+}
+function normalizeEngineBots(input) {
+  const output = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return output;
+  for (const [number, value] of Object.entries(input)) {
+    const raw = value && typeof value === 'object'
+      ? (value.state || value.status || value.connection || value.connectionState)
+      : value;
+    output[number] = normalizeEngineState(raw);
+  }
+  return output;
 }
 
 // ===== OWNER ACCOUNT =====
@@ -145,7 +169,7 @@ const resetTokens = new Map();
 // ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
 // DO NOT put sessions/Safari here. This file has no Baileys.
 // It only forwards to Engine.
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -530,7 +554,7 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
   const mine = botRecords.filter(b => b.ownerId === req.account.id);
   let states = {};
   if (mine.length) {
-    try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = d.bots || {}; }
+    try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = normalizeEngineBots(d.bots); }
     catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
   }
   const bots = mine.map(b => ({ number: b.number, state: states[b.number] || b.state || 'offline', createdAt: b.createdAt, updatedAt: b.updatedAt }));
@@ -541,10 +565,11 @@ app.post('/api/bots/status', async (req, res) => {
   if (!nums.length) return res.json({ success: true, bots: {} });
   try {
     const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
+    const normalizedBots = normalizeEngineBots(d.bots);
     const account = currentUser(req);
     if (account) {
       botRecords.filter(b => b.ownerId === account.id && nums.includes(b.number)).forEach(b => {
-        const nextState = (d.bots || {})[b.number] || 'offline';
+        const nextState = normalizedBots[b.number] || 'offline';
         if (b.state !== nextState && (nextState === 'online' || nextState === 'offline')) {
           addUserNotification(account, 'bot_status', nextState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (nextState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: nextState });
         }
@@ -552,7 +577,7 @@ app.post('/api/bots/status', async (req, res) => {
       });
       saveJsonFile(BOTS_FILE, botRecords); saveUsers();
     }
-    res.json({ success: true, bots: d.bots || {} });
+    res.json({ success: true, bots: normalizedBots });
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Engine status unavailable', bots: {} }); }
 });
 app.delete('/session/:phone', requireUser, async (req, res) => {
