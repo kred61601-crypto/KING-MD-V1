@@ -7677,7 +7677,7 @@ const A = {
       const r = await fetch('/api/bots/status', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(this.token ? { 'x-auth-token': this.token } : {}) }, body: JSON.stringify({ numbers: nums, deviceId: this._devId() }) });
       const d = await r.json();
       if (d && d.success) {
-        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = st;
+        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = (st && typeof st === 'object') ? st.state : st;
         if (JSON.stringify(next) !== JSON.stringify(this._botOnline || {})) { this._botOnline = next; this._loadMyBotsCard(); }
       }
     } catch (_) {} finally { this._botPollBusy = false; }

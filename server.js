@@ -57,6 +57,14 @@ function normalizePhone(p){
   if(s.startsWith('0')) s = '254' + s.slice(1);
   return s;
 }
+function normalizeBotState(value, info) {
+  const raw = String(value || '').toLowerCase().trim();
+  if ((info && typeof info === 'object' && info.connected === true) ||
+      ['online','connected','open','active','ready'].includes(raw)) return 'online';
+  if (['offline','close','closed','disconnected','logged_out','logout','dead'].includes(raw)) return 'offline';
+  if (['pairing','connecting','qr','starting','reconnecting'].includes(raw)) return 'pairing';
+  return raw || 'offline';
+}
 function isOwner(email, phone){
   const e = String(email||'').toLowerCase().trim();
   const ph = normalizePhone(phone||'');
@@ -80,10 +88,15 @@ let users = loadUsers();
 users.forEach(u=>{
   if(isOwner(u.email, u.phone)){
     u.isAdmin = true; u.isVerified = true; u.isPremium = true;
+    // One-time owner balance grant; do not refill on every server restart.
+    if (!u.adminCoinGrantVersion) { u.coins = 9999; u.adminCoinGrantVersion = 1; }
   }
+  if(!Array.isArray(u.followers)) u.followers = [];
+  if(!Array.isArray(u.following)) u.following = [];
   if(!u.avatar && u.photo) u.avatar = u.photo;
   if(!u.cover) u.cover = '';
 });
+saveJsonFile(USERS_FILE, users);
 let messages = [{ _id: 'welcome1', username: 'KING MD', text: 'Welcome to KING MD V4 Community! 👑', createdAt: new Date().toISOString(), reactions: [], pinned: true, isAdmin: true, isVerified: true }];
 let communityMessages = messages;
 let typingUsers = new Map();
@@ -214,8 +227,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (base.length < 3) base = 'user' + base;
     let username = base, n = 1; while (findUsername(username)) { username = (base.slice(0,16) + n++).slice(0,20); }
     const owner = isOwner(email, phone);
-    const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, isPremium: owner, followers:[], following:[], likes:0, coins:3, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
-    users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins:3 });
+    const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, isPremium: owner, followers:[], following:[], likes:0, coins: owner ? 9999 : 3, adminCoinGrantVersion: owner ? 1 : 0, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
+    users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins: owner ? 9999 : 3 });
   } catch (e) { console.error('Registration error:', e); res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
 });
 app.post('/api/auth/login', async (req, res) => {
@@ -380,7 +393,7 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
     isAdmin: owner, isVerified: owner, isPremium: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
     hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
   users.push(u); saveUsers(); onboarding.delete(key);
-  res.json({ success: true, token: tokenFor(u), signupBonusCoins: 3, numberLinked: false });
+  res.json({ success: true, token: tokenFor(u), signupBonusCoins: owner ? 9999 : 3, numberLinked: false });
 });
 
 // ===== PROFILE =====
@@ -422,12 +435,33 @@ app.get('/api/users/:username', (req, res) => {
 });
 app.post('/api/users/:username/follow', requireUser, (req, res) => {
   const target = findUsername(req.params.username), me = req.account;
-  if (!target || target.id === me.id) return res.json({ success: false, error: 'User not found.' });
-  target.followers = target.followers || []; me.following = me.following || [];
-  const i = target.followers.indexOf(me.id);
-  if (i >= 0) { target.followers.splice(i, 1); me.following = me.following.filter(id => id !== target.id); }
-  else { target.followers.push(me.id); me.following.push(target.id); }
-  saveUsers(); res.json({ success: true });
+  if (!target || target.id === me.id) return res.status(404).json({ success: false, error: 'User not found.' });
+  target.followers = Array.isArray(target.followers) ? target.followers : [];
+  me.following = Array.isArray(me.following) ? me.following : [];
+  const following = me.following.includes(target.id);
+  if (following) {
+    target.followers = target.followers.filter(id => id !== me.id);
+    me.following = me.following.filter(id => id !== target.id);
+  } else {
+    if (!target.followers.includes(me.id)) target.followers.push(me.id);
+    if (!me.following.includes(target.id)) me.following.push(target.id);
+    addUserNotification(target, 'follower', 'New follower', '@' + me.username + ' started following you.', { username: me.username });
+  }
+  saveUsers();
+  res.json({ success: true, following: !following, followersCount: target.followers.length, followingCount: me.following.length });
+});
+app.get('/api/users/:username/followers', (req, res) => {
+  const target = findUsername(req.params.username);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found.' });
+  const list = (target.followers || []).map(id => users.find(u => u.id === id)).filter(Boolean);
+  res.json({ success: true, users: list.map(publicUser) });
+});
+app.get('/api/users/:username/following', (req, res) => {
+  const target = findUsername(req.params.username);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found.' });
+  if (target.hideFollowing && (!currentUser(req) || currentUser(req).id !== target.id)) return res.json({ success: true, restricted: true, users: [] });
+  const list = (target.following || []).map(id => users.find(u => u.id === id)).filter(Boolean);
+  res.json({ success: true, users: list.map(publicUser) });
 });
 app.post('/api/users/:username/like', requireUser, (req, res) => {
   const target = findUsername(req.params.username);
@@ -535,11 +569,24 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
     try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = d.bots || {}; }
     catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
   }
+  let changed = false;
   const bots = mine.map(b => {
     const info = states[b.number];
-    const liveState = (info && typeof info === 'object' ? info.state : info) || (typeof b.state === 'object' ? b.state.state : b.state) || 'offline';
-    return { number: b.number, state: liveState, connected: !!(info && info.connected), createdAt: b.createdAt, updatedAt: b.updatedAt };
+    const rawState = info && typeof info === 'object' ? info.state : info;
+    const liveState = rawState != null || (info && info.connected === true)
+      ? normalizeBotState(rawState, info)
+      : normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state);
+    const oldState = normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state);
+    if (liveState !== oldState) {
+      if (liveState === 'online' || liveState === 'offline') {
+        addUserNotification(req.account, 'bot_status', liveState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected',
+          '+' + b.number + (liveState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: liveState });
+      }
+      b.state = liveState; b.updatedAt = new Date().toISOString(); changed = true;
+    }
+    return { number: b.number, state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt };
   });
+  if (changed) { saveJsonFile(BOTS_FILE, botRecords); saveUsers(); }
   res.json({ success: true, bots, total: bots.length });
 });
 app.post('/api/bots/status', async (req, res) => {
@@ -552,7 +599,7 @@ app.post('/api/bots/status', async (req, res) => {
     const normalized = {};
     for (const n of nums) {
       const info = (d.bots || {})[n];
-      const st = (info && typeof info === 'object' ? info.state : info) || 'offline';
+      const st = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
       normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null };
     }
     if (account) {
@@ -581,6 +628,136 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
+
+// ===== COMPATIBILITY API: public fleet stats + admin monitoring =====
+async function readFleetStatus() {
+  const numbers = [...new Set(botRecords.map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
+  if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
+  const started = Date.now();
+  const data = await engineFetch('/api/status?numbers=' + encodeURIComponent(numbers.join(',')));
+  const raw = data.bots || {}, bots = {};
+  numbers.forEach(n => {
+    const info = raw[n];
+    const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
+    bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null };
+  });
+  return { numbers, bots, ok: true, ms: Date.now() - started };
+}
+function adminOnly(req, res, next) {
+  if (!(req.account && (req.account.isAdmin || isOwner(req.account.email, req.account.phone)))) {
+    return res.status(403).json({ success: false, error: 'Admin only' });
+  }
+  next();
+}
+app.get('/sessions', async (req, res) => {
+  const started = Date.now();
+  try {
+    const fleet = await readFleetStatus();
+    botRecords.forEach(b => { if (fleet.bots[b.number]) b.state = fleet.bots[b.number].state; });
+    saveJsonFile(BOTS_FILE, botRecords);
+    const sessions = botRecords.map(b => ({
+      number: b.number, phoneNumber: b.number, connected: fleet.bots[b.number] ? fleet.bots[b.number].connected : normalizeBotState(b.state) === 'online',
+      state: fleet.bots[b.number] ? fleet.bots[b.number].state : normalizeBotState(b.state), ownerId: b.ownerId,
+      createdAt: b.createdAt, updatedAt: b.updatedAt
+    }));
+    const alive = sessions.filter(x => x.connected).length;
+    const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
+    res.json({ success: true, total: sessions.length,
+      serverStats: { detectedServers: 1, serversLeft: 0, loadingServers: 0, readyServers: 1 },
+      ...(admin ? { sessions, totalAlive: alive } : {}) });
+  } catch (e) {
+    const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
+    const sessions = botRecords.map(b => ({ number: b.number, phoneNumber: b.number, connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId }));
+    res.status(502).json({ success: false, total: botRecords.length, serverStats: { detectedServers: 1, serversLeft: 0, loadingServers: 0, readyServers: 0 },
+      ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started });
+  }
+});
+app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
+  try {
+    const fleet = await readFleetStatus();
+    const sessions = botRecords.map(b => ({ ...b, state: fleet.bots[b.number] ? fleet.bots[b.number].state : normalizeBotState(b.state) }));
+    const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive;
+    sessions.forEach(b => { const rec = botRecords.find(x => x.ownerId === b.ownerId && x.number === b.number); if (rec) rec.state = b.state; });
+    saveJsonFile(BOTS_FILE, botRecords);
+    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: 1, totalServers: 1,
+      perServer: [{ server: 'KING MD Engine', healthy: true, alive, dead, ms: fleet.ms }] });
+  } catch (e) {
+    res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message });
+  }
+});
+app.post('/api/admin/monitoring/purge-dead', requireUser, adminOnly, async (req, res) => {
+  try {
+    const fleet = await readFleetStatus();
+    const dead = botRecords.filter(b => !fleet.bots[b.number] || fleet.bots[b.number].state !== 'online');
+    for (const b of dead) {
+      try { await engineFetch('/api/session/' + encodeURIComponent(b.number), { method: 'DELETE' }); } catch (_) {}
+    }
+    const keys = new Set(dead.map(b => b.ownerId + ':' + b.number));
+    botRecords = botRecords.filter(b => !keys.has(b.ownerId + ':' + b.number));
+    saveJsonFile(BOTS_FILE, botRecords);
+    res.json({ success: true, purged: dead.length });
+  } catch (e) { res.status(502).json({ success: false, error: e.message }); }
+});
+
+// ===== CORE ADMIN USER + NOTIFICATION APIs =====
+app.get('/api/admin/users', requireUser, adminOnly, (req, res) => {
+  const q = String(req.query.search || '').toLowerCase();
+  const found = users.filter(u => !q || [u.username, u.email, u.phone].some(v => String(v || '').toLowerCase().includes(q)));
+  res.json({ success: true, total: found.length, users: found.map(u => ({ ...publicUser(u), _id: u.id, email: u.email, referralCount: (u.referrals || []).length, banned: !!u.banned, chatBanned: !!u.chatBanned, verified: !!(u.isVerified || u.isAdmin) })) });
+});
+app.post('/api/admin/users/:userId/addspaces', requireUser, adminOnly, (req, res) => {
+  const u = users.find(x => x.id === req.params.userId), spaces = Math.max(0, Math.min(1000, Number(req.body.spaces) || 0));
+  if (!u || !spaces) return res.status(400).json({ success: false, error: 'User and a valid space amount are required.' });
+  u.botSpaces = Math.max(3, Number(u.botSpaces || 3)) + spaces; saveUsers();
+  res.json({ success: true, botSpaces: u.botSpaces });
+});
+app.post('/api/admin/users/:userId/chatfreeze', requireUser, adminOnly, (req, res) => {
+  const u = users.find(x => x.id === req.params.userId);
+  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
+  u.chatBanned = !u.chatBanned; u.chatBanReason = u.chatBanned ? String(req.body.reason || '').slice(0, 200) : '';
+  saveUsers(); res.json({ success: true, chatBanned: u.chatBanned });
+});
+app.post('/api/admin/users/:userId/:action', requireUser, adminOnly, (req, res) => {
+  const u = users.find(x => x.id === req.params.userId);
+  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
+  if (isOwner(u.email, u.phone) && req.params.action !== 'verify') return res.status(403).json({ success: false, error: 'Owner account is protected.' });
+  const action = req.params.action;
+  if (action === 'verify') u.isVerified = !u.isVerified;
+  else if (action === 'freeze') u.banned = !u.banned;
+  else if (action === 'promote') u.isAdmin = !u.isAdmin;
+  else return res.status(400).json({ success: false, error: 'Unsupported action.' });
+  saveUsers(); res.json({ success: true, user: publicUser(u) });
+});
+app.delete('/api/admin/users/:userId', requireUser, adminOnly, (req, res) => {
+  const u = users.find(x => x.id === req.params.userId);
+  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
+  if (isOwner(u.email, u.phone)) return res.status(403).json({ success: false, error: 'Owner account is protected.' });
+  users = users.filter(x => x.id !== u.id);
+  botRecords = botRecords.filter(b => b.ownerId !== u.id);
+  users.forEach(x => { x.followers = (x.followers || []).filter(id => id !== u.id); x.following = (x.following || []).filter(id => id !== u.id); });
+  saveUsers(); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true });
+});
+app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
+  const all = users.flatMap(u => notificationList(u).map(n => ({ ...n, userId: u.id, username: u.username })))
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+  res.json({ success: true, notifications: all.slice(0, 500) });
+});
+app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => {
+  users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; });
+app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => {
+  users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; });
+  saveUsers(); res.json({ success: true });
+});
+
+  saveUsers(); res.json({ success: true });
+});
+app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => {
+  const title = String(req.body.title || '').slice(0, 100), body = String(req.body.body || '').slice(0, 500);
+  if (!title || !body) return res.status(400).json({ success: false, error: 'Title and message are required.' });
+  users.forEach(u => addUserNotification(u, 'broadcast', title, body, {}));
+  saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 });
+});
+
 // ===== BOT SPACE PURCHASES / DEPLOYMENT COUNTS =====
 app.post('/api/spaces/buy', requireUser, (req, res) => {
   const cost = 15, balance = Number(req.account.coins || 0);
@@ -594,7 +771,21 @@ app.post('/api/db-full/report', requireUser, (req, res) => {
   if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id });
   saveUsers(); res.json({ success: true });
 });
-app.get('/api/stats/deploys', (_req, res) => res.json({ success: true, total: botRecords.length, active: botRecords.filter(b => b.state === 'online').length }));
+app.get('/api/stats/deploys', (_req, res) => {
+  const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7);
+  const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0);
+  let todayTotal = 0, monthTotal = 0;
+  botRecords.forEach(b => {
+    const d = new Date(b.createdAt || b.updatedAt || 0);
+    if (!Number.isFinite(d.getTime())) return;
+    const day = d.toISOString().slice(0, 10);
+    if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; }
+    if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; }
+  });
+  res.json({ success: true, month: monthKey, today, monthDays,
+    totals: { today: todayTotal, month: monthTotal, allTime: botRecords.length },
+    total: botRecords.length, active: botRecords.filter(b => normalizeBotState(b.state) === 'online').length });
+});
 
 // ===== NOTIFICATIONS =====
 app.post('/api/admin/notifications', requireUser, (req, res) => {
