@@ -1,9 +1,3 @@
-// KING MD V4 — FULL FIXED server.js - Bot Count + Channel React For Everyone + Coins 👑
-// FIXED 1: Forward kingCode / displayCode from Engine (was lost!)
-// FIXED 2: getBotNumbersForEveryone now calls /api/status?numbers=... correctly
-// FIXED 3: /api/channel-react now handles Engine 404 + retries with correct payload
-// FIXED 4: app.listen 0.0.0.0 + /health + API 404 before * catch-all
-// FIXED 5: APP server.js forwards /api/manage-login + /api/managebot/* to ENGINE - fixes "API not found: /managebot/login"
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -34,8 +28,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 
-// ===== KING MD - GLOBAL SLOTS 👑 =====
-const TOTAL_SERVERS = Number(process.env.TOTAL_SERVERS || 1);
+// ===== KING MD - REAL GLOBAL SLOTS 👑 - NO FAKE =====
+// REAL: You have 1 Engine. Do NOT set TOTAL_SERVERS=270 in Render - that was fake.
+// TOTAL_SLOTS = 1 Engine * SLOTS_PER_SERVER. When REAL bots reach TOTAL_SLOTS, slots = 0 -> time to upgrade / add Engine.
+const TOTAL_SERVERS = 1;
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
 const FREE_SLOTS = 3;
@@ -102,7 +98,6 @@ function addUserNotification(user, type, title, body, meta) {
   user.notifications = user.notifications.slice(0, 100);
   user.unreadNotifs = user.notifications.filter(n => !n.read).length;
 }
-// FIXED: engineFetch now handles non-JSON + 404 properly
 async function engineFetch(route, options) {
   const base = ENGINE_URL;
   const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
@@ -172,6 +167,10 @@ function publicUser(u) {
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
+  // ===== REAL My Bot Sessions counting - GREEN CIRCLE PART ✅ =====
+  // botSpaces = how many bots user CAN pair (3 free, 6 premium, or custom bought)
+  // usedSpaces = REAL how many bots user HAS paired (unique numbers with this ownerId)
+  // Frontend shows: usedSpaces / botSpaces  e.g. 2/3 used, 0/6 used
   x.botSpaces = Number(u.botSpaces || (x.isPremium ? PREMIUM_SLOTS : FREE_SLOTS));
   x.usedSpaces = uniqueBots(botRecords.filter(b => b.ownerId === u.id)).length;
   x.coins = Number(u.coins || 0);
@@ -678,7 +677,7 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
-// ===== COMPATIBILITY API =====
+// ===== COMPATIBILITY API - REAL COUNTING ✅ =====
 async function readFleetStatus() {
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
   if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
@@ -698,16 +697,27 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+// REAL calcStats - counts REAL unique bots, NOT fake 4042
 function calcStats() {
   dedupeBotRecords();
-  const { total, online } = countBots();
+  const { total, online } = countBots(); // REAL total from bots.json
   const botsPaired = total;
-  const availableSlots = Math.max(0, TOTAL_SLOTS - total);
+  const availableSlots = Math.max(0, TOTAL_SLOTS - total); // REAL slots left - when 0, upgrade needed
   return { botsPaired, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
 }
-app.get('/api/stats', (req, res) => { res.json({ success: true, ...calcStats() }); });
-app.get('/api/fleet', (req, res) => res.json({ success: true, ...calcStats() }));
-app.get('/api/public-stats', (req, res) => res.json({ success: true, ...calcStats() }));
+// LIVE stats - tries Engine for REAL online count, falls back to calcStats if Engine down
+async function calcStatsLive() {
+  try {
+    const fleet = await readFleetStatus();
+    const total = fleet.numbers.length;
+    const online = Object.values(fleet.bots).filter(b => b.connected).length;
+    const availableSlots = Math.max(0, TOTAL_SLOTS - total);
+    return { botsPaired: total, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true };
+  } catch (e) { return { ...calcStats(), live: false }; }
+}
+app.get('/api/stats', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
+app.get('/api/fleet', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
+app.get('/api/public-stats', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
 app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) => {
   const before = botRecords.length;
   dedupeBotRecords();
@@ -884,15 +894,12 @@ app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   if (!(req.body && req.body.confirm)) return res.json({ success: true, until: req.account.premiumUntil || null, current: req.account.boundNumber || null, needsReplace: !!(req.account.boundNumber && req.account.boundNumber !== number) });
   req.account.boundNumber = number; saveUsers(); res.json({ success: true, until: req.account.premiumUntil || null });
 });
-
-// FIXED FOR EVERYONE: Each user uses THEIR OWN bot
 async function getBotNumbersForEveryone(account) {
   dedupeBotRecords();
   let local = uniqueBots(botRecords.filter(b => b.ownerId === account.id)).map(b => normalizePhone(b.number));
   if (local.length) {
     try {
       const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(local.join(',')));
-      const live = Object.keys(d.bots||{}).filter(n => d.bots[n]?.connected || String(d.bots[n]?.state||'').toLowerCase()==='online');
       return local;
     } catch(e){ return local; }
   }
@@ -910,7 +917,6 @@ async function getBotNumbersForEveryone(account) {
     return [];
   } catch (e) { console.log('[ChannelReact] Engine fail:', e.message); return local; }
 }
-
 app.get('/api/channel-react/status', requireUser, async (req, res) => {
   const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
   const usage = req.account.channelReactUsage || {};
@@ -919,7 +925,6 @@ app.get('/api/channel-react/status', requireUser, async (req, res) => {
   const numbers = await getBotNumbersForEveryone(req.account);
   res.json({ success: true, premium, hasBot: numbers.length > 0, botsCount: numbers.length, bots: numbers, coins: Number(req.account.coins || 0), dailyLimit: limit, dailyUsed: used, freeLimit: limit, refillPrice: 15, remaining: Math.max(0, limit - used) });
 });
-
 app.post('/api/channel-react', requireUser, async (req, res) => {
   const body = req.body || {}, premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
   const usage = req.account.channelReactUsage || {};
@@ -952,8 +957,6 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
     res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' });
   }
 });
-
-// Payment endpoints deliberately stay disabled until a real Daraja/Korapay merchant integration is configured.
 app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
   success: true, paymentsOff: true, maxMonths: 2, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || null,
   mpesaNumber: '+254726476468', options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1, methods: ['mobile_money'] }]
@@ -963,10 +966,8 @@ app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: tr
 app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet; Daraja merchant credentials are required.' }));
 
 // ===== MANAGE BOT - APP server.js FORWARDS TO ENGINE (BOT main.js) ✅ =====
-// This is APP code. It does NOT check password itself.
-// Password lives ONLY on Engine in manage-passwords.json.
-// Flow: Browser -> APP server.js -> ENGINE_URL /api/manage-login -> Engine checks password -> returns token -> APP returns token to browser
-// This fixes: "API not found: /managebot/login" - because before, APP had no route, so it hit the 404 below.
+// APP code. Does NOT check password itself. Password lives ONLY on Engine in manage-passwords.json.
+// Browser -> APP server.js -> ENGINE_URL /api/manage-login -> Engine checks -> returns token -> APP returns token
 async function forwardManageBot(req, res, enginePath, methodOverride) {
   try {
     const method = methodOverride || req.method;
@@ -988,19 +989,16 @@ async function forwardManageBot(req, res, enginePath, methodOverride) {
     return res.status(502).json({ success: false, error: 'Bot engine offline. Try again shortly.' });
   }
 }
-// Login - accepts bot number + bot password (the one bot sent in welcome with logo.jpg)
 app.post('/api/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
 app.post('/api/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
 app.post('/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
 app.post('/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-// Attempts / Logout / Update / Forgot
 app.post('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
 app.get('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
 app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api/managebot/logout'));
 app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
 app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
 app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-// Premium + Usage + Bot-Service (GET needs query forwarding)
 app.get('/api/managebot/premium', (req, res) => forwardManageBot(req, res, '/api/managebot/premium', 'GET'));
 app.post('/api/managebot/premium', (req, res) => forwardManageBot(req, res, '/api/managebot/premium'));
 app.get('/api/managebot/usage', (req, res) => forwardManageBot(req, res, '/api/managebot/usage', 'GET'));
