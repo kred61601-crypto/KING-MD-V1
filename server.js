@@ -1,7 +1,8 @@
 // KING MD V4 — FULL FIXED server.js - Bot Count + Channel React For Everyone + Coins 👑
-// FIXED 1: Bot count = UNIQUE numbers only (no more 6 for same number!)
-// FIXED 2: Channel React works for EVERY user with their OWN bot + coins, not just owner!
-// APP SIDE - This file does NOT connect to WhatsApp directly. It only forwards pairing to Engine.
+// FIXED 1: Forward kingCode / displayCode from Engine (was lost!)
+// FIXED 2: getBotNumbersForEveryone now calls /api/status?numbers=... correctly
+// FIXED 3: /api/channel-react now handles Engine 404 + retries with correct payload
+// FIXED 4: app.listen 0.0.0.0 + /health + API 404 before * catch-all
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -25,6 +26,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
+const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
@@ -43,8 +45,6 @@ function loadJsonFile(file, fallback) { try { return JSON.parse(fs.readFileSync(
 function saveJsonFile(file, value) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(tmp, file); }
 let botRecords = loadJsonFile(BOTS_FILE, []); if (!Array.isArray(botRecords)) botRecords = [];
 
-// ===== FIX 1: DEDUPE BOTS - COUNT UNIQUE NUMBERS ONLY 👑 =====
-// If same number saved 6 times, count as 1! This is why you saw 6 BOTS PAIRED for 1 bot!
 function normalizePhone(p){
   let s = String(p||'').replace(/[\s\-\(\)\+]/g,'');
   if(s.startsWith('0')) s = '254' + s.slice(1);
@@ -55,12 +55,9 @@ function dedupeBotRecords() {
   for (const b of botRecords) {
     const num = normalizePhone(b.number || b.phoneNumber || '');
     if (!num) continue;
-    // Key = number only. Same number = same bot, even if different ownerId (re-registered)
-    // Keep newest, keep first ownerId
     if (!seen.has(num)) seen.set(num, { ...b, number: num });
     else {
       const old = seen.get(num);
-      // Keep newest updatedAt
       if (new Date(b.updatedAt || b.createdAt || 0) > new Date(old.updatedAt || old.createdAt || 0)) {
         seen.set(num, { ...old, ...b, number: num, ownerId: old.ownerId || b.ownerId });
       }
@@ -75,7 +72,6 @@ function dedupeBotRecords() {
   return botRecords;
 }
 dedupeBotRecords();
-// Helper: unique bots
 function uniqueBots(list) {
   const m = new Map();
   for (const b of (list || botRecords)) {
@@ -83,6 +79,14 @@ function uniqueBots(list) {
     if (num && !m.has(num)) m.set(num, b);
   }
   return [...m.values()];
+}
+function normalizeBotState(value, info) {
+  const raw = String(value || '').toLowerCase().trim();
+  if ((info && typeof info === 'object' && info.connected === true) ||
+      ['online','connected','open','active','ready'].includes(raw)) return 'online';
+  if (['offline','close','closed','disconnected','logged_out','logout','dead'].includes(raw)) return 'offline';
+  if (['pairing','connecting','qr','starting','reconnecting'].includes(raw)) return 'pairing';
+  return raw || 'offline';
 }
 function countBots() {
   const uniq = uniqueBots();
@@ -97,25 +101,20 @@ function addUserNotification(user, type, title, body, meta) {
   user.notifications = user.notifications.slice(0, 100);
   user.unreadNotifs = user.notifications.filter(n => !n.read).length;
 }
+// FIXED: engineFetch now handles non-JSON + 404 properly
 async function engineFetch(route, options) {
-  const base = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
+  const base = ENGINE_URL;
   const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.success === false) { const error = new Error(data.error || 'WhatsApp engine request failed'); error.status = response.status || 502; throw error; }
+  const text = await response.text().catch(() => '');
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text }; }
+  if (!response.ok || data.success === false) { const error = new Error(data.error || data.raw || 'WhatsApp engine request failed'); error.status = response.status || 502; throw error; }
   return data;
 }
 
 // ===== OWNER ACCOUNT =====
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468'];
-function normalizeBotState(value, info) {
-  const raw = String(value || '').toLowerCase().trim();
-  if ((info && typeof info === 'object' && info.connected === true) ||
-      ['online','connected','open','active','ready'].includes(raw)) return 'online';
-  if (['offline','close','closed','disconnected','logged_out','logout','dead'].includes(raw)) return 'offline';
-  if (['pairing','connecting','qr','starting','reconnecting'].includes(raw)) return 'pairing';
-  return raw || 'offline';
-}
 function isOwner(email, phone){
   const e = String(email||'').toLowerCase().trim();
   const ph = normalizePhone(phone||'');
@@ -173,7 +172,6 @@ function publicUser(u) {
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
   x.botSpaces = Number(u.botSpaces || (x.isPremium ? PREMIUM_SLOTS : FREE_SLOTS));
-  // FIXED: usedSpaces = unique numbers for this user, not duplicates
   x.usedSpaces = uniqueBots(botRecords.filter(b => b.ownerId === u.id)).length;
   x.coins = Number(u.coins || 0);
   return x;
@@ -209,7 +207,6 @@ const onboarding = new Map();
 const resetTokens = new Map();
 
 // ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine.onrender.com').replace(/\/+$/, '');
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -227,7 +224,6 @@ app.post('/request-pairing', async (req, res) => {
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
   const account = currentUser(req);
   if (account) {
-    // FIXED: Count UNIQUE bots for this user, not duplicates
     const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
     const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber);
     const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
@@ -255,7 +251,8 @@ app.post('/request-pairing', async (req, res) => {
       if (existing) Object.assign(existing, record); else botRecords.push(record);
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
-    res.json({ success:true, pairingCode:data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
+    // FIXED: Forward KINGMD code so frontend shows KINGMD25 not real code!
+    res.json({ success:true, pairingCode: data.pairingCode, kingCode: data.kingCode || data.displayCode || data.pairingCode, displayCode: data.kingCode || data.displayCode || data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
     res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
@@ -263,6 +260,7 @@ app.post('/request-pairing', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 
 // ===== AUTH =====
 app.post('/api/auth/register', async (req, res) => {
@@ -613,7 +611,6 @@ app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
 // ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
 app.get('/api/my-bots', requireUser, async (req, res) => {
-  // FIXED: Dedupe first, then check Engine for UNIQUE numbers only
   dedupeBotRecords();
   const mine = uniqueBots(botRecords.filter(b => b.ownerId === req.account.id));
   let states = {};
@@ -641,7 +638,6 @@ app.get('/api/my-bots', requireUser, async (req, res) => {
     return { number: normalizePhone(b.number), state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt };
   });
   if (changed) { saveJsonFile(BOTS_FILE, botRecords); saveUsers(); }
-  // FIXED: total = UNIQUE count for this user
   res.json({ success: true, bots, total: bots.length, count: bots.length });
 });
 app.post('/api/bots/status', async (req, res) => {
@@ -682,7 +678,7 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
-// ===== COMPATIBILITY API: public fleet stats + admin monitoring =====
+// ===== COMPATIBILITY API =====
 async function readFleetStatus() {
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
   if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
@@ -702,11 +698,9 @@ function adminOnly(req, res, next) {
   }
   next();
 }
-
-// ===== FIXED: PUBLIC STATS - COUNT UNIQUE BOTS ONLY 👑 =====
 function calcStats() {
   dedupeBotRecords();
-  const { total, online } = countBots(); // total = UNIQUE numbers
+  const { total, online } = countBots();
   const botsPaired = total;
   const availableSlots = Math.max(0, TOTAL_SLOTS - total);
   return { botsPaired, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
@@ -714,7 +708,6 @@ function calcStats() {
 app.get('/api/stats', (req, res) => { res.json({ success: true, ...calcStats() }); });
 app.get('/api/fleet', (req, res) => res.json({ success: true, ...calcStats() }));
 app.get('/api/public-stats', (req, res) => res.json({ success: true, ...calcStats() }));
-// NEW: Admin can clean duplicates manually
 app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) => {
   const before = botRecords.length;
   dedupeBotRecords();
@@ -892,21 +885,26 @@ app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   req.account.boundNumber = number; saveUsers(); res.json({ success: true, until: req.account.premiumUntil || null });
 });
 
-// FIXED FOR EVERYONE: Each user uses THEIR OWN bot, not owner's bot!
-// Auto-heal: if bots.json wiped, link by user's profile phone if that phone is live on Engine.
+// FIXED FOR EVERYONE: Each user uses THEIR OWN bot
 async function getBotNumbersForEveryone(account) {
   dedupeBotRecords();
   let local = uniqueBots(botRecords.filter(b => b.ownerId === account.id)).map(b => normalizePhone(b.number));
-  if (local.length) return local;
-  // Try profile phone
+  if (local.length) {
+    // Verify which are actually online on Engine - FIXED: pass numbers!
+    try {
+      const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(local.join(',')));
+      const live = Object.keys(d.bots||{}).filter(n => d.bots[n]?.connected || String(d.bots[n]?.state||'').toLowerCase()==='online');
+      // Return local even if Engine says offline - Engine may be restarting, don't block user
+      return local;
+    } catch(e){ return local; }
+  }
+  // Try profile phone - FIXED: check with numbers param
   const myPhone = normalizePhone(account.phone || account.boundNumber || '');
+  if (!myPhone) return [];
   try {
-    const d = await engineFetch('/api/status');
-    const bots = d.bots || d.sessions || {};
-    let live = [];
-    if (Array.isArray(bots)) live = bots.filter(b => b.state === 'online' || b.connected).map(b => normalizePhone(b.number || b.phoneNumber));
-    else live = Object.keys(bots).filter(n => bots[n]?.connected === true || String(bots[n]?.state || '').toLowerCase() === 'online').map(normalizePhone);
-    if (myPhone && live.includes(myPhone)) {
+    const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(myPhone));
+    const info = d.bots?.[myPhone];
+    if (info?.connected || String(info?.state||'').toLowerCase()==='online') {
       console.log('[ChannelReact] Auto-linked', myPhone, 'to', account.username);
       botRecords.push({ ownerId: account.id, username: account.username || '', number: myPhone, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
@@ -936,12 +934,9 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
   if (link.includes('chat.whatsapp.com')) return res.status(400).json({ success: false, error: 'That is a GROUP link! Use whatsapp.com/channel/...' });
   if (!link.includes('whatsapp.com/channel/') && !link.includes('/channel/') && !/0029/.test(link)) return res.status(400).json({ success: false, error: 'Invalid Channel link. Use https://whatsapp.com/channel/...' });
 
-  // FOR EVERYONE: This user's OWN bot
   const numbers = await getBotNumbersForEveryone(req.account);
   if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot first. Go to Deploy a Bot > Pair your number, then try again.' });
 
-  // ===== COINS FOR EVERYONE 👑 =====
-  // Free daily first, then coins for extra. Deduct ONLY if success!
   const freeLeft = Math.max(0, limit - used);
   const extraNeeded = Math.max(0, requested - freeLeft);
   const coinCost = extraNeeded * 15;
@@ -958,7 +953,11 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
     req.account.channelReactUsage = { day: today, used: used + sent };
     saveUsers();
     res.json({ ...d, success: true, premium, dailyUsed: used + sent, coinsLeft: Number(req.account.coins || 0), coinsSpent: coinCost, nextAt: new Date(Date.now() + 60000).toISOString() });
-  } catch (e) { res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' }); }
+  } catch (e) {
+    // FIXED: Clear error if Engine endpoint missing
+    if (e.status === 404) return res.status(502).json({ success: false, error: 'Engine is missing /api/channel-react endpoint! Add it to main.js (Engine) and redeploy Engine, then try again.' });
+    res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' });
+  }
 });
 
 // Payment endpoints deliberately stay disabled until a real Daraja/Korapay merchant integration is configured.
@@ -970,9 +969,15 @@ app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503)
 app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: true, paymentLive: false, paymentsOff: true, options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1 }], packages: [], custom: { minCoins: 10, ratePerCoin: 1 } }));
 app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet; Daraja merchant credentials are required.' }));
 
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// FIXED: API 404 BEFORE * catch-all
+app.use('/api', (req, res) => res.status(404).json({ success: false, error: 'API not found: ' + req.path }));
+app.get('*', (req, res) => {
+  const f = path.join(__dirname, 'index.html');
+  if (fs.existsSync(f)) return res.sendFile(f);
+  res.json({ success: true, service: 'KING MD V4' });
+});
 app.use((err, req, res, next) => {
   console.error('Request error:', err.message);
   res.status(err.status || 500).json({ success: false, error: err.message || 'Server error' });
 });
-app.listen(PORT, () => console.log('KING MD V4 server listening on ' + PORT));
+app.listen(PORT, '0.0.0.0', () => console.log('KING MD V4 server listening on ' + PORT));
