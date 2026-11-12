@@ -4,17 +4,16 @@
   var mb = null;
   EH.mb = function () { return mb; };
 
-  // ===== KING MD FIX: Where is Bot? =====
-  // If App + Bot SAME server -> leave '' - uses same origin, will work 100%
-  // If DIFFERENT server -> put bot URL here, e.g. 'https://king-md-bot.onrender.com'
-  // You can also set window.KING_BOT_SERVER in index.html
-  var BOT_SERVER = window.KING_BOT_SERVER || '';
-
-  // Call Bot directly - Bot checks manage-passwords.json
+  // ===== NO URL - SAME SERVER ✅ =====
+  // App + Bot are on same main.js, so fetch('/api/...') auto uses your site.
   function botApi(path, body) {
-    var url = (BOT_SERVER || '') + path;
-    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-device': dev() }, body: JSON.stringify(body || {}) })
-      .then(function (r) { return r.json().then(function (d) { return { d: d, status: r.status }; }); });
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-device': dev() },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (d) { return { d: d, status: r.status }; });
+    });
   }
 
   var dev = function () { var d = EH.ls.get('eh_mbdev'); if (!d) { d = 'd' + Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(12)), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); EH.ls.set('eh_mbdev', d); } return d; };
@@ -26,7 +25,6 @@
 
   function set(feature, value, silent) {
     if (!mb) return Promise.reject();
-    // Try Bot first, fallback to App API - both return settings
     return botApi('/api/managebot/update', { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number }).then(function (r) {
       if (!r.d.success) { return EH.api('/api/managebot/update', { method: 'POST', auth: false, body: { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number } }).then(function (r2) { if (!r2.d.success) { EH.toast(r2.d.error || 'Update failed', 'er'); throw new Error('fail'); } mb.settings = r2.d.settings; if (!silent) EH.toast('Updated ✓', 'ok'); return r2.d; }); }
       mb.settings = r.d.settings || mb.settings; if (!silent) EH.toast('Updated ✓', 'ok'); return r.d;
@@ -67,20 +65,17 @@
       if (a.left != null && a.left < 5) { box.hidden = false; box.innerHTML = (wrong ? '<b class="err">Wrong password.</b><br>' : '') + 'You have <b>' + a.left + '</b> ' + (a.left === 1 ? 'attempt' : 'attempts') + ' left.' + (wrong ? ' Go to your bot on WhatsApp and type <b>.password</b> to get your password.' : ''); }
       else { box.hidden = true; box.innerHTML = ''; }
     }
-    // ===== FIXED LOGIN - ACCEPTS BOT PASSWORD ✅ =====
+    // ===== LOGIN - ACCEPTS BOT PASSWORD ✅ - NO URL =====
     function login(number, pass) {
       if ((att().until || 0) > Date.now()) { showAtt(); return; }
       if (!number || !pass) return EH.toast('Enter both number and password', 'er');
       var btn = $('[data-signin]', body); if (btn) btn.classList.add('busy'); EH.toast('Signing in…');
-      // 1. Try Bot /api/manage-login - Bot checks manage-passwords.json - THE SAME file Bot created
       botApi('/api/manage-login', { phoneNumber: number, password: pass }).then(function (r) {
         var d = r.d || {};
         if (d.success) { onLoginSuccess(d); return; }
-        // 2. Fallback: old endpoint /api/managebot/login - Bot also accepts same password there
         return botApi('/api/managebot/login', { phoneNumber: number, password: pass }).then(function (r2) {
           var d2 = r2.d || {};
           if (d2.success) { onLoginSuccess(d2); return; }
-          // 3. Last fallback: App's own API (if App and Bot are merged)
           return api('/api/managebot/login', { method: 'POST', body: { phoneNumber: number, password: pass } }).then(function (r3) {
             var d3 = r3.d || {};
             if (d3.success) { onLoginSuccess(d3); return; }
@@ -89,7 +84,6 @@
         });
       }).catch(function (e) {
         if (btn) btn.classList.remove('busy');
-        // If attemptsLeft sent, show it
         var msg = (e && e.message) || 'Sign in failed';
         if (msg.indexOf('Wrong') >= 0) { var a = att(); var left = (a.left == null ? 4 : a.left - 1); setAtt({ left: left }); showAtt(true); }
         EH.toast(msg, 'er');
@@ -97,7 +91,7 @@
       function onLoginSuccess(d) {
         if (btn) btn.classList.remove('busy');
         setAtt(null);
-        mb = { token: d.token, server: d.server || BOT_SERVER || '', number: number, settings: d.settings || {}, password: pass };
+        mb = { token: d.token, server: d.server || '', number: number, settings: d.settings || {}, password: pass };
         var l = saved(), i = -1; l.forEach(function (b, k) { if (b.number === number) i = k; }); var en = { number: number, password: pass, lastLogin: Date.now() }; if (i >= 0) l[i] = en; else l.push(en); saveSaved(l);
         EH.buzz(15); EH.toast('Bot unlocked ✓', 'ok'); panel();
       }
