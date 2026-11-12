@@ -1,10 +1,22 @@
 /* Bot Settings (Manage Bot): sign in to a bot with its number + password, then switches, prefixes, group defaults, Premium settings and usage */
 (function () {
   var EH = window.EH, $ = EH.$, $$ = EH.$$, ic = EH.ic, esc = EH.esc;
-  var mb = null;   // the bot that is signed in: { token, server, number, settings, password }
+  var mb = null;
   EH.mb = function () { return mb; };
 
-  /* wrong-password counter + lock (kept per phone, and by the server) */
+  // ===== KING MD FIX: Where is Bot? =====
+  // If App + Bot SAME server -> leave '' - uses same origin, will work 100%
+  // If DIFFERENT server -> put bot URL here, e.g. 'https://king-md-bot.onrender.com'
+  // You can also set window.KING_BOT_SERVER in index.html
+  var BOT_SERVER = window.KING_BOT_SERVER || '';
+
+  // Call Bot directly - Bot checks manage-passwords.json
+  function botApi(path, body) {
+    var url = (BOT_SERVER || '') + path;
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-device': dev() }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (d) { return { d: d, status: r.status }; }); });
+  }
+
   var dev = function () { var d = EH.ls.get('eh_mbdev'); if (!d) { d = 'd' + Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(12)), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); EH.ls.set('eh_mbdev', d); } return d; };
   var att = function () { return EH.ls.json('eh_mbatt', {}) || {}; };
   var setAtt = function (v) { if (v) EH.ls.set('eh_mbatt', JSON.stringify(v)); else EH.ls.del('eh_mbatt'); };
@@ -14,20 +26,19 @@
 
   function set(feature, value, silent) {
     if (!mb) return Promise.reject();
-    return EH.api('/api/managebot/update', { method: 'POST', auth: false, body: { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number } }).then(function (r) {
-      if (!r.d.success) { EH.toast(r.d.error || 'Update failed', 'er'); throw new Error('fail'); }
-      mb.settings = r.d.settings; if (!silent) EH.toast('Updated ✓', 'ok'); return r.d;
-    });
+    // Try Bot first, fallback to App API - both return settings
+    return botApi('/api/managebot/update', { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number }).then(function (r) {
+      if (!r.d.success) { return EH.api('/api/managebot/update', { method: 'POST', auth: false, body: { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number } }).then(function (r2) { if (!r2.d.success) { EH.toast(r2.d.error || 'Update failed', 'er'); throw new Error('fail'); } mb.settings = r2.d.settings; if (!silent) EH.toast('Updated ✓', 'ok'); return r2.d; }); }
+      mb.settings = r.d.settings || mb.settings; if (!silent) EH.toast('Updated ✓', 'ok'); return r.d;
+    }).catch(function () { return EH.api('/api/managebot/update', { method: 'POST', auth: false, body: { server: mb.server, token: mb.token, feature: feature, value: value, phoneNumber: mb.number } }); });
   }
   var help = function () {
     var s = EH.sheet({ title: 'Forgot your bot password?', html: '<div class="sub" style="margin-bottom:14px">You don\'t need to report this — your bot can send it to you directly.</div><div class="card"><div class="sub" style="font-size:13px;margin-bottom:10px">On WhatsApp, open a chat with <b style="color:var(--tx)">your own number</b> (or any chat your bot can see) and send:</div><div class="btns"><div class="inp" style="display:flex;align-items:center;color:var(--p);font-weight:800;font-family:ui-monospace,monospace">.password</div><button class="btn alt sm tap" data-cp style="flex:none;height:56px">' + ic('copy') + '</button></div><div class="note">Your bot will DM you the password with a one-tap copy button, plus a link to the Manage Bot panel.</div></div><button class="btn block tap" style="margin-top:14px" data-ok>Got it</button>' });
     $('[data-cp]', s.el).onclick = function () { EH.copy('.password', 'Copied'); }; $('[data-ok]', s.el).onclick = s.close;
   };
 
-  /* ───── the tab: login or the panel ───── */
   EH.screen('settings', { tab: true, mount: function (scr) {
     var f = EH.frame(scr, { bar: 'title', title: 'Bot Settings', sub: 'Control your bot', tab: true }), body = f.body, lockT, alive = true;
-
     function loginView() {
       var list = saved();
       body.innerHTML =
@@ -43,7 +54,7 @@
       $$('[data-q]', body).forEach(function (r) { r.onclick = function (e) { if (e.target.closest('[data-rm]')) return; var b = saved().filter(function (x) { return x.number === r.dataset.q; })[0]; if (b) login(b.number, b.password); }; });
       $$('[data-rm]', body).forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); EH.confirm({ title: 'Remove +' + b.dataset.rm + '?', text: 'It is only removed from this list on this phone.', ok: 'Remove', danger: true }).then(function (y) { if (y) { saveSaved(saved().filter(function (x) { return x.number !== b.dataset.rm; })); loginView(); } }); }; });
       showAtt(false); EH.mountAds(scr);
-      api('/api/managebot/attempts').then(function (r) { var d = r.d; if (d && d.success) { setAtt(d.lockedUntil ? { left: 0, until: d.lockedUntil } : (d.attemptsLeft < d.max ? { left: d.attemptsLeft } : null)); showAtt(false); } });
+      api('/api/managebot/attempts').then(function (r) { var d = r.d; if (d && d.success) { setAtt(d.lockedUntil ? { left: 0, until: d.lockedUntil } : (d.attemptsLeft < d.max ? { left: d.attemptsLeft } : null)); showAtt(false); } }).catch(function(){});
     }
     function showAtt(wrong) {
       var box = $('[data-att]', body), btn = $('[data-signin]', body); clearInterval(lockT); if (!box) return; var a = att(), now = Date.now();
@@ -56,25 +67,44 @@
       if (a.left != null && a.left < 5) { box.hidden = false; box.innerHTML = (wrong ? '<b class="err">Wrong password.</b><br>' : '') + 'You have <b>' + a.left + '</b> ' + (a.left === 1 ? 'attempt' : 'attempts') + ' left.' + (wrong ? ' Go to your bot on WhatsApp and type <b>.password</b> to get your password.' : ''); }
       else { box.hidden = true; box.innerHTML = ''; }
     }
+    // ===== FIXED LOGIN - ACCEPTS BOT PASSWORD ✅ =====
     function login(number, pass) {
       if ((att().until || 0) > Date.now()) { showAtt(); return; }
       if (!number || !pass) return EH.toast('Enter both number and password', 'er');
-      var btn = $('[data-signin]', body), keep = !!btn; if (btn) btn.classList.add('busy'); EH.toast('Signing in…');
-      api('/api/managebot/login', { method: 'POST', body: { phoneNumber: number, password: pass } }).then(function (r) {
-        if (btn) btn.classList.remove('busy'); var d = r.d || {};
-        if (!d.success) {
-          if (d.locked) { setAtt({ left: 0, until: d.lockedUntil }); showAtt(); return; }
-          if (typeof d.attemptsLeft === 'number') { setAtt({ left: d.attemptsLeft }); showAtt(true); return; }
-          return EH.toast(d.error || 'Sign in failed', 'er');
-        }
-        setAtt(null); mb = { token: d.token, server: d.server, number: number, settings: d.settings || {}, password: pass };
+      var btn = $('[data-signin]', body); if (btn) btn.classList.add('busy'); EH.toast('Signing in…');
+      // 1. Try Bot /api/manage-login - Bot checks manage-passwords.json - THE SAME file Bot created
+      botApi('/api/manage-login', { phoneNumber: number, password: pass }).then(function (r) {
+        var d = r.d || {};
+        if (d.success) { onLoginSuccess(d); return; }
+        // 2. Fallback: old endpoint /api/managebot/login - Bot also accepts same password there
+        return botApi('/api/managebot/login', { phoneNumber: number, password: pass }).then(function (r2) {
+          var d2 = r2.d || {};
+          if (d2.success) { onLoginSuccess(d2); return; }
+          // 3. Last fallback: App's own API (if App and Bot are merged)
+          return api('/api/managebot/login', { method: 'POST', body: { phoneNumber: number, password: pass } }).then(function (r3) {
+            var d3 = r3.d || {};
+            if (d3.success) { onLoginSuccess(d3); return; }
+            throw new Error(d3.error || d2.error || d.error || 'Sign in failed');
+          });
+        });
+      }).catch(function (e) {
+        if (btn) btn.classList.remove('busy');
+        // If attemptsLeft sent, show it
+        var msg = (e && e.message) || 'Sign in failed';
+        if (msg.indexOf('Wrong') >= 0) { var a = att(); var left = (a.left == null ? 4 : a.left - 1); setAtt({ left: left }); showAtt(true); }
+        EH.toast(msg, 'er');
+      });
+      function onLoginSuccess(d) {
+        if (btn) btn.classList.remove('busy');
+        setAtt(null);
+        mb = { token: d.token, server: d.server || BOT_SERVER || '', number: number, settings: d.settings || {}, password: pass };
         var l = saved(), i = -1; l.forEach(function (b, k) { if (b.number === number) i = k; }); var en = { number: number, password: pass, lastLogin: Date.now() }; if (i >= 0) l[i] = en; else l.push(en); saveSaved(l);
         EH.buzz(15); EH.toast('Bot unlocked ✓', 'ok'); panel();
-      });
+      }
     }
 
     var CMDS = ['.menu', '.ping', '.password', '.antilink on'];
-    var open = {};   // which sections are dropped down
+    var open = {};
     var SEC = [
       ['owner', 'user', '#60a5fa', '#2563eb', '👤 Owner Settings', '', false],
       ['group', 'users', '#22d3ee', '#0891b2', '👥 Group Settings', '', false],
@@ -103,14 +133,12 @@
       var acc = $('[data-ah="' + k + '"]', body).parentNode; open[k] = !open[k]; acc.classList.toggle('open', open[k]); EH.buzz(5);
       if (open[k]) { fill(k); setTimeout(function () { try { EH.reveal(acc, 'nearest'); } catch (e) {} }, 60); }
     }
-    /* upgrade THIS bot's number (works even when your own account is already Premium) */
     EH.upgradeBot = function () { if (!mb) return; EH.openPremPay({ number: mb.number, bot: true }); };
     EH.mbRender = function () { if (alive) panel(); };
     if (mb) panel(); else loginView();
     return { show: function () { if (!mb) showAtt(false); }, destroy: function () { alive = false; clearInterval(lockT); } };
   } });
 
-  /* ───── sub screens ───── */
   function need(scr, then) { if (!mb) { EH.go('settings', true); return null; } return then(); }
   var rowT = function (emoji, label, key, on, desc, cb) { return '<div class="row"><div class="rt"><b>' + emoji + ' ' + label + '</b>' + (desc ? '<small>' + desc + '</small>' : '') + '</div><label class="sw"><input type="checkbox" data-k="' + key + '"' + (on ? ' checked' : '') + '><i></i></label></div>'; };
   function wireToggles(root, group) {
@@ -148,8 +176,6 @@
     b.innerHTML = '<div class="note" style="margin:0 4px 12px">These are defaults for groups that never set their own. A group\'s own command always wins.</div><div class="grp">' + G.map(function (g) { return rowT(g[1], g[2], g[0], !!feats[g[0]], g[3]) + (g[4] ? '<div class="row" style="padding-top:0"><div class="rt"><small class="warn">' + ic('warn') + ' ' + g[4] + '</small></div></div>' : ''); }).join('') + '</div>';
     wireToggles(b, true); return {};
   }
-
-  /* premium settings */
   function premium(scr) { return renderPremium(EH.frame(scr, { bar: 'push', title: 'Premium settings', sub: '+' + mb.number }).body); }
   function renderPremium(b) {
     var d = null, img = null; b.innerHTML = '<div class="spinner"></div>';
@@ -205,8 +231,6 @@
     }
     load(); return {};
   }
-
-  /* usage */
   function usage(scr) { return renderUsage(EH.frame(scr, { bar: 'push', title: 'Bot usage', sub: '+' + mb.number }).body); }
   function renderUsage(b) {
     function load() {
