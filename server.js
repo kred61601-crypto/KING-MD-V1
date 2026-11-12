@@ -3,6 +3,7 @@
 // FIXED 2: getBotNumbersForEveryone now calls /api/status?numbers=... correctly
 // FIXED 3: /api/channel-react now handles Engine 404 + retries with correct payload
 // FIXED 4: app.listen 0.0.0.0 + /health + API 404 before * catch-all
+// FIXED 5: APP server.js forwards /api/manage-login + /api/managebot/* to ENGINE - fixes "API not found: /managebot/login"
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -251,7 +252,6 @@ app.post('/request-pairing', async (req, res) => {
       if (existing) Object.assign(existing, record); else botRecords.push(record);
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
-    // FIXED: Forward KINGMD code so frontend shows KINGMD25 not real code!
     res.json({ success:true, pairingCode: data.pairingCode, kingCode: data.kingCode || data.displayCode || data.pairingCode, displayCode: data.kingCode || data.displayCode || data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
@@ -890,15 +890,12 @@ async function getBotNumbersForEveryone(account) {
   dedupeBotRecords();
   let local = uniqueBots(botRecords.filter(b => b.ownerId === account.id)).map(b => normalizePhone(b.number));
   if (local.length) {
-    // Verify which are actually online on Engine - FIXED: pass numbers!
     try {
       const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(local.join(',')));
       const live = Object.keys(d.bots||{}).filter(n => d.bots[n]?.connected || String(d.bots[n]?.state||'').toLowerCase()==='online');
-      // Return local even if Engine says offline - Engine may be restarting, don't block user
       return local;
     } catch(e){ return local; }
   }
-  // Try profile phone - FIXED: check with numbers param
   const myPhone = normalizePhone(account.phone || account.boundNumber || '');
   if (!myPhone) return [];
   try {
@@ -933,10 +930,8 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
   if (!link) return res.status(400).json({ success: false, error: 'Paste a WhatsApp Channel link.' });
   if (link.includes('chat.whatsapp.com')) return res.status(400).json({ success: false, error: 'That is a GROUP link! Use whatsapp.com/channel/...' });
   if (!link.includes('whatsapp.com/channel/') && !link.includes('/channel/') && !/0029/.test(link)) return res.status(400).json({ success: false, error: 'Invalid Channel link. Use https://whatsapp.com/channel/...' });
-
   const numbers = await getBotNumbersForEveryone(req.account);
   if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot first. Go to Deploy a Bot > Pair your number, then try again.' });
-
   const freeLeft = Math.max(0, limit - used);
   const extraNeeded = Math.max(0, requested - freeLeft);
   const coinCost = extraNeeded * 15;
@@ -944,7 +939,6 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
   if (coinCost > 0 && balance < coinCost) {
     return res.status(402).json({ success: false, needCoins: true, error: `You used your ${limit} free reacts today. You need ${coinCost} coins for ${extraNeeded} extra reacts. You have ${balance} coins. Buy coins or try tomorrow.` });
   }
-
   try {
     const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
     const sent = Number(d.reactionsSent || d.sent || 0);
@@ -954,7 +948,6 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
     saveUsers();
     res.json({ ...d, success: true, premium, dailyUsed: used + sent, coinsLeft: Number(req.account.coins || 0), coinsSpent: coinCost, nextAt: new Date(Date.now() + 60000).toISOString() });
   } catch (e) {
-    // FIXED: Clear error if Engine endpoint missing
     if (e.status === 404) return res.status(502).json({ success: false, error: 'Engine is missing /api/channel-react endpoint! Add it to main.js (Engine) and redeploy Engine, then try again.' });
     res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' });
   }
@@ -968,6 +961,50 @@ app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
 app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet. Automatic payment verification requires Safaricom Daraja credentials and a registered shortcode.' }));
 app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: true, paymentLive: false, paymentsOff: true, options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1 }], packages: [], custom: { minCoins: 10, ratePerCoin: 1 } }));
 app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet; Daraja merchant credentials are required.' }));
+
+// ===== MANAGE BOT - APP server.js FORWARDS TO ENGINE (BOT main.js) ✅ =====
+// This is APP code. It does NOT check password itself.
+// Password lives ONLY on Engine in manage-passwords.json.
+// Flow: Browser -> APP server.js -> ENGINE_URL /api/manage-login -> Engine checks password -> returns token -> APP returns token to browser
+// This fixes: "API not found: /managebot/login" - because before, APP had no route, so it hit the 404 below.
+async function forwardManageBot(req, res, enginePath, methodOverride) {
+  try {
+    const method = methodOverride || req.method;
+    const isGet = method === 'GET';
+    let url = ENGINE_URL + enginePath;
+    if (isGet && Object.keys(req.query || {}).length) url += '?' + new URLSearchParams(req.query).toString();
+    const r = await fetch(url, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
+      body: isGet ? undefined : JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(30000)
+    });
+    const text = await r.text().catch(() => '');
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { success: false, error: text || 'Engine error' }; }
+    return res.status(r.status).json(data);
+  } catch (e) {
+    console.error('[ManageBot forward]', enginePath, e.message);
+    return res.status(502).json({ success: false, error: 'Bot engine offline. Try again shortly.' });
+  }
+}
+// Login - accepts bot number + bot password (the one bot sent in welcome with logo.jpg)
+app.post('/api/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
+app.post('/api/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
+app.post('/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
+app.post('/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
+// Attempts / Logout / Update / Forgot
+app.post('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
+app.get('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
+app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api/managebot/logout'));
+app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
+app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
+app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
+// Premium + Usage + Bot-Service (GET needs query forwarding)
+app.get('/api/managebot/premium', (req, res) => forwardManageBot(req, res, '/api/managebot/premium', 'GET'));
+app.post('/api/managebot/premium', (req, res) => forwardManageBot(req, res, '/api/managebot/premium'));
+app.get('/api/managebot/usage', (req, res) => forwardManageBot(req, res, '/api/managebot/usage', 'GET'));
+app.post('/api/managebot/bot-service', (req, res) => forwardManageBot(req, res, '/api/managebot/bot-service'));
 
 // FIXED: API 404 BEFORE * catch-all
 app.use('/api', (req, res) => res.status(404).json({ success: false, error: 'API not found: ' + req.path }));
