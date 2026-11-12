@@ -26,7 +26,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://app-f4b4b5c87692cc42.up.railway.app').replace(/\/+$/, '');
+const ENGINE_URL = (process.env.ENGINE_URL || 'https://app-f4b4b5c87692cc42.up.railway.app/').replace(/\/+$/, '');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
