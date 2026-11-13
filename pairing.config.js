@@ -1,2 +1,3 @@
-// Server-side configuration only; never import this file from browser JavaScript.
-module.exports = { ENGINE_URL: 'https://king-md-engine-t49k.onrender.com', PAIR_BRIDGE_KEY: 'KINGMD-PAIR-BRIDGE-2026-CHANGE-THIS-STATIC-KEY-8f91c3d7', JWT_SECRET: 'KINGMD-WEBSITE-SESSION-SECRET-2026-REPLACE-BEFORE-PUBLIC-DEPLOYMENT-9d27f4a1' };
+ENGINE_URL: 'https://king-md-engine-t49k.onrender.com',
+PAIR_BRIDGE_KEY: 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7',
+JWT_SECRET: 'KINGMD-WEBSITE-SESSION-SECRET-2026-7d87fd1b740f3cc5f7be31b5253852c5'
