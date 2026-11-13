@@ -1,4 +1,3 @@
-'use strict';
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -21,17 +20,17 @@ const JWT_SECRET = process.env.JWT_SECRET || '';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
-// NEVER put a real key here. Set PAIR_BRIDGE_KEY in Render on BOTH services with SAME value.
-const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || '';
+const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'uFOg2BeCn3EJV6tf1fdXbsMSwshScKuzFDQwvoh68jx59ftO';
 const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine-t49k.onrender.com').replace(/\/+$/, '');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
 }
-if (!PAIR_BRIDGE_KEY) console.error('CONFIG ERROR: Set PAIR_BRIDGE_KEY in Render on App AND Engine to the SAME value.');
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 
-// ===== KING MD - REAL GLOBAL SLOTS - NO FAKE =====
+// ===== KING MD - REAL GLOBAL SLOTS 👑 - NO FAKE =====
+// REAL: You have 1 Engine. Do NOT set TOTAL_SERVERS=270 in Render - that was fake.
+// TOTAL_SLOTS = 1 Engine * SLOTS_PER_SERVER. When REAL bots reach TOTAL_SLOTS, slots = 0 -> time to upgrade / add Engine.
 const TOTAL_SERVERS = 1;
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
@@ -63,6 +62,7 @@ function dedupeBotRecords() {
   }
   const cleaned = [...seen.values()];
   if (cleaned.length !== botRecords.length) {
+    console.log(`[KING MD] Deduped bots: ${botRecords.length} -> ${cleaned.length} unique`);
     botRecords = cleaned;
     saveJsonFile(BOTS_FILE, botRecords);
   }
@@ -88,7 +88,7 @@ function normalizeBotState(value, info) {
 function countBots() {
   const uniq = uniqueBots();
   const online = uniq.filter(b => normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state) === 'online').length;
-  return { total: uniq.length, online, offline: uniq.length - online, unique: uniq.length };
+  return { total: uniq.length, online, offline: uniq.length - online, unique: uniq };
 }
 
 const notificationList = user => Array.isArray(user.notifications) ? user.notifications : [];
@@ -167,6 +167,10 @@ function publicUser(u) {
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
   x.likesCount = Number(u.likes || 0);
+  // ===== REAL My Bot Sessions counting - GREEN CIRCLE PART ✅ =====
+  // botSpaces = how many bots user CAN pair (3 free, 6 premium, or custom bought)
+  // usedSpaces = REAL how many bots user HAS paired (unique numbers with this ownerId)
+  // Frontend shows: usedSpaces / botSpaces  e.g. 2/3 used, 0/6 used
   x.botSpaces = Number(u.botSpaces || (x.isPremium ? PREMIUM_SLOTS : FREE_SLOTS));
   x.usedSpaces = uniqueBots(botRecords.filter(b => b.ownerId === u.id)).length;
   x.coins = Number(u.coins || 0);
@@ -202,7 +206,7 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
-// ===== WHATSAPP PAIRING BRIDGE - APP SIDE - FIXED: REAL CODE ONLY =====
+// ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -241,15 +245,13 @@ app.post('/request-pairing', async (req, res) => {
       return res.json({ success: true, alreadyConnected: true, state: 'online', serverInfo: { serverUsed: 'KING MD Engine' } });
     }
     if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
-    // FIX: Use REAL pairingCode only. kingCode/displayCode must equal pairingCode (Engine now sends same value).
-    const realCode = data.pairingCode || data.code || '';
     if (req.user && req.user.id) {
       const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
       const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
       if (existing) Object.assign(existing, record); else botRecords.push(record);
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
-    res.json({ success:true, pairingCode: realCode, kingCode: realCode, displayCode: realCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
+    res.json({ success:true, pairingCode: data.pairingCode, kingCode: data.kingCode || data.displayCode || data.pairingCode, displayCode: data.kingCode || data.displayCode || data.pairingCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
   } catch (error) {
     console.error('Pairing engine request failed:', error.message);
     res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
@@ -675,7 +677,7 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
-// ===== COMPATIBILITY API =====
+// ===== COMPATIBILITY API - REAL COUNTING ✅ =====
 async function readFleetStatus() {
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
   if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
@@ -695,12 +697,15 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+// REAL calcStats - counts REAL unique bots, NOT fake 4042
 function calcStats() {
   dedupeBotRecords();
-  const { total, online } = countBots();
-  const availableSlots = Math.max(0, TOTAL_SLOTS - total);
-  return { botsPaired: total, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
+  const { total, online } = countBots(); // REAL total from bots.json
+  const botsPaired = total;
+  const availableSlots = Math.max(0, TOTAL_SLOTS - total); // REAL slots left - when 0, upgrade needed
+  return { botsPaired, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
 }
+// LIVE stats - tries Engine for REAL online count, falls back to calcStats if Engine down
 async function calcStatsLive() {
   try {
     const fleet = await readFleetStatus();
@@ -770,7 +775,7 @@ app.post('/api/admin/monitoring/purge-dead', requireUser, adminOnly, async (req,
   } catch (e) { res.status(502).json({ success: false, error: e.message }); }
 });
 
-// ===== ADMIN USER + NOTIFICATIONS =====
+// ===== CORE ADMIN USER + NOTIFICATION APIs =====
 app.get('/api/admin/users', requireUser, adminOnly, (req, res) => {
   const q = String(req.query.search || '').toLowerCase();
   const found = users.filter(u => !q || [u.username, u.email, u.phone].some(v => String(v || '').toLowerCase().includes(q)));
@@ -828,7 +833,7 @@ app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => {
   saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 });
 });
 
-// ===== BOT SPACE PURCHASES =====
+// ===== BOT SPACE PURCHASES / DEPLOYMENT COUNTS =====
 app.post('/api/spaces/buy', requireUser, (req, res) => {
   const cost = 15, balance = Number(req.account.coins || 0);
   if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' });
@@ -880,7 +885,7 @@ app.delete('/api/notifications/:id', requireUser, (req, res) => {
   req.account.unreadNotifs = req.account.notifications.filter(n => !n.read).length; saveUsers(); res.json({ success: true });
 });
 
-// ===== APP CONFIG / CHANNEL REACT =====
+// ===== APP CONFIG / CHANNEL REACT FOR EVERYONE + COINS 👑 =====
 app.get('/api/pages/status', (_req, res) => res.json({ success: true, pages: {}, turnstileSiteKey: null, maintenance: false }));
 app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   const number = normalizePhone(req.body && req.body.number);
@@ -904,12 +909,13 @@ async function getBotNumbersForEveryone(account) {
     const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(myPhone));
     const info = d.bots?.[myPhone];
     if (info?.connected || String(info?.state||'').toLowerCase()==='online') {
+      console.log('[ChannelReact] Auto-linked', myPhone, 'to', account.username);
       botRecords.push({ ownerId: account.id, username: account.username || '', number: myPhone, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
       return [myPhone];
     }
     return [];
-  } catch (e) { return local; }
+  } catch (e) { console.log('[ChannelReact] Engine fail:', e.message); return local; }
 }
 app.get('/api/channel-react/status', requireUser, async (req, res) => {
   const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
@@ -941,7 +947,7 @@ app.post('/api/channel-react', requireUser, async (req, res) => {
   try {
     const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
     const sent = Number(d.reactionsSent || d.sent || 0);
-    if (!sent) return res.status(500).json({ success: false, error: 'Engine failed. Make sure YOUR bot follows that Channel first!' });
+    if (!sent) return res.status(500).json({ success: false, error: 'Engine failed. Make sure YOUR bot follows that Channel first! Open WhatsApp on YOUR bot number > Channels > Follow this channel.' });
     if (coinCost > 0) req.account.coins = balance - coinCost;
     req.account.channelReactUsage = { day: today, used: used + sent };
     saveUsers();
@@ -955,11 +961,13 @@ app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
   success: true, paymentsOff: true, maxMonths: 2, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || null,
   mpesaNumber: '+254726476468', options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1, methods: ['mobile_money'] }]
 }));
-app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet.' }));
+app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet. Automatic payment verification requires Safaricom Daraja credentials and a registered shortcode.' }));
 app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: true, paymentLive: false, paymentsOff: true, options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1 }], packages: [], custom: { minCoins: 10, ratePerCoin: 1 } }));
-app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet.' }));
+app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet; Daraja merchant credentials are required.' }));
 
-// ===== MANAGE BOT - FORWARDS TO ENGINE =====
+// ===== MANAGE BOT - APP server.js FORWARDS TO ENGINE (BOT main.js) ✅ =====
+// APP code. Does NOT check password itself. Password lives ONLY on Engine in manage-passwords.json.
+// Browser -> APP server.js -> ENGINE_URL /api/manage-login -> Engine checks -> returns token -> APP returns token
 async function forwardManageBot(req, res, enginePath, methodOverride) {
   try {
     const method = methodOverride || req.method;
@@ -990,11 +998,4 @@ app.get('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/ap
 app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api/managebot/logout'));
 app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
 app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
-app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-
-app.use((req, res) => res.status(404).json({ success: false, error: 'Not found: ' + req.path }));
-app.use((err, req, res, next) => { console.error('[KING MD] Express error:', err.message); res.status(500).json({ success: false, error: err.message }); });
-
-app.listen(PORT, '0.0.0.0', () => console.log('[KING MD APP] Listening on ' + PORT + ' | Engine: ' + ENGINE_URL));
-module.exports = app;
+app.post
