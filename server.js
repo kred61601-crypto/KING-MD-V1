@@ -23,7 +23,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 // FIXED: Same key as Engine main.js - so no more Unauthorized
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-engine-t49k.onrender.com').replace(/\/+$/, '');
+const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').replace(/\/+$/, '');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');

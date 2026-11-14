@@ -3108,7 +3108,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div style="font-size:.88rem;color:var(--t1);margin-bottom:1rem;line-height:1.55">
           Welcome back — open your bot's control panel.
         </div>
-        <div class="fg"><label class="fl">Bot Number</label><input type="tel" id="mbpPhone" class="fi" placeholder="e.g. 2348012345678" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Bot Number</label><input type="tel" id="mbpPhone" class="fi" placeholder="e.g. 254726476468" inputmode="numeric"></div>
         <div class="fg"><label class="fl">Password</label><input type="text" id="mbpPass" class="fi" placeholder="8 characters" maxlength="32" style="letter-spacing:2px"></div>
         <div id="mbpAttempts" style="display:none;margin:0 0 .8rem;padding:.7rem .8rem;border:1px solid var(--er,#ef4444);background:rgba(239,68,68,.08);font-size:.82rem;line-height:1.5;border-radius:6px"></div>
         <button class="btn bp bfw" id="mbpLoginBtn" onclick="A.mbpLogin()"><i class="fas fa-unlock"></i> Sign In</button>
@@ -13006,8 +13006,8 @@ const A = {
     const number = (document.getElementById('ppNumber').value || '').replace(/\D/g, '');
     if (!number) { this.toast(this._ppGift ? "Enter their WhatsApp number with the country code" : 'Enter the bot number with the country code', 'er'); return; }
     // the same rules as the server, so a number is never changed behind your back: country code first, no leading 0
-    if (number.startsWith('0')) { this.toast(number.length === 11 ? `Start with the country code instead of 0 — for Nigeria, ${number} becomes 234${number.slice(1)}` : 'Start with the country code, not 0 (for example 2348012345678)', 'er'); return; }
-    if (number.length < 10 || number.length > 15) { this.toast('That number looks wrong — type it with the country code, digits only (for example 2348012345678)', 'er'); return; }
+    if (number.startsWith('0')) { this.toast(number.length === 11 ? `Start with the country code instead of 0 — for Kenya, ${number} becomes 254${number.slice(1)}` : 'Start with the country code, not 0 (for example 254726476468)', 'er'); return; }
+    if (number.length < 10 || number.length > 15) { this.toast('That number looks wrong — type it with the country code, digits only (for example 254726476468)', 'er'); return; }
     const bind = !this._ppGift;
     btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = '<span class="eh-btn-spin"></span> Opening checkout…';
     try {
