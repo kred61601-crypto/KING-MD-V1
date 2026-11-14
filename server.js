@@ -202,7 +202,7 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
-// ===== WHATSAPP PAIRING BRIDGE - APP SIDE - FIXED: REAL CODE ONLY =====
+// ===== WHATSAPP PAIRING BRIDGE - APP SIDE - FIXED: 1 NUMBER = 1 SESSION =====
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -241,7 +241,8 @@ app.post('/request-pairing', async (req, res) => {
       return res.json({ success: true, alreadyConnected: true, state: 'online', serverInfo: { serverUsed: 'KING MD Engine' } });
     }
     if (!upstream.ok || !data.success) return res.status(upstream.status || 502).json({ success:false, error:data.error || 'The bot engine could not generate a pairing code.' });
-    const realCode = data.pairingCode || data.code || '';
+    const realCode = String(data.pairingCode || data.code || data.pairing_code || '').trim();
+    if (!realCode) return res.status(502).json({ success:false, error:'Engine is still preparing your code for ' + phoneNumber + '. Tap Generate again.' });
     if (req.user && req.user.id) {
       const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
       const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -990,7 +991,7 @@ app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api
 app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
 app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
 app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
+app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, res, '/api/managebot/forgot-password'));
 
 app.use((req, res) => res.status(404).json({ success: false, error: 'Not found: ' + req.path }));
 app.use((err, req, res, next) => { console.error('[KING MD] Express error:', err.message); res.status(500).json({ success: false, error: err.message }); });
