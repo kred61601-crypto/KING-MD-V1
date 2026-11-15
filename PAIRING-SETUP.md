@@ -24,12 +24,3 @@ The bot must continue running in the engine after the pairing code is entered. T
 ## Health check
 
 The website exposes `GET /api/health`.
-
-
-## QR scan mode (KING MD V4 engine)
-
-The deploy screen also offers **QR code** mode. The app calls `POST /request-qr`; the website forwards this to the engine's authenticated `POST /api/qr` endpoint. The engine creates a WhatsApp Web QR from Baileys and returns a PNG data URL for the app to display.
-
-The QR flow currently uses the engine's legacy single `./session` store (one QR-linked account per engine). For multiple separate bot accounts, use the existing phone-number **Pair code** flow, which stores sessions under `./sessions/<number>`.
-
-Set the same `PAIR_BRIDGE_KEY` on the app and engine. Set `ENGINE_URL` (or `ENGINE_URLS`) on the app to the deployed KING MD V4 engine URL. Do not expose `PAIR_BRIDGE_KEY` in browser code.

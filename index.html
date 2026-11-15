@@ -2118,6 +2118,17 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 /* small loader used inside a page / card while its data comes in */
 .eh-inline{display:flex;flex-direction:column;align-items:center;gap:.6rem;padding:1.4rem 0;color:var(--t2);font-size:.8rem}
 </style>
+<style>
+/* Pair / QR selection */
+.pair-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px}
+.pair-mode-btn{display:flex;align-items:center;justify-content:center;gap:9px;padding:13px 10px;border:1px solid var(--bd);border-radius:12px;background:var(--bgg);color:var(--t1);font-weight:800;cursor:pointer;transition:.2s}
+.pair-mode-btn.active{background:rgba(var(--p-rgb),.13);border-color:var(--p);color:var(--p);box-shadow:0 0 18px rgba(var(--p-rgb),.12)}
+.qr-scan-panel{display:none;text-align:center;padding:14px;border:1px solid var(--bd);border-radius:14px;background:var(--bgg);margin-bottom:14px}
+.qr-scan-panel.active{display:block}
+.qr-scan-video{display:block;width:100%;max-height:320px;object-fit:cover;background:#050505;border-radius:12px;margin:12px auto}
+.qr-scan-status{font-size:.82rem;color:var(--t2);line-height:1.5;margin:8px 0}
+.qr-scan-result{display:none;text-align:left;overflow-wrap:anywhere;max-height:120px;overflow:auto;padding:10px;border-radius:9px;background:var(--bg1);border:1px solid var(--bd);font-size:.75rem}
+</style>
 </head>
 <body>
 <div class="bg-wrap" id="bgWrap"></div>
@@ -2214,6 +2225,22 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div class="pc-ht"><div class="pc-title">Deploy your bot</div><div class="pc-sub">Enter your WhatsApp number to get your pairing code. Your bot is live in about a minute.</div></div>
       </div>
       <div id="loginWarn" class="warn-box" style="display:none"><i class="fas fa-exclamation-triangle"></i><span>You've used your free slot. <a href="#" onclick="A.openM('login')" style="color:var(--p)">Sign in</a> for more space.</span></div>
+
+      <div class="pair-mode-switch" role="group" aria-label="Choose pairing method">
+        <button type="button" class="pair-mode-btn active" id="pairModeCode" aria-pressed="true"><i class="fas fa-mobile-screen-button"></i> Pair</button>
+        <button type="button" class="pair-mode-btn" id="pairModeQR" aria-pressed="false"><i class="fas fa-qrcode"></i> QR Code Scanner</button>
+      </div>
+      <section class="qr-scan-panel" id="qrScanPanel" aria-label="QR code scanner">
+        <b><i class="fas fa-qrcode"></i> Scan a QR code</b>
+        <p class="qr-scan-status" id="qrScanStatus">Allow camera access and point it at a QR code.</p>
+        <video class="qr-scan-video" id="qrScanVideo" playsinline muted></video>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn bp" id="qrStartBtn" style="flex:1"><i class="fas fa-camera"></i> Start scanner</button>
+          <button type="button" class="btn bgr" id="qrStopBtn" style="flex:1" disabled><i class="fas fa-stop"></i> Stop</button>
+        </div>
+        <div class="qr-scan-result" id="qrScanResult"></div>
+        <p class="qr-scan-status">Note: this scanner reads QR codes. WhatsApp QR-based device pairing also requires a QR-pairing endpoint on the server; the existing server currently supports pairing codes only.</p>
+      </section>
       <form id="pairForm">
         <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 254726476468"></div>
         <div class="fg" id="pairVerifyRow" style="display:none"><label class="fl">Security Check</label><div class="cf-wrap" id="pairVerifyBox"></div></div>
@@ -5909,7 +5936,102 @@ const A = {
       + '<scr' + `ipt>atOptions={'key':'${key}','format':'iframe','height':50,'width':320,'params':{}};</scr` + 'ipt>'
       + '<scr' + `ipt src="${this._AD_CODE.bannerSrc}${key}"></scr` + 'ipt>'
       + '<scr' + `ipt>(function(){var l=-1;function s(){var h=document.body.scrollHeight;if(h!==l){l=h;parent.postMessage({ehAd:${JSON.stringify(slotId)},h:h},'*');}}try{new ResizeObserver(s).observe(document.body)}catch(e){}setInterval(s,1500);s();})();</scr` + 'ipt>'
-      + '</body></html>';
+      + '
+<script>
+/* Pair / QR scanner UI. Camera scanning is client-side and does not modify server routes. */
+(function () {
+  function initPairQr() {
+    var pairBtn = document.getElementById('pairModeCode');
+    var qrBtn = document.getElementById('pairModeQR');
+    var form = document.getElementById('pairForm');
+    var panel = document.getElementById('qrScanPanel');
+    var video = document.getElementById('qrScanVideo');
+    var status = document.getElementById('qrScanStatus');
+    var result = document.getElementById('qrScanResult');
+    var start = document.getElementById('qrStartBtn');
+    var stop = document.getElementById('qrStopBtn');
+    if (!pairBtn || !qrBtn || !form || !panel || !video) return;
+    var stream = null, timer = null, detector = null, active = false;
+    function setMode(qr) {
+      pairBtn.classList.toggle('active', !qr);
+      qrBtn.classList.toggle('active', qr);
+      pairBtn.setAttribute('aria-pressed', String(!qr));
+      qrBtn.setAttribute('aria-pressed', String(qr));
+      form.style.display = qr ? 'none' : '';
+      panel.classList.toggle('active', qr);
+      if (!qr) stopScan();
+    }
+    function stopScan() {
+      active = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (stream) { stream.getTracks().forEach(function (track) { track.stop(); }); stream = null; }
+      video.srcObject = null;
+      if (start) start.disabled = false;
+      if (stop) stop.disabled = true;
+    }
+    function scanFrame() {
+      if (!active || !detector || video.readyState < 2) { if (active) timer = setTimeout(scanFrame, 250); return; }
+      detector.detect(video).then(function (codes) {
+        if (!active) return;
+        if (codes && codes.length) {
+          result.textContent = codes[0].rawValue || '';
+          result.style.display = 'block';
+          status.textContent = 'QR code detected. The code is shown below.';
+          stopScan();
+          return;
+        }
+        timer = setTimeout(scanFrame, 250);
+      }).catch(function () { if (active) timer = setTimeout(scanFrame, 500); });
+    }
+    async function startScan() {
+      if (!('BarcodeDetector' in window)) {
+        status.textContent = 'QR scanning is not supported by this browser. Try the latest Chrome on Android.';
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        status.textContent = 'Camera access requires HTTPS and a browser that supports camera access.';
+        return;
+      }
+      try {
+        detector = new BarcodeDetector({ formats: ['qr_code'] });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        video.srcObject = stream;
+        await video.play();
+        active = true;
+        start.disabled = true;
+        stop.disabled = false;
+        result.style.display = 'none';
+        status.textContent = 'Camera is active. Point it steadily at a QR code.';
+        scanFrame();
+      } catch (err) {
+        stopScan();
+        status.textContent = err && err.name === 'NotAllowedError' ? 'Camera permission was denied. Allow camera access in your browser settings.' : 'Could not start the camera. Check camera permission and try again.';
+      }
+    }
+    pairBtn.addEventListener('click', function () { setMode(false); });
+    qrBtn.addEventListener('click', function () { setMode(true); });
+    start.addEventListener('click', startScan);
+    stop.addEventListener('click', stopScan);
+    window.addEventListener('pagehide', stopScan);
+    setMode(false);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPairQr);
+  else initPairQr();
+
+  // Recovery for a startup overlay accidentally left visible after the page has loaded.
+  window.addEventListener('load', function () {
+    window.setTimeout(function () {
+      var overlay = document.getElementById('ehLoad');
+      if (overlay && overlay.classList.contains('on') && !document.hidden) {
+        overlay.classList.remove('on');
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+    }, 20000);
+  }, { once: true });
+})();
+</script>
+
+</body></html>';
     if (!this._adMsg) {
       this._adMsg = true;
       // the frame says when the banner is there; one that never filled stays hidden (no empty strip)
