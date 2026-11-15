@@ -23,8 +23,8 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
 // ===== KING MD - MULTI SERVER - REAL COUNTING =====
-// In Render set: ENGINE_URLS=https://king-md-v4.onrender.com,https://king-md-v4-2.onrender.com
-// If you only have 1 server, it will say 1. If you add 2nd, it will say 2. Automatic.
+// In Render App Env set: ENGINE_URLS=https://king-md-v4.onrender.com
+// Add 2nd later: ENGINE_URLS=https://king-md-v4.onrender.com,https://king-md-v4-2.onrender.com
 const ENGINE_URLS = (process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
 const ENGINE_URL = ENGINE_URLS[0];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -101,7 +101,6 @@ function addUserNotification(user, type, title, body, meta) {
   user.notifications = user.notifications.slice(0, 100);
   user.unreadNotifs = user.notifications.filter(n => !n.read).length;
 }
-// ===== REAL COUNTING HELPERS - ASK ENGINE, ENGINE NEVER LIES =====
 async function fetchFromEngine(base, route, options) {
   const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
   const text = await response.text().catch(() => '');
@@ -111,7 +110,6 @@ async function fetchFromEngine(base, route, options) {
   return data;
 }
 async function engineFetch(route, options) {
-  // Try first engine, if it fails try others - so 2nd server still works
   let lastErr = null;
   for (const base of ENGINE_URLS) {
     try { return await fetchFromEngine(base, route, options); } catch (e) { lastErr = e; if (e.status === 409 || e.status === 400) throw e; }
@@ -124,7 +122,6 @@ async function engineFetchAll(route, options) {
   }));
   return results.filter(Boolean);
 }
-// Get REAL numbers from ALL engines - this is the true count
 async function getRealEngineNumbers() {
   const all = await engineFetchAll('/api/count');
   let numbers = [];
@@ -132,29 +129,28 @@ async function getRealEngineNumbers() {
     if (Array.isArray(d.numbers)) numbers.push(...d.numbers.map(normalizePhone));
     else if (d.bots && typeof d.bots === 'object') numbers.push(...Object.keys(d.bots).map(normalizePhone));
   }
-  // Fallback: if Engine does not have /api/count yet, use local list
-  if (!numbers.length && all.length === 0) return null;
-  return [...new Set(numbers.filter(n => /^\d{8,15}$/.test(n)))];
+  if (numbers.length) return [...new Set(numbers.filter(n => /^\d{8,15}$/.test(n)))];
+  try {
+    const all2 = await engineFetchAll('/api/status');
+    for (const d of all2) if (d.bots) numbers.push(...Object.keys(d.bots).map(normalizePhone));
+    if (numbers.length) return [...new Set(numbers.filter(n => /^\d{8,15}$/.test(n)))];
+  } catch {}
+  return null;
 }
-// SYNC: If Engine says bot is GONE, remove it from App too - so count goes DOWN when deleted
 async function syncBotRecordsWithEngine() {
   try {
     const real = await getRealEngineNumbers();
     if (real === null) return false;
     const realSet = new Set(real);
     const before = botRecords.length;
-    // Keep only bots that still exist on Engine OR are still in pairing (just requested, not yet on Engine)
     const now = Date.now();
     botRecords = botRecords.filter(b => {
       const num = normalizePhone(b.number);
       if (realSet.has(num)) return true;
-      // Keep very fresh pairing requests for 10 minutes, they are not on Engine yet
       const age = now - new Date(b.createdAt || b.updatedAt || 0).getTime();
       if (b.state === 'pairing' && age < 10 * 60 * 1000) return true;
       return false;
     });
-    if (botRecords.length !== before) saveJsonFile(BOTS_FILE, botRecords);
-    // Add any Engine bots missing locally (e.g. after App redeploy wiped file) - so count comes BACK
     for (const num of real) {
       if (!botRecords.some(b => normalizePhone(b.number) === num)) {
         botRecords.push({ ownerId: '', username: '', number: num, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), fromEngineSync: true });
@@ -259,7 +255,7 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 
-// ===== WHATSAPP PAIRING BRIDGE - APP SIDE - FIXED: 1 NUMBER = 1 SESSION =====
+// ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -283,7 +279,6 @@ app.post('/request-pairing', async (req, res) => {
     if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
   }
   try {
-    // Pick engine with fewest bots - so 2nd server gets used too, not only 1st
     let orderedEngines = [...ENGINE_URLS];
     try {
       const counts = await Promise.all(ENGINE_URLS.map(async (base) => {
@@ -745,10 +740,8 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   const record = botRecords.find(b => b.ownerId === req.account.id && normalizePhone(b.number) === number);
   if (!record) return res.status(404).json({ success: false, error: 'This bot is not linked to your account.' });
   try {
-    // Delete from ALL engines - so count goes DOWN everywhere
     await engineFetchAll('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
     botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && normalizePhone(b.number) === number));
-    // Also remove any orphan record with same number (after sync) so count really drops
     botRecords = botRecords.filter(b => normalizePhone(b.number) !== number || b.ownerId !== req.account.id);
     saveJsonFile(BOTS_FILE, botRecords);
     res.json({ success: true, serversDeleted: ENGINE_URLS });
@@ -760,7 +753,6 @@ async function readFleetStatus() {
   await syncBotRecordsWithEngine();
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
   if (!numbers.length) {
-    // Even if local is empty, ask Engine - Engine may have bots after App redeploy
     const real = await getRealEngineNumbers().catch(() => null);
     if (real && real.length) {
       const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(real.join(',')));
@@ -795,12 +787,9 @@ function calcStats() {
 }
 async function calcStatsLive() {
   try {
-    // REAL COUNT: from Engine, not from wiped local file
     const real = await getRealEngineNumbers();
     const fleet = await readFleetStatus();
     let total = fleet.numbers.length;
-    if (real && real.length >= 0) total = Math.max(total, real.length);
-    // If Engine says 0 but local says 2 and Engine is reachable, trust Engine - someone deleted
     if (real !== null) total = real.length;
     const online = Object.values(fleet.bots).filter(b => b.connected).length;
     const availableSlots = Math.max(0, TOTAL_SLOTS - total);
@@ -953,7 +942,6 @@ app.get('/api/stats/deploys', async (_req, res) => {
     if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; }
   });
   const uniq = countBots();
-  // REAL: allTime = Engine count, so if someone deletes, allTime goes DOWN too
   const real = await getRealEngineNumbers().catch(() => null);
   const allTime = real !== null ? real.length : uniq.total;
   res.json({ success: true, month: monthKey, today, monthDays,
