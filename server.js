@@ -21,9 +21,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'KINGMD-WEBSITE-SESSION-SECRET-2026
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
-// FIXED: Same key as Engine main.js - so no more Unauthorized
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
-const ENGINE_URL = (process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').replace(/\/+$/, '');
+// ===== KING MD - MULTI SERVER - REAL COUNTING =====
+// In Render set: ENGINE_URLS=https://king-md-v4.onrender.com,https://king-md-v4-2.onrender.com
+// If you only have 1 server, it will say 1. If you add 2nd, it will say 2. Automatic.
+const ENGINE_URLS = (process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
+const ENGINE_URL = ENGINE_URLS[0];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('CONFIG ERROR: Set JWT_SECRET to a random secret of at least 32 characters in Render.');
@@ -32,7 +35,7 @@ if (!PAIR_BRIDGE_KEY) console.error('CONFIG ERROR: Set PAIR_BRIDGE_KEY in Render
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
 
 // ===== KING MD - REAL GLOBAL SLOTS - NO FAKE =====
-const TOTAL_SERVERS = 1;
+const TOTAL_SERVERS = ENGINE_URLS.length;
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
 const FREE_SLOTS = 3;
@@ -98,14 +101,68 @@ function addUserNotification(user, type, title, body, meta) {
   user.notifications = user.notifications.slice(0, 100);
   user.unreadNotifs = user.notifications.filter(n => !n.read).length;
 }
-async function engineFetch(route, options) {
-  const base = ENGINE_URL;
+// ===== REAL COUNTING HELPERS - ASK ENGINE, ENGINE NEVER LIES =====
+async function fetchFromEngine(base, route, options) {
   const response = await fetch(base + route, { ...(options || {}), headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY, ...((options || {}).headers || {}) }, signal: AbortSignal.timeout(30000) });
   const text = await response.text().catch(() => '');
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { raw: text }; }
-  if (!response.ok || data.success === false) { const error = new Error(data.error || data.raw || 'WhatsApp engine request failed'); error.status = response.status || 502; throw error; }
+  if (!response.ok || data.success === false) { const error = new Error(data.error || data.raw || 'WhatsApp engine request failed'); error.status = response.status || 502; error.code = data.code; error.data = data; throw error; }
   return data;
+}
+async function engineFetch(route, options) {
+  // Try first engine, if it fails try others - so 2nd server still works
+  let lastErr = null;
+  for (const base of ENGINE_URLS) {
+    try { return await fetchFromEngine(base, route, options); } catch (e) { lastErr = e; if (e.status === 409 || e.status === 400) throw e; }
+  }
+  throw lastErr || new Error('All engines offline');
+}
+async function engineFetchAll(route, options) {
+  const results = await Promise.all(ENGINE_URLS.map(async (base) => {
+    try { return await fetchFromEngine(base, route, options); } catch (_) { return null; }
+  }));
+  return results.filter(Boolean);
+}
+// Get REAL numbers from ALL engines - this is the true count
+async function getRealEngineNumbers() {
+  const all = await engineFetchAll('/api/count');
+  let numbers = [];
+  for (const d of all) {
+    if (Array.isArray(d.numbers)) numbers.push(...d.numbers.map(normalizePhone));
+    else if (d.bots && typeof d.bots === 'object') numbers.push(...Object.keys(d.bots).map(normalizePhone));
+  }
+  // Fallback: if Engine does not have /api/count yet, use local list
+  if (!numbers.length && all.length === 0) return null;
+  return [...new Set(numbers.filter(n => /^\d{8,15}$/.test(n)))];
+}
+// SYNC: If Engine says bot is GONE, remove it from App too - so count goes DOWN when deleted
+async function syncBotRecordsWithEngine() {
+  try {
+    const real = await getRealEngineNumbers();
+    if (real === null) return false;
+    const realSet = new Set(real);
+    const before = botRecords.length;
+    // Keep only bots that still exist on Engine OR are still in pairing (just requested, not yet on Engine)
+    const now = Date.now();
+    botRecords = botRecords.filter(b => {
+      const num = normalizePhone(b.number);
+      if (realSet.has(num)) return true;
+      // Keep very fresh pairing requests for 10 minutes, they are not on Engine yet
+      const age = now - new Date(b.createdAt || b.updatedAt || 0).getTime();
+      if (b.state === 'pairing' && age < 10 * 60 * 1000) return true;
+      return false;
+    });
+    if (botRecords.length !== before) saveJsonFile(BOTS_FILE, botRecords);
+    // Add any Engine bots missing locally (e.g. after App redeploy wiped file) - so count comes BACK
+    for (const num of real) {
+      if (!botRecords.some(b => normalizePhone(b.number) === num)) {
+        botRecords.push({ ownerId: '', username: '', number: num, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), fromEngineSync: true });
+      }
+    }
+    if (botRecords.length !== before) saveJsonFile(BOTS_FILE, botRecords);
+    return true;
+  } catch (_) { return false; }
 }
 
 // ===== OWNER ACCOUNT =====
@@ -226,15 +283,31 @@ app.post('/request-pairing', async (req, res) => {
     if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
   }
   try {
-    const upstream = await fetch(ENGINE_URL + '/api/pair', {
-      method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY },
-      body: JSON.stringify({ phoneNumber }) , signal: AbortSignal.timeout(90000)
-    });
-    const data = await upstream.json().catch(() => ({}));
+    // Pick engine with fewest bots - so 2nd server gets used too, not only 1st
+    let orderedEngines = [...ENGINE_URLS];
+    try {
+      const counts = await Promise.all(ENGINE_URLS.map(async (base) => {
+        try { const d = await fetchFromEngine(base, '/api/count'); return { base, total: Number(d.total || d.count || 0) }; } catch (_) { return { base, total: 9999 }; }
+      }));
+      orderedEngines = counts.sort((a,b) => a.total - b.total).map(x => x.base);
+    } catch (_) {}
+    let upstream = null; let data = null; let usedEngine = orderedEngines[0];
+    let lastError = null;
+    for (const base of orderedEngines) {
+      try {
+        const r = await fetch(base + '/api/pair', { method: 'POST', headers: { 'content-type':'application/json', 'x-pair-bridge-key':PAIR_BRIDGE_KEY }, body: JSON.stringify({ phoneNumber }), signal: AbortSignal.timeout(90000) });
+        const j = await r.json().catch(() => ({}));
+        if (r.status === 409 && j.code === 'ALREADY_CONNECTED') { upstream = r; data = j; usedEngine = base; break; }
+        if (r.ok && j.success) { upstream = r; data = j; usedEngine = base; break; }
+        lastError = j.error || 'Engine could not generate code';
+        if (r.status === 429 || r.status === 400) { upstream = r; data = j; break; }
+      } catch (e) { lastError = e.message; }
+    }
+    if (!upstream || !data) return res.status(502).json({ success:false, error: lastError || 'Pairing engine is offline or still starting. Please try again shortly.' });
     if (upstream.status === 409 && data.code === 'ALREADY_CONNECTED') {
       if (req.user && req.user.id) {
         const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
-        const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'online', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: usedEngine, deviceId: String(body.deviceId || '').slice(0, 100), state: 'online', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
         if (existing) Object.assign(existing, record); else botRecords.push(record);
         dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
       }
@@ -245,7 +318,7 @@ app.post('/request-pairing', async (req, res) => {
     if (!realCode) return res.status(502).json({ success:false, error:'Engine is still preparing your code for ' + phoneNumber + '. Tap Generate again.' });
     if (req.user && req.user.id) {
       const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
-      const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: usedEngine, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
       if (existing) Object.assign(existing, record); else botRecords.push(record);
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
@@ -608,12 +681,15 @@ app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
 
 // ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
 app.get('/api/my-bots', requireUser, async (req, res) => {
+  await syncBotRecordsWithEngine();
   dedupeBotRecords();
   const mine = uniqueBots(botRecords.filter(b => b.ownerId === req.account.id));
   let states = {};
   if (mine.length) {
-    try { const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); states = d.bots || {}; }
-    catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
+    try {
+      const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(',')));
+      for (const d of all) Object.assign(states, d.bots || {});
+    } catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
   }
   let changed = false;
   const bots = mine.map(b => {
@@ -641,11 +717,12 @@ app.post('/api/bots/status', async (req, res) => {
   const nums = Array.isArray(req.body && req.body.numbers) ? [...new Set(req.body.numbers.map(normalizePhone).filter(n => /^\d{8,15}$/.test(n)))] .slice(0, 30) : [];
   if (!nums.length) return res.json({ success: true, bots: {} });
   try {
-    const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
+    const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
+    const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
     const account = currentUser(req);
     const normalized = {};
     for (const n of nums) {
-      const info = (d.bots || {})[n];
+      const info = merged[n];
       const st = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
       normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null };
     }
@@ -668,22 +745,37 @@ app.delete('/session/:phone', requireUser, async (req, res) => {
   const record = botRecords.find(b => b.ownerId === req.account.id && normalizePhone(b.number) === number);
   if (!record) return res.status(404).json({ success: false, error: 'This bot is not linked to your account.' });
   try {
-    await engineFetch('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
+    // Delete from ALL engines - so count goes DOWN everywhere
+    await engineFetchAll('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
     botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && normalizePhone(b.number) === number));
+    // Also remove any orphan record with same number (after sync) so count really drops
+    botRecords = botRecords.filter(b => normalizePhone(b.number) !== number || b.ownerId !== req.account.id);
     saveJsonFile(BOTS_FILE, botRecords);
-    res.json({ success: true, serversDeleted: ['KING MD Engine'] });
+    res.json({ success: true, serversDeleted: ENGINE_URLS });
   } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
 
 // ===== COMPATIBILITY API =====
 async function readFleetStatus() {
+  await syncBotRecordsWithEngine();
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
-  if (!numbers.length) return { numbers, bots: {}, ok: true, ms: 0 };
+  if (!numbers.length) {
+    // Even if local is empty, ask Engine - Engine may have bots after App redeploy
+    const real = await getRealEngineNumbers().catch(() => null);
+    if (real && real.length) {
+      const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(real.join(',')));
+      const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
+      const bots = {}; real.forEach(n => { const info = merged[n]; const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info); bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null }; });
+      return { numbers: real, bots, ok: true, ms: 0 };
+    }
+    return { numbers, bots: {}, ok: true, ms: 0 };
+  }
   const started = Date.now();
-  const data = await engineFetch('/api/status?numbers=' + encodeURIComponent(numbers.join(',')));
-  const raw = data.bots || {}, bots = {};
+  const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(numbers.join(',')));
+  const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
+  const bots = {};
   numbers.forEach(n => {
-    const info = raw[n];
+    const info = merged[n];
     const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
     bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null };
   });
@@ -703,11 +795,16 @@ function calcStats() {
 }
 async function calcStatsLive() {
   try {
+    // REAL COUNT: from Engine, not from wiped local file
+    const real = await getRealEngineNumbers();
     const fleet = await readFleetStatus();
-    const total = fleet.numbers.length;
+    let total = fleet.numbers.length;
+    if (real && real.length >= 0) total = Math.max(total, real.length);
+    // If Engine says 0 but local says 2 and Engine is reachable, trust Engine - someone deleted
+    if (real !== null) total = real.length;
     const online = Object.values(fleet.bots).filter(b => b.connected).length;
     const availableSlots = Math.max(0, TOTAL_SLOTS - total);
-    return { botsPaired: total, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true };
+    return { botsPaired: total, total, count: total, bots: total, online, offline: Math.max(0, total - online), servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true };
   } catch (e) { return { ...calcStats(), live: false }; }
 }
 app.get('/api/stats', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
@@ -721,7 +818,7 @@ app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) =
 
 app.get('/sessions', async (req, res) => {
   const started = Date.now();
-  const stats = calcStats();
+  const stats = await calcStatsLive();
   try {
     const fleet = await readFleetStatus();
     botRecords.forEach(b => { if (fleet.bots[normalizePhone(b.number)]) b.state = fleet.bots[normalizePhone(b.number)].state; });
@@ -750,8 +847,10 @@ app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
     const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive;
     sessions.forEach(b => { const rec = botRecords.find(x => normalizePhone(x.number) === b.number); if (rec) rec.state = b.state; });
     saveJsonFile(BOTS_FILE, botRecords);
-    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS,
-      perServer: [{ server: 'KING MD Engine', healthy: true, alive, dead, ms: fleet.ms }] });
+    const perServer = await Promise.all(ENGINE_URLS.map(async (base, i) => {
+      try { const d = await fetchFromEngine(base, '/api/count'); return { server: 'KING MD Engine ' + (i+1), healthy: true, alive: Number(d.total || 0), dead: 0, ms: fleet.ms }; } catch (_) { return { server: 'KING MD Engine ' + (i+1), healthy: false, alive: 0, dead: 0, ms: 0 }; }
+    }));
+    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, perServer });
   } catch (e) {
     res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message });
   }
@@ -841,7 +940,8 @@ app.post('/api/db-full/report', requireUser, (req, res) => {
   if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id });
   saveUsers(); res.json({ success: true });
 });
-app.get('/api/stats/deploys', (_req, res) => {
+app.get('/api/stats/deploys', async (_req, res) => {
+  await syncBotRecordsWithEngine();
   const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7);
   const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0);
   let todayTotal = 0, monthTotal = 0;
@@ -853,9 +953,12 @@ app.get('/api/stats/deploys', (_req, res) => {
     if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; }
   });
   const uniq = countBots();
+  // REAL: allTime = Engine count, so if someone deletes, allTime goes DOWN too
+  const real = await getRealEngineNumbers().catch(() => null);
+  const allTime = real !== null ? real.length : uniq.total;
   res.json({ success: true, month: monthKey, today, monthDays,
-    totals: { today: todayTotal, month: monthTotal, allTime: uniq.total },
-    total: uniq.total, active: uniq.online, ...calcStats() });
+    totals: { today: todayTotal, month: monthTotal, allTime },
+    total: allTime, active: uniq.online, ...(await calcStatsLive()) });
 });
 
 // ===== NOTIFICATIONS =====
@@ -996,5 +1099,5 @@ app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, r
 app.use((req, res) => res.status(404).json({ success: false, error: 'Not found: ' + req.path }));
 app.use((err, req, res, next) => { console.error('[KING MD] Express error:', err.message); res.status(500).json({ success: false, error: err.message }); });
 
-app.listen(PORT, '0.0.0.0', () => console.log('[KING MD APP] Listening on ' + PORT + ' | Engine: ' + ENGINE_URL));
+app.listen(PORT, '0.0.0.0', () => console.log('[KING MD APP] Listening on ' + PORT + ' | Engines: ' + ENGINE_URLS.join(', ') + ' | Servers: ' + TOTAL_SERVERS));
 module.exports = app;
