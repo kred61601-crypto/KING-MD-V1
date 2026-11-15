@@ -324,6 +324,21 @@ app.post('/request-pairing', async (req, res) => {
   }
 });
 
+app.post('/request-qr', async (req, res) => {
+  const body = req.body || {};
+  const token = String(body.pairToken || '');
+  const expiry = pairTokens.get(token);
+  if (!expiry || expiry < Date.now()) { pairTokens.delete(token); return res.status(403).json({ success:false, error:'QR request expired. Refresh and try again.' }); }
+  pairTokens.delete(token);
+  try {
+    const data = await engineFetch('/api/qr', { method:'POST', body: JSON.stringify({}) });
+    if (!data.qr) return res.status(502).json({ success:false, error:'The engine did not return a QR code.' });
+    res.json({ success:true, qr:data.qr, state:data.state || 'waiting_for_scan' });
+  } catch (e) {
+    res.status(e.status || 502).json({ success:false, error:e.message || 'QR engine is unavailable.' });
+  }
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 
