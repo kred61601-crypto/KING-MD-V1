@@ -13781,5 +13781,25 @@ async function submitReportToTelegram(e) {
 
 <!-- Branded offline screen — auto-shown the moment the connection drops -->
 
+</div>
+</div>
+
+<!-- KING SOUNDS - YOUR OWN SOUNDS -->
+<script>
+  function playError(){
+    try{
+      const a = new Audio('/sounds/error.mp3');
+      a.play();
+    }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(200);
+  }
+  function playSuccess(){
+    try{
+      const a = new Audio('/sounds/success.mp3');
+      a.play();
+    }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(100);
+  }
+</script>
 </body>
 </html>
