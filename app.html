@@ -13798,32 +13798,74 @@ async function submitReportToTelegram(e) {
     try{ new Audio('sounds/wait.mp3').play().catch(()=>{}); }catch(e){}
   }
 
-  // KING AUTO SOUND - FOR EVERYTHING IN APP
-  // Wrong number, wrong channel, wrong payment, wrong email = ERROR sound
-  // Right number, right channel, right payment, right email = SUCCESS sound
+<!-- KING SOUNDS - V3 - FOR EVERYTHING + CODE + MPESA + PASSWORD -->
+<script>
+  function playError(){
+    try{ new Audio('sounds/error.mp3').play().catch(()=>{}); }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(200);
+  }
+  function playSuccess(){
+    try{ new Audio('sounds/success.mp3').play().catch(()=>{}); }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(100);
+  }
+  function playWait(){
+    try{ new Audio('sounds/wait.mp3').play().catch(()=>{}); }catch(e){}
+  }
+
+  function kingCheckSound(data, method, url){
+    if(!data || typeof data !== 'object') return;
+    const txt = JSON.stringify(data).toLowerCase();
+    const isGet = method === 'GET';
+
+    // ERROR - any of these words
+    if(data.success === false || data.ok === false || data.verified === false ||
+       data.status === 'failed' || data.status === 'error' ||
+       txt.includes('"error"') || txt.includes('wrong code') || txt.includes('invalid code') ||
+       txt.includes('incorrect') || txt.includes('failed to') || txt.includes('wrong password') ||
+       txt.includes('not correct') || txt.includes('expired')){
+      playError();
+      return;
+    }
+    // SUCCESS - only when you DO something, not loading
+    if(!isGet && (data.success === true || data.ok === true || data.verified === true ||
+       data.status === 'success' || data.status === 'sent' || data.status === 'ok' ||
+       txt.includes('code sent') || txt.includes('verified') || txt.includes('password updated') ||
+       txt.includes('password changed') || txt.includes('payment sent') || txt.includes('request sent'))){
+      playSuccess();
+    }
+  }
+
   const _oldFetch = window.fetch;
   window.fetch = async function(...args){
     const url = String(args[0] || '');
     const method = String((args[1] && args[1].method) || 'GET').toUpperCase();
     const isApi = url.includes('/api/');
-
-    // Play WAIT only when you DO something, not when app just loads messages
     if(isApi && method !== 'GET') playWait();
-
     try{
       const res = await _oldFetch(...args);
-      const clone = res.clone();
-      clone.json().then(data=>{
-        if(!data || typeof data.success === 'undefined') return;
-        if(data.success === false){
-          playError(); // WRONG - anything
-        } else if(data.success === true && isApi && method !== 'GET'){
-          playSuccess(); // RIGHT - anything
+      // If server returns NO json (M-Pesa sometimes), don't break it
+      try{
+        const clone = res.clone();
+        const text = await clone.text();
+        if(text){
+          try{ kingCheckSound(JSON.parse(text), method, url); }
+          catch(e){
+            const low = text.toLowerCase();
+            if(low.includes('error') || low.includes('wrong') || low.includes('invalid') || low.includes('failed')) playError();
+            else if(!isGet && (low.includes('success') || low.includes('sent') || low.includes('verified'))) playSuccess();
+          }
         }
-      }).catch(()=>{});
+      }catch(e){}
       return res;
     }catch(e){ playError(); throw e; }
   };
+
+  // ALSO: Watch screen text - if app shows "Wrong code" or "Password updated" as popup, play sound
+  const _obs = new MutationObserver(()=>{
+    const bodyTxt = document.body.innerText.slice(-500).toLowerCase();
+    if(bodyTxt.includes('wrong code') || bodyTxt.includes('invalid code') || bodyTxt.includes('wrong password') || bodyTxt.includes('failed')) playError();
+  });
+  _obs.observe(document.body, {childList:true, subtree:true});
 </script>
 </body>
 </html>
