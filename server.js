@@ -23,8 +23,6 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
 // ===== KING MD - MULTI SERVER - REAL COUNTING =====
-// In Render App Env set: ENGINE_URLS=https://king-md-v4.onrender.com
-// Add 2nd later: ENGINE_URLS=https://king-md-v4.onrender.com,https://king-md-v4-2.onrender.com
 const ENGINE_URLS = (process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
 const ENGINE_URL = ENGINE_URLS[0];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -961,6 +959,73 @@ app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => {
   saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 });
 });
 
+// ===== KING MD - PREMIUM PLANS =====
+// 1 Month = 150 KSH OR 99 Coins
+// 2 Months = 250 KSH OR 200 Coins
+const PREMIUM_PLANS = {
+  '1month': { id: '1month', label: '1 Month Premium', months: 1, ksh: 150, coins: 99 },
+  '2month': { id: '2month', label: '2 Months Premium', months: 2, ksh: 250, coins: 200 },
+};
+
+app.get('/api/premium/plans', (req, res) => {
+  res.json({ success: true, plans: Object.values(PREMIUM_PLANS) });
+});
+
+app.post('/api/premium/buy-coins', requireUser, (req, res) => {
+  const plan = PREMIUM_PLANS[String((req.body||{}).planId || '')];
+  if (!plan) return res.status(400).json({ success: false, error: 'Pick a valid plan.' });
+  const balance = Number(req.account.coins || 0);
+  if (balance < plan.coins) return res.status(400).json({ success: false, error: 'Not enough coins. You need ' + plan.coins + ' coins for ' + plan.label });
+  req.account.coins = balance - plan.coins;
+  const now = Date.now();
+  const currentUntil = Date.parse(req.account.premiumUntil || '') || 0;
+  const startFrom = Math.max(now, currentUntil);
+  const newUntil = new Date(startFrom + plan.months * 30 * 24 * 60 * 60 * 1000).toISOString();
+  req.account.premiumUntil = newUntil;
+  req.account.proPlanUntil = newUntil;
+  req.account.isPremium = true;
+  req.account.proPlan = true;
+  req.account.botSpaces = Math.max(Number(req.account.botSpaces || 0), PREMIUM_SLOTS);
+  saveUsers();
+  res.json({ success: true, message: plan.label + ' activated!', premiumUntil: newUntil, coinsLeft: req.account.coins, user: publicUser(req.account) });
+});
+
+app.post('/api/premium/request-ksh', requireUser, (req, res) => {
+  const plan = PREMIUM_PLANS[String((req.body||{}).planId || '')];
+  const mpesaCode = String((req.body||{}).mpesaCode || '').trim().toUpperCase();
+  if (!plan) return res.status(400).json({ success: false, error: 'Pick a valid plan.' });
+  if (!mpesaCode) return res.status(400).json({ success: false, error: 'Enter your M-Pesa code.' });
+  const owner = users.find(u => isOwner(u.email, u.phone));
+  if (owner) {
+    addUserNotification(owner, 'broadcast', 'New Premium KSH Request',
+      '@' + req.account.username + ' wants ' + plan.label + ' for ' + plan.ksh + ' KSH. M-Pesa: ' + mpesaCode,
+      { userId: req.account.id, planId: plan.id, mpesaCode });
+  }
+  addUserNotification(req.account, 'broadcast', 'Premium request sent',
+    'Your request for ' + plan.label + ' (' + plan.ksh + ' KSH) was sent. Wait for approval.',
+    { planId: plan.id, mpesaCode });
+  saveUsers();
+  res.json({ success: true, message: 'Request sent to KING. You will get Premium after approval.' });
+});
+
+app.post('/api/admin/premium/grant', requireUser, adminOnly, (req, res) => {
+  const u = users.find(x => x.id === String((req.body||{}).userId || ''));
+  const plan = PREMIUM_PLANS[String((req.body||{}).planId || '')];
+  if (!u || !plan) return res.status(400).json({ success: false, error: 'User and plan required.' });
+  const now = Date.now();
+  const currentUntil = Date.parse(u.premiumUntil || '') || 0;
+  const startFrom = Math.max(now, currentUntil);
+  const newUntil = new Date(startFrom + plan.months * 30 * 24 * 60 * 60 * 1000).toISOString();
+  u.premiumUntil = newUntil;
+  u.proPlanUntil = newUntil;
+  u.isPremium = true;
+  u.proPlan = true;
+  u.botSpaces = Math.max(Number(u.botSpaces || 0), PREMIUM_SLOTS);
+  addUserNotification(u, 'broadcast', 'Premium Activated!', plan.label + ' is now active until ' + newUntil.slice(0,10), { planId: plan.id });
+  saveUsers();
+  res.json({ success: true, user: publicUser(u) });
+});
+
 // ===== BOT SPACE PURCHASES =====
 app.post('/api/spaces/buy', requireUser, (req, res) => {
   const cost = 15, balance = Number(req.account.coins || 0);
@@ -1031,106 +1096,13 @@ async function getBotNumbersForEveryone(account) {
   if (local.length) {
     try {
       const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(local.join(',')));
-      return local;
-    } catch(e){ return local; }
+      if (d && d.bots) return Object.keys(d.bots).map(normalizePhone);
+    } catch (_) {}
   }
-  const myPhone = normalizePhone(account.phone || account.boundNumber || '');
-  if (!myPhone) return [];
-  try {
-    const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(myPhone));
-    const info = d.bots?.[myPhone];
-    if (info?.connected || String(info?.state||'').toLowerCase()==='online') {
-      botRecords.push({ ownerId: account.id, username: account.username || '', number: myPhone, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-      dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
-      return [myPhone];
-    }
-    return [];
-  } catch (e) { return local; }
+  return local;
 }
-app.get('/api/channel-react/status', requireUser, async (req, res) => {
-  const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
-  const usage = req.account.channelReactUsage || {};
-  const used = usage.day === today ? Number(usage.used || 0) : 0;
-  const limit = premium ? 10 : 1;
-  const numbers = await getBotNumbersForEveryone(req.account);
-  res.json({ success: true, premium, hasBot: numbers.length > 0, botsCount: numbers.length, bots: numbers, coins: Number(req.account.coins || 0), dailyLimit: limit, dailyUsed: used, freeLimit: limit, refillPrice: 15, remaining: Math.max(0, limit - used) });
-});
-app.post('/api/channel-react', requireUser, async (req, res) => {
-  const body = req.body || {}, premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
-  const usage = req.account.channelReactUsage || {};
-  const used = usage.day === today ? Number(usage.used || 0) : 0;
-  const limit = premium ? 10 : 1;
-  const requested = Math.max(1, Math.min(Number(body.amount) || 1, 10));
-  const link = String(body.link || '').trim();
-  if (!link) return res.status(400).json({ success: false, error: 'Paste a WhatsApp Channel link.' });
-  if (link.includes('chat.whatsapp.com')) return res.status(400).json({ success: false, error: 'That is a GROUP link! Use whatsapp.com/channel/...' });
-  if (!link.includes('whatsapp.com/channel/') && !link.includes('/channel/') && !/0029/.test(link)) return res.status(400).json({ success: false, error: 'Invalid Channel link. Use https://whatsapp.com/channel/...' });
-  const numbers = await getBotNumbersForEveryone(req.account);
-  if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot first. Go to Deploy a Bot > Pair your number, then try again.' });
-  const freeLeft = Math.max(0, limit - used);
-  const extraNeeded = Math.max(0, requested - freeLeft);
-  const coinCost = extraNeeded * 15;
-  const balance = Number(req.account.coins || 0);
-  if (coinCost > 0 && balance < coinCost) {
-    return res.status(402).json({ success: false, needCoins: true, error: `You used your ${limit} free reacts today. You need ${coinCost} coins for ${extraNeeded} extra reacts. You have ${balance} coins. Buy coins or try tomorrow.` });
-  }
-  try {
-    const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
-    const sent = Number(d.reactionsSent || d.sent || 0);
-    if (!sent) return res.status(500).json({ success: false, error: 'Engine failed. Make sure YOUR bot follows that Channel first!' });
-    if (coinCost > 0) req.account.coins = balance - coinCost;
-    req.account.channelReactUsage = { day: today, used: used + sent };
-    saveUsers();
-    res.json({ ...d, success: true, premium, dailyUsed: used + sent, coinsLeft: Number(req.account.coins || 0), coinsSpent: coinCost, nextAt: new Date(Date.now() + 60000).toISOString() });
-  } catch (e) {
-    if (e.status === 404) return res.status(502).json({ success: false, error: 'Engine is missing /api/channel-react endpoint! Add it to main.js (Engine) and redeploy Engine, then try again.' });
-    res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' });
-  }
-});
-app.get('/api/premium/pay-info', requireUser, (req, res) => res.json({
-  success: true, paymentsOff: true, maxMonths: 2, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || null,
-  mpesaNumber: '+254726476468', options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1, methods: ['mobile_money'] }]
-}));
-app.post('/api/premium/pay/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet.' }));
-app.get('/api/coins/packages', requireUser, (req, res) => res.json({ success: true, paymentLive: false, paymentsOff: true, options: [{ id: 'KE', country: 'Kenya', flag: '🇰🇪', live: false, symbol: 'KSh ', currency: 'KES', month: 1, base: 1 }], packages: [], custom: { minCoins: 10, ratePerCoin: 1 } }));
-app.post('/api/coins/topup/initiate', requireUser, (req, res) => res.status(503).json({ success: false, comingSoon: true, error: 'M-Pesa checkout is not enabled yet.' }));
 
-// ===== MANAGE BOT - FORWARDS TO ENGINE =====
-async function forwardManageBot(req, res, enginePath, methodOverride) {
-  try {
-    const method = methodOverride || req.method;
-    const isGet = method === 'GET';
-    let url = ENGINE_URL + enginePath;
-    if (isGet && Object.keys(req.query || {}).length) url += '?' + new URLSearchParams(req.query).toString();
-    const r = await fetch(url, {
-      method,
-      headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
-      body: isGet ? undefined : JSON.stringify(req.body || {}),
-      signal: AbortSignal.timeout(30000)
-    });
-    const text = await r.text().catch(() => '');
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { success: false, error: text || 'Engine error' }; }
-    return res.status(r.status).json(data);
-  } catch (e) {
-    console.error('[ManageBot forward]', enginePath, e.message);
-    return res.status(502).json({ success: false, error: 'Bot engine offline. Try again shortly.' });
-  }
-}
-app.post('/api/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/api/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
-app.get('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
-app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api/managebot/logout'));
-app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
-app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
-app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, res, '/api/managebot/forgot-password'));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/app.html', (req, res) => res.sendFile(path.join(__dirname, 'app.html')));
 
-app.use((req, res) => res.status(404).json({ success: false, error: 'Not found: ' + req.path }));
-app.use((err, req, res, next) => { console.error('[KING MD] Express error:', err.message); res.status(500).json({ success: false, error: err.message }); });
-
-app.listen(PORT, '0.0.0.0', () => console.log('[KING MD APP] Listening on ' + PORT + ' | Engines: ' + ENGINE_URLS.join(', ') + ' | Servers: ' + TOTAL_SERVERS));
-module.exports = app;
+app.listen(PORT, () => console.log('KING MD V4 App listening on ' + PORT + ' | Premium: 1M=150KSH/99Coins, 2M=250KSH/200Coins'));
