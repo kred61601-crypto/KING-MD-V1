@@ -13784,22 +13784,46 @@ async function submitReportToTelegram(e) {
 </div>
 </div>
 
-<!-- KING SOUNDS - YOUR OWN SOUNDS -->
+<!-- KING SOUNDS - AUTO FOR EVERYTHING IN APP -->
 <script>
   function playError(){
-    try{
-      const a = new Audio('/sounds/error.mp3');
-      a.play();
-    }catch(e){}
+    try{ new Audio('sounds/error.mp3').play().catch(()=>{}); }catch(e){}
     if(navigator.vibrate) navigator.vibrate(200);
   }
   function playSuccess(){
-    try{
-      const a = new Audio('/sounds/success.mp3');
-      a.play();
-    }catch(e){}
+    try{ new Audio('sounds/success.mp3').play().catch(()=>{}); }catch(e){}
     if(navigator.vibrate) navigator.vibrate(100);
   }
+  function playWait(){
+    try{ new Audio('sounds/wait.mp3').play().catch(()=>{}); }catch(e){}
+  }
+
+  // KING AUTO SOUND - FOR EVERYTHING IN APP
+  // Wrong number, wrong channel, wrong payment, wrong email = ERROR sound
+  // Right number, right channel, right payment, right email = SUCCESS sound
+  const _oldFetch = window.fetch;
+  window.fetch = async function(...args){
+    const url = String(args[0] || '');
+    const method = String((args[1] && args[1].method) || 'GET').toUpperCase();
+    const isApi = url.includes('/api/');
+
+    // Play WAIT only when you DO something, not when app just loads messages
+    if(isApi && method !== 'GET') playWait();
+
+    try{
+      const res = await _oldFetch(...args);
+      const clone = res.clone();
+      clone.json().then(data=>{
+        if(!data || typeof data.success === 'undefined') return;
+        if(data.success === false){
+          playError(); // WRONG - anything
+        } else if(data.success === true && isApi && method !== 'GET'){
+          playSuccess(); // RIGHT - anything
+        }
+      }).catch(()=>{});
+      return res;
+    }catch(e){ playError(); throw e; }
+  };
 </script>
 </body>
 </html>
