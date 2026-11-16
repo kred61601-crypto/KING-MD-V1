@@ -80,7 +80,7 @@ app.post('/request-qr', async (req, res) => {
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
   const account = currentUser(req);
   if (account) { const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id)); const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber); const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS))); if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' }); }
-  if(botSettings && botSettings.botCommands === false) return res.status(403).json({ success:false, error:'Bot commands are turned OFF by the owner.' });
+  if(typeof botSettings !== 'undefined' && botSettings && botSettings.botCommands === false) return res.status(403).json({ success:false, error:'Bot commands are turned OFF by the owner.' });
   try { let lastError = 'QR engine is unavailable.'; for (const base of ENGINE_URLS) { try { const upstream = await fetch(base + '/api/qr?number=' + encodeURIComponent(phoneNumber), { method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY }, signal: AbortSignal.timeout(30000) }); const data = await upstream.json().catch(() => ({})); if (!upstream.ok || !data.success || !data.qrImage) { lastError = data.error || 'The engine could not create a QR code.'; if (upstream.status === 400 || upstream.status === 409 || upstream.status === 429) return res.status(upstream.status).json(data); continue; } if (req.user && req.user.id) { const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber); const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: base, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() }; if (existing) Object.assign(existing, record); else botRecords.push(record); dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords); } return res.json({ success:true, qrImage:data.qrImage, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD V4' } }); } catch (e) { lastError = e.message || lastError; } } return res.status(502).json({ success:false, error:lastError }); } catch (error) { return res.status(502).json({ success:false, error:'QR pairing engine is offline.' }); }
 });
 app.post('/request-pairing', async (req, res) => {
@@ -90,7 +90,7 @@ app.post('/request-pairing', async (req, res) => {
   if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
   const account = currentUser(req);
   if (account) { const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id)); const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber); const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS))); if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' }); }
-  if(botSettings && botSettings.botCommands === false) return res.status(403).json({ success:false, error:'Bot commands are turned OFF by the owner.' });
+  if(typeof botSettings !== 'undefined' && botSettings && botSettings.botCommands === false) return res.status(403).json({ success:false, error:'Bot commands are turned OFF by the owner.' });
   try {
     let orderedEngines = [...ENGINE_URLS];
     try { const counts = await Promise.all(ENGINE_URLS.map(async (base) => { try { const d = await fetchFromEngine(base, '/api/count'); return { base, total: Number(d.total || d.count || 0) }; } catch (_) { return { base, total: 9999 }; } })); orderedEngines = counts.sort((a,b) => a.total - b.total).map(x => x.base); } catch (_) {}
@@ -236,6 +236,98 @@ app.get('/api/payments/receipt/:ref', requireUser, (req,res)=>{ const p = paymen
 app.post('/api/admin/mpesa/approve', requireUser, adminOnly, (req,res)=>{ const p = payments.find(x=>x.id===(req.body||{}).checkoutId); if(!p) return res.json({success:false, error:'Not found'}); p.status='completed'; p.completedAt=new Date().toISOString(); savePaymentsList(); const u = users.find(x=>x.id===p.userId); if(u){ u.coins=Number(u.coins||0)+Number(p.coins||0); if(p.kind==='premium'){ u.isPremium=true; u.premiumUntil=new Date(Date.now()+(p.months||1)*30*86400000).toISOString(); } saveUsers(); } res.json({success:true}); });
 app.post('/api/admin/mpesa/reject', requireUser, adminOnly, (req,res)=>{ const p = payments.find(x=>x.id===(req.body||{}).checkoutId); if(p){ p.status='rejected'; savePaymentsList(); } res.json({success:true}); });
 app.get('/api/admin/mpesa/pending', requireUser, adminOnly, (req,res)=>{ res.json({success:true, payments: payments.filter(p=>p.status==='waiting'||p.status==='processing')}); });
+
+// ===== KING MD - CHANNEL REACTS FIX =====
+const REACTS_FILE = path.join(DATA_DIR, 'reacts.json');
+function loadReacts(){ try{ return JSON.parse(fs.readFileSync(REACTS_FILE,'utf8')); }catch(_){ return []; } }
+function saveReactsList(){ try{ fs.writeFileSync(REACTS_FILE, JSON.stringify(channelReacts,null,2)); }catch(_){} }
+let channelReacts = loadReacts();
+function parseChannelLink(link){
+  let s = String(link||'').trim();
+  if(!s) return null;
+  if(!s.startsWith('http')) s = 'https://' + s;
+  if(s.includes('whatsapp.com/channel/') || s.includes('chat.whatsapp.com/') || s.includes('whatsapp.com/')) return s;
+  return null;
+}
+app.post('/api/channel-react/send', requireUser, async (req,res)=>{
+  try{
+    const b = req.body||{};
+    const link = parseChannelLink(b.link || b.channelLink || b.postLink || b.url || '');
+    if(!link) return res.json({success:false, error:'Put a valid WhatsApp Channel Post Link.'});
+    let emojis = b.emojis || b.reactions || [];
+    if(typeof emojis === 'string') emojis = emojis.split(',').map(x=>x.trim()).filter(Boolean);
+    if(!Array.isArray(emojis) || !emojis.length) emojis = ['❤️','👍','😮','🙏','😂'];
+    emojis = emojis.slice(0,5);
+    const count = Math.min(1000, Math.max(1, Number(b.count||b.amount||1000)));
+    const isPremium = isPremiumUser(req.account);
+    if(!isPremium){
+      if(Number(req.account.coins||0) < 1) return res.json({success:false, error:'Not enough EH coins. You need 1 EH coin.'});
+      req.account.coins = Number(req.account.coins||0) - 1; saveUsers();
+    }
+    const id = 'REACT'+Date.now();
+    const job = { id, userId:req.account.id, username:req.account.username, link, emojis, count, status:'queued', createdAt:new Date().toISOString() };
+    channelReacts.push(job); saveReactsList();
+    try{ await engineFetch('/api/channel-react', {method:'POST', body: JSON.stringify({link, emojis, count, userId:req.account.id})}); job.status='sent'; }catch(e){ job.status='queued'; job.note='Engine will process when online'; }
+    saveReactsList();
+    return res.json({success:true, id, status: job.status, message:'Reactions queued! ✅', coinsLeft: Number(req.account.coins||0)});
+  }catch(e){ return res.json({success:false, error:'Network error - try again: '+e.message}); }
+});
+app.get('/api/channel-react/status/:id', requireUser, (req,res)=>{ const j = channelReacts.find(x=>x.id===req.params.id); if(!j) return res.json({success:false, error:'Not found'}); res.json({success:true, status:j.status, job:j}); });
+app.get('/api/channel-react/history', requireUser, (req,res)=>{ res.json({success:true, history: channelReacts.filter(x=>x.userId===req.account.id).slice(-20).reverse()}); });
+
+// ===== KING MD - MANAGE BOT LOGIN FIX =====
+const BOT_PASS_FILE = path.join(DATA_DIR, 'bot_passwords.json');
+function loadBotPass(){ try{ return JSON.parse(fs.readFileSync(BOT_PASS_FILE,'utf8')); }catch(_){ return {}; } }
+function saveBotPass(){ try{ fs.writeFileSync(BOT_PASS_FILE, JSON.stringify(botPasswords,null,2)); }catch(_){} }
+let botPasswords = loadBotPass();
+app.post('/api/bot/login', requireUser, (req,res)=>{
+  try{
+    const b = req.body||{};
+    let number = normalizePhone(b.number || b.botNumber || b.phone || '');
+    const password = String(b.password || b.pass || '');
+    if(!/^\d{8,15}$/.test(number)) return res.json({success:false, error:'Enter a valid bot number, e.g. 254726476468'});
+    if(!password) return res.json({success:false, error:'Enter your bot password'});
+    const mine = botRecords.find(x=> normalizePhone(x.number)===number && x.ownerId===req.account.id);
+    const anyBot = botRecords.find(x=> normalizePhone(x.number)===number);
+    if(!anyBot && !mine){
+      if(isOwner(req.account.email, req.account.phone)){
+        botRecords.push({ownerId:req.account.id, username:req.account.username, number, state:'offline', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()});
+        saveJsonFile(BOTS_FILE, botRecords);
+      } else {
+        return res.json({success:false, error:'This bot is not linked to your account. Pair it first in Deploy.'});
+      }
+    }
+    if(botSettings && botSettings.botCommands===false) return res.json({success:false, error:'Bot commands are turned OFF by the owner.'});
+    if(!botPasswords[number]){ botPasswords[number]=password; saveBotPass(); }
+    if(botPasswords[number] !== password) return res.json({success:false, error:'Wrong bot password. Tap Forgot your bot password?'});
+    const token = jwt.sign({id:req.account.id, username:req.account.username, botNumber:number, isBot:true}, SECRET, {expiresIn:'30d'});
+    return res.json({success:true, token, botNumber:number, number, message:'Welcome back! Opening control panel...', bot:{number, state: anyBot?anyBot.state:'offline'}});
+  }catch(e){ return res.json({success:false, error:'Server error: '+e.message}); }
+});
+app.post('/api/bot/signin', requireUser, (req,res)=>{ req.url='/api/bot/login'; return app.handle(req,res); });
+app.post('/api/bot/forgot-password', requireUser, (req,res)=>{
+  const b=req.body||{}; let number = normalizePhone(b.number||b.botNumber||'');
+  if(!/^\d{8,15}$/.test(number)) return res.json({success:false, error:'Enter your bot number first'});
+  const rec = botRecords.find(x=> normalizePhone(x.number)===number && x.ownerId===req.account.id);
+  if(!rec && !isOwner(req.account.email, req.account.phone)) return res.json({success:false, error:'Bot not found for your account'});
+  const newPass = crypto.randomBytes(4).toString('base64').replace(/[^A-Za-z0-9]/g,'').slice(0,8) || 'KING1234';
+  botPasswords[number]=newPass; saveBotPass();
+  addUserNotification(req.account, 'bot_password', 'Bot password reset', 'Your new bot password for +'+number+' is: '+newPass, {number});
+  saveUsers();
+  return res.json({success:true, newPassword:newPass, message:'New password created. Check notifications.'});
+});
+app.post('/api/bot/reset-password', requireUser, (req,res)=>{
+  const b=req.body||{}; let number = normalizePhone(b.number||'');
+  const newPass = String(b.newPassword||'').trim();
+  if(newPass.length<4) return res.json({success:false, error:'New password must be 4+ characters'});
+  botPasswords[number]=newPass; saveBotPass();
+  return res.json({success:true, message:'Bot password updated'});
+});
+app.get('/api/bot/me', requireUser, (req,res)=>{
+  const mine = uniqueBots(botRecords.filter(b=>b.ownerId===req.account.id));
+  res.json({success:true, bots: mine.map(b=>({number: normalizePhone(b.number), state: b.state, createdAt:b.createdAt}))});
+});
+app.use('/api', (req,res)=>{ res.status(404).json({success:false, error:'API not found: '+req.path}); });
 
 // ===== START =====
 app.listen(PORT, () => console.log('KING MD V4 running on ' + PORT));
