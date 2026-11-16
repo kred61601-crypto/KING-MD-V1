@@ -7344,7 +7344,7 @@ const A = {
     // the same countries as the Premium window: the ones Korapay has not switched on yet are listed as Coming soon
     const sel = document.getElementById('topupCountry');
     if (!sel.options.length) {
-      sel.innerHTML = (data.options || []).map(o => `<option value="${o.id}"${o.live ? '' : ' disabled'}>${o.flag} ${this._esc(o.country)}${o.live ? (o.id === 'XX' ? '' : ` — ${this._esc(o.currency)}`) : ' — Coming soon'}</option>`).join('');
+      sel.innerHTML = (data.options || []).map(o => `<option value="${o.id}">${o.flag} ${this._esc(o.country)}${o.live ? (o.id === 'XX' ? '' : ` — ${this._esc(o.currency)}`) : ' — Coming soon'}</option>`).join('');
       const guess = this._ppGuess();
       sel.value = (data.options || []).some(o => o.id === guess && o.live) ? guess : ((data.options || []).find(o => o.live) || { id: 'NG' }).id;
     }
@@ -13063,7 +13063,7 @@ async _doPair() {
     this._ppGift = false;
     this._ppRender();
     const sel = document.getElementById('ppCountry'), keep = sel.value || this._ppGuess();
-    sel.innerHTML = d.options.map(o => `<option value="${o.id}"${o.live ? '' : ' disabled'}>${o.flag} ${this._esc(o.country)} — ${o.live ? `${this._esc(o.symbol)}${o.month.toLocaleString()}/month` : 'Coming soon'}</option>`).join('');
+    sel.innerHTML = d.options.map(o => `<option value="${o.id}">${o.flag} ${this._esc(o.country)} — ${o.live ? `${this._esc(o.symbol)}${o.month.toLocaleString()}/month` : 'Coming soon'}</option>`).join('');
     const firstLive = (d.options.find(o => o.live) || d.options[0]).id;
     sel.value = d.options.some(o => o.id === keep && o.live) ? keep : firstLive;
     document.getElementById('ppMonths').innerHTML = [1, 2].filter(n => n <= d.maxMonths).map(n => `<button type="button" data-n="${n}" onclick="A.ppMonths(${n})">${n} month${n === 1 ? '' : 's'}</button>`).join('');
@@ -13119,6 +13119,8 @@ async _doPair() {
   },
   async ppPay() {
     const d = this._pp; if (!d) return;
+    const selected = (this._pp.options || []).find(o => o.id === document.getElementById('ppCountry').value);
+    if (selected && !selected.live) { this.toast(`Coming Soon - ${selected.country} is still waiting. Card payment coming soon.`, 'in'); document.getElementById('ppBtn').disabled = true; return; }
     const btn = document.getElementById('ppBtn');
     const number = (document.getElementById('ppNumber').value || '').replace(/\D/g, '');
     if (!number) { this.toast(this._ppGift ? "Enter their WhatsApp number with the country code" : 'Enter the bot number with the country code', 'er'); return; }
@@ -13803,20 +13805,6 @@ async function submitReportToTelegram(e) {
 </div>
 </div>
 
-<!-- KING SOUNDS - AUTO FOR EVERYTHING IN APP -->
-<script>
-  function playError(){
-    try{ new Audio('sounds/error.mp3').play().catch(()=>{}); }catch(e){}
-    if(navigator.vibrate) navigator.vibrate(200);
-  }
-  function playSuccess(){
-    try{ new Audio('sounds/success.mp3').play().catch(()=>{}); }catch(e){}
-    if(navigator.vibrate) navigator.vibrate(100);
-  }
-  function playWait(){
-    try{ new Audio('sounds/wait.mp3').play().catch(()=>{}); }catch(e){}
-  }
-
 <!-- KING SOUNDS - V3 - FOR EVERYTHING + CODE + MPESA + PASSWORD -->
 <script>
   function playError(){
@@ -13885,6 +13873,66 @@ async function submitReportToTelegram(e) {
     if(bodyTxt.includes('wrong code') || bodyTxt.includes('invalid code') || bodyTxt.includes('wrong password') || bodyTxt.includes('failed')) playError();
   });
   _obs.observe(document.body, {childList:true, subtree:true});
+</script>
+
+<style>
+#kingCheckout,#kingConfirmPop,#kingPinPop{display:none;position:fixed;inset:0;z-index:100000;background:#000b;align-items:center;justify-content:center;padding:16px}
+.king-pay-card{background:var(--card,#fff);color:var(--t,#111);width:min(440px,100%);max-height:90vh;overflow:auto;border-radius:18px;padding:20px;box-shadow:0 20px 70px #0006}
+.king-pay-card input,.king-pay-card select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--bd,#ccc);background:var(--bg,#fff);color:inherit;margin:6px 0 12px}
+.king-pay-card button{padding:12px 16px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
+.king-pay-primary{background:#16a34a;color:white;width:100%}.king-pay-muted{background:#8882;color:inherit;width:100%;margin-top:8px}
+</style>
+<div id="kingCheckout"><div class="king-pay-card"><h3>Secure checkout</h3><label>Search country</label><input id="kingCountrySearch" placeholder="Type a country…" oninput="kingFilterCountries()"><label>Country</label><select id="kingCountry" onchange="kingCountryChanged()"></select><div id="kingComingSoon" style="display:none;color:#d97706;font-size:.9rem;margin:4px 0 12px"></div><label>Purchase</label><select id="kingPurchaseType"><option value="premium">Premium</option><option value="coins">Coins</option></select><label>Pack</label><select id="kingPack"><option value="1">1 month / 99 coins — KSh 150</option><option value="2">2 months / 200 coins — KSh 250</option></select><label>M-Pesa phone number</label><input id="kingMpesaNumber" inputmode="tel" placeholder="2547XXXXXXXX"><button class="king-pay-primary" id="kingPayBtn" onclick="kingTapPay()">Pay with M-Pesa</button><button class="king-pay-muted" onclick="document.getElementById('kingCheckout').style.display='none'">Cancel</button></div></div>
+<div id="kingConfirmPop"><div class="king-pay-card"><h3>Confirm purchase</h3><p id="kingConfirmText">Do you want to purchase?</p><button class="king-pay-primary" onclick="kingShowPin()">YES, PURCHASE</button><button class="king-pay-muted" onclick="document.getElementById('kingConfirmPop').style.display='none'">Cancel</button></div></div>
+<div id="kingPinPop"><div class="king-pay-card"><h3>Complete M-Pesa payment</h3><p id="kingPinText">An official M-Pesa STK prompt will appear on your phone. Enter your PIN only in the M-Pesa prompt — never on this website.</p><button class="king-pay-primary" onclick="kingSendPin()">I HAVE COMPLETED THE PHONE PROMPT</button><button class="king-pay-muted" onclick="document.getElementById('kingPinPop').style.display='none'">Close</button></div></div>
+<script>
+(function(){
+const WORLD_COUNTRIES=[{"id": "AF", "country": "Afghanistan", "flag": "🇦🇫"}, {"id": "AL", "country": "Albania", "flag": "🇦🇱"}, {"id": "DZ", "country": "Algeria", "flag": "🇩🇿"}, {"id": "AD", "country": "Andorra", "flag": "🇦🇩"}, {"id": "AO", "country": "Angola", "flag": "🇦🇴"}, {"id": "AG", "country": "Antigua and Barbuda", "flag": "🇦🇬"}, {"id": "AR", "country": "Argentina", "flag": "🇦🇷"}, {"id": "AM", "country": "Armenia", "flag": "🇦🇲"}, {"id": "AU", "country": "Australia", "flag": "🇦🇺"}, {"id": "AT", "country": "Austria", "flag": "🇦🇹"}, {"id": "AZ", "country": "Azerbaijan", "flag": "🇦🇿"}, {"id": "BS", "country": "Bahamas", "flag": "🇧🇸"}, {"id": "BH", "country": "Bahrain", "flag": "🇧🇭"}, {"id": "BD", "country": "Bangladesh", "flag": "🇧🇩"}, {"id": "BB", "country": "Barbados", "flag": "🇧🇧"}, {"id": "BY", "country": "Belarus", "flag": "🇧🇾"}, {"id": "BE", "country": "Belgium", "flag": "🇧🇪"}, {"id": "BZ", "country": "Belize", "flag": "🇧🇿"}, {"id": "BJ", "country": "Benin", "flag": "🇧🇯"}, {"id": "BT", "country": "Bhutan", "flag": "🇧🇹"}, {"id": "BO", "country": "Bolivia", "flag": "🇧🇴"}, {"id": "BA", "country": "Bosnia and Herzegovina", "flag": "🇧🇦"}, {"id": "BW", "country": "Botswana", "flag": "🇧🇼"}, {"id": "BR", "country": "Brazil", "flag": "🇧🇷"}, {"id": "BN", "country": "Brunei", "flag": "🇧🇳"}, {"id": "BG", "country": "Bulgaria", "flag": "🇧🇬"}, {"id": "BF", "country": "Burkina Faso", "flag": "🇧🇫"}, {"id": "BI", "country": "Burundi", "flag": "🇧🇮"}, {"id": "KH", "country": "Cambodia", "flag": "🇰🇭"}, {"id": "CM", "country": "Cameroon", "flag": "🇨🇲"}, {"id": "CA", "country": "Canada", "flag": "🇨🇦"}, {"id": "CV", "country": "Cape Verde", "flag": "🇨🇻"}, {"id": "CF", "country": "Central African Republic", "flag": "🇨🇫"}, {"id": "TD", "country": "Chad", "flag": "🇹🇩"}, {"id": "CL", "country": "Chile", "flag": "🇨🇱"}, {"id": "CN", "country": "China", "flag": "🇨🇳"}, {"id": "CO", "country": "Colombia", "flag": "🇨🇴"}, {"id": "KM", "country": "Comoros", "flag": "🇰🇲"}, {"id": "CG", "country": "Congo", "flag": "🇨🇬"}, {"id": "CD", "country": "DR Congo", "flag": "🇨🇩"}, {"id": "CR", "country": "Costa Rica", "flag": "🇨🇷"}, {"id": "CI", "country": "Ivory Coast", "flag": "🇨🇮"}, {"id": "HR", "country": "Croatia", "flag": "🇭🇷"}, {"id": "CU", "country": "Cuba", "flag": "🇨🇺"}, {"id": "CY", "country": "Cyprus", "flag": "🇨🇾"}, {"id": "CZ", "country": "Czechia", "flag": "🇨🇿"}, {"id": "DK", "country": "Denmark", "flag": "🇩🇰"}, {"id": "DJ", "country": "Djibouti", "flag": "🇩🇯"}, {"id": "DM", "country": "Dominica", "flag": "🇩🇲"}, {"id": "DO", "country": "Dominican Republic", "flag": "🇩🇴"}, {"id": "EC", "country": "Ecuador", "flag": "🇪🇨"}, {"id": "EG", "country": "Egypt", "flag": "🇪🇬"}, {"id": "SV", "country": "El Salvador", "flag": "🇸🇻"}, {"id": "GQ", "country": "Equatorial Guinea", "flag": "🇬🇶"}, {"id": "ER", "country": "Eritrea", "flag": "🇪🇷"}, {"id": "EE", "country": "Estonia", "flag": "🇪🇪"}, {"id": "SZ", "country": "Eswatini", "flag": "🇸🇿"}, {"id": "ET", "country": "Ethiopia", "flag": "🇪🇹"}, {"id": "FJ", "country": "Fiji", "flag": "🇫🇯"}, {"id": "FI", "country": "Finland", "flag": "🇫🇮"}, {"id": "FR", "country": "France", "flag": "🇫🇷"}, {"id": "GA", "country": "Gabon", "flag": "🇬🇦"}, {"id": "GM", "country": "Gambia", "flag": "🇬🇲"}, {"id": "GE", "country": "Georgia", "flag": "🇬🇪"}, {"id": "DE", "country": "Germany", "flag": "🇩🇪"}, {"id": "GH", "country": "Ghana", "flag": "🇬🇭"}, {"id": "GR", "country": "Greece", "flag": "🇬🇷"}, {"id": "GD", "country": "Grenada", "flag": "🇬🇩"}, {"id": "GT", "country": "Guatemala", "flag": "🇬🇹"}, {"id": "GN", "country": "Guinea", "flag": "🇬🇳"}, {"id": "GW", "country": "Guinea-Bissau", "flag": "🇬🇼"}, {"id": "GY", "country": "Guyana", "flag": "🇬🇾"}, {"id": "HT", "country": "Haiti", "flag": "🇭🇹"}, {"id": "HN", "country": "Honduras", "flag": "🇭🇳"}, {"id": "HU", "country": "Hungary", "flag": "🇭🇺"}, {"id": "IS", "country": "Iceland", "flag": "🇮🇸"}, {"id": "IN", "country": "India", "flag": "🇮🇳"}, {"id": "ID", "country": "Indonesia", "flag": "🇮🇩"}, {"id": "IR", "country": "Iran", "flag": "🇮🇷"}, {"id": "IQ", "country": "Iraq", "flag": "🇮🇶"}, {"id": "IE", "country": "Ireland", "flag": "🇮🇪"}, {"id": "IL", "country": "Israel", "flag": "🇮🇱"}, {"id": "IT", "country": "Italy", "flag": "🇮🇹"}, {"id": "JM", "country": "Jamaica", "flag": "🇯🇲"}, {"id": "JP", "country": "Japan", "flag": "🇯🇵"}, {"id": "JO", "country": "Jordan", "flag": "🇯🇴"}, {"id": "KZ", "country": "Kazakhstan", "flag": "🇰🇿"}, {"id": "KE", "country": "Kenya", "flag": "🇰🇪"}, {"id": "KI", "country": "Kiribati", "flag": "🇰🇮"}, {"id": "KW", "country": "Kuwait", "flag": "🇰🇼"}, {"id": "KG", "country": "Kyrgyzstan", "flag": "🇰🇬"}, {"id": "LA", "country": "Laos", "flag": "🇱🇦"}, {"id": "LV", "country": "Latvia", "flag": "🇱🇻"}, {"id": "LB", "country": "Lebanon", "flag": "🇱🇧"}, {"id": "LS", "country": "Lesotho", "flag": "🇱🇸"}, {"id": "LR", "country": "Liberia", "flag": "🇱🇷"}, {"id": "LY", "country": "Libya", "flag": "🇱🇾"}, {"id": "LI", "country": "Liechtenstein", "flag": "🇱🇮"}, {"id": "LT", "country": "Lithuania", "flag": "🇱🇹"}, {"id": "LU", "country": "Luxembourg", "flag": "🇱🇺"}, {"id": "MG", "country": "Madagascar", "flag": "🇲🇬"}, {"id": "MW", "country": "Malawi", "flag": "🇲🇼"}, {"id": "MY", "country": "Malaysia", "flag": "🇲🇾"}, {"id": "MV", "country": "Maldives", "flag": "🇲🇻"}, {"id": "ML", "country": "Mali", "flag": "🇲🇱"}, {"id": "MT", "country": "Malta", "flag": "🇲🇹"}, {"id": "MH", "country": "Marshall Islands", "flag": "🇲🇭"}, {"id": "MR", "country": "Mauritania", "flag": "🇲🇷"}, {"id": "MU", "country": "Mauritius", "flag": "🇲🇺"}, {"id": "MX", "country": "Mexico", "flag": "🇲🇽"}, {"id": "FM", "country": "Micronesia", "flag": "🇫🇲"}, {"id": "MD", "country": "Moldova", "flag": "🇲🇩"}, {"id": "MC", "country": "Monaco", "flag": "🇲🇨"}, {"id": "MN", "country": "Mongolia", "flag": "🇲🇳"}, {"id": "ME", "country": "Montenegro", "flag": "🇲🇪"}, {"id": "MA", "country": "Morocco", "flag": "🇲🇦"}, {"id": "MZ", "country": "Mozambique", "flag": "🇲🇿"}, {"id": "MM", "country": "Myanmar", "flag": "🇲🇲"}, {"id": "NA", "country": "Namibia", "flag": "🇳🇦"}, {"id": "NR", "country": "Nauru", "flag": "🇳🇷"}, {"id": "NP", "country": "Nepal", "flag": "🇳🇵"}, {"id": "NL", "country": "Netherlands", "flag": "🇳🇱"}, {"id": "NZ", "country": "New Zealand", "flag": "🇳🇿"}, {"id": "NI", "country": "Nicaragua", "flag": "🇳🇮"}, {"id": "NE", "country": "Niger", "flag": "🇳🇪"}, {"id": "NG", "country": "Nigeria", "flag": "🇳🇬"}, {"id": "KP", "country": "North Korea", "flag": "🇰🇵"}, {"id": "MK", "country": "North Macedonia", "flag": "🇲🇰"}, {"id": "NO", "country": "Norway", "flag": "🇳🇴"}, {"id": "OM", "country": "Oman", "flag": "🇴🇲"}, {"id": "PK", "country": "Pakistan", "flag": "🇵🇰"}, {"id": "PW", "country": "Palau", "flag": "🇵🇼"}, {"id": "PS", "country": "Palestine", "flag": "🇵🇸"}, {"id": "PA", "country": "Panama", "flag": "🇵🇦"}, {"id": "PG", "country": "Papua New Guinea", "flag": "🇵🇬"}, {"id": "PY", "country": "Paraguay", "flag": "🇵🇾"}, {"id": "PE", "country": "Peru", "flag": "🇵🇪"}, {"id": "PH", "country": "Philippines", "flag": "🇵🇭"}, {"id": "PL", "country": "Poland", "flag": "🇵🇱"}, {"id": "PT", "country": "Portugal", "flag": "🇵🇹"}, {"id": "QA", "country": "Qatar", "flag": "🇶🇦"}, {"id": "RO", "country": "Romania", "flag": "🇷🇴"}, {"id": "RU", "country": "Russia", "flag": "🇷🇺"}, {"id": "RW", "country": "Rwanda", "flag": "🇷🇼"}, {"id": "KN", "country": "Saint Kitts and Nevis", "flag": "🇰🇳"}, {"id": "LC", "country": "Saint Lucia", "flag": "🇱🇨"}, {"id": "VC", "country": "Saint Vincent", "flag": "🇻🇨"}, {"id": "WS", "country": "Samoa", "flag": "🇼🇸"}, {"id": "SM", "country": "San Marino", "flag": "🇸🇲"}, {"id": "ST", "country": "Sao Tome and Principe", "flag": "🇸🇹"}, {"id": "SA", "country": "Saudi Arabia", "flag": "🇸🇦"}, {"id": "SN", "country": "Senegal", "flag": "🇸🇳"}, {"id": "RS", "country": "Serbia", "flag": "🇷🇸"}, {"id": "SC", "country": "Seychelles", "flag": "🇸🇨"}, {"id": "SL", "country": "Sierra Leone", "flag": "🇸🇱"}, {"id": "SG", "country": "Singapore", "flag": "🇸🇬"}, {"id": "SK", "country": "Slovakia", "flag": "🇸🇰"}, {"id": "SI", "country": "Slovenia", "flag": "🇸🇮"}, {"id": "SB", "country": "Solomon Islands", "flag": "🇸🇧"}, {"id": "SO", "country": "Somalia", "flag": "🇸🇴"}, {"id": "ZA", "country": "South Africa", "flag": "🇿🇦"}, {"id": "KR", "country": "South Korea", "flag": "🇰🇷"}, {"id": "SS", "country": "South Sudan", "flag": "🇸🇸"}, {"id": "ES", "country": "Spain", "flag": "🇪🇸"}, {"id": "LK", "country": "Sri Lanka", "flag": "🇱🇰"}, {"id": "SD", "country": "Sudan", "flag": "🇸🇩"}, {"id": "SR", "country": "Suriname", "flag": "🇸🇷"}, {"id": "SE", "country": "Sweden", "flag": "🇸🇪"}, {"id": "CH", "country": "Switzerland", "flag": "🇨🇭"}, {"id": "SY", "country": "Syria", "flag": "🇸🇾"}, {"id": "TW", "country": "Taiwan", "flag": "🇹🇼"}, {"id": "TJ", "country": "Tajikistan", "flag": "🇹🇯"}, {"id": "TZ", "country": "Tanzania", "flag": "🇹🇿"}, {"id": "TH", "country": "Thailand", "flag": "🇹🇭"}, {"id": "TG", "country": "Togo", "flag": "🇹🇬"}, {"id": "TO", "country": "Tonga", "flag": "🇹🇴"}, {"id": "TT", "country": "Trinidad and Tobago", "flag": "🇹🇹"}, {"id": "TN", "country": "Tunisia", "flag": "🇹🇳"}, {"id": "TR", "country": "Turkey", "flag": "🇹🇷"}, {"id": "TM", "country": "Turkmenistan", "flag": "🇹🇲"}, {"id": "TV", "country": "Tuvalu", "flag": "🇹🇻"}, {"id": "UG", "country": "Uganda", "flag": "🇺🇬"}, {"id": "UA", "country": "Ukraine", "flag": "🇺🇦"}, {"id": "AE", "country": "United Arab Emirates", "flag": "🇦🇪"}, {"id": "GB", "country": "United Kingdom", "flag": "🇬🇧"}, {"id": "US", "country": "United States", "flag": "🇺🇸"}, {"id": "UY", "country": "Uruguay", "flag": "🇺🇾"}, {"id": "UZ", "country": "Uzbekistan", "flag": "🇺🇿"}, {"id": "VU", "country": "Vanuatu", "flag": "🇻🇺"}, {"id": "VA", "country": "Vatican City", "flag": "🇻🇦"}, {"id": "VE", "country": "Venezuela", "flag": "🇻🇪"}, {"id": "VN", "country": "Vietnam", "flag": "🇻🇳"}, {"id": "YE", "country": "Yemen", "flag": "🇾🇪"}, {"id": "ZM", "country": "Zambia", "flag": "🇿🇲"}, {"id": "ZW", "country": "Zimbabwe", "flag": "🇿🇼"}];
+const sym={KE:'KSh ',ZA:'R',NG:'₦',GH:'GH₵',TZ:'TSh ',UG:'USh ',IN:'₹',GB:'£',EU:'€',JP:'¥',CN:'¥'};
+const opts=WORLD_COUNTRIES.map(c=>({...c,symbol:sym[c.id]||'$',month:c.id==='KE'?150:50,live:c.id==='KE',methods:c.id==='KE'?['mobile_money']:['card']}));
+function el(id){return document.getElementById(id)}
+function auth(){return {'Content-Type':'application/json','x-auth-token':(typeof A!=='undefined'&&A.token)||localStorage.getItem('eh_tok')||''}}
+window.kingFilterCountries=function(){const q=(el('kingCountrySearch').value||'').toLowerCase();el('kingCountry').innerHTML=opts.filter(c=>(c.country+' '+c.id).toLowerCase().includes(q)).map(c=>`<option value="${c.id}">${c.flag} ${c.country}${c.live?'':' — Coming soon'}</option>`).join('');kingCountryChanged()};
+window.kingCountryChanged=function(){const c=opts.find(x=>x.id===el('kingCountry').value)||opts[0],soon=!c.live;el('kingComingSoon').style.display=soon?'block':'none';el('kingComingSoon').textContent=soon?`Coming Soon - ${c.country} is still waiting. Card payment coming soon.`:'';el('kingPayBtn').disabled=soon;el('kingPayBtn').style.opacity=soon?'.5':'1'};
+window.openKingCheckout=function(){el('kingCheckout').style.display='flex';el('kingCountrySearch').value='';kingFilterCountries();el('kingCountry').value='KE';kingCountryChanged();el('kingMpesaNumber').value=(typeof A!=='undefined'&&A.user&&A.user.phone)||''};
+window.openPayment=window.openKingCheckout;
+window.openBuyCoins=window.openKingCheckout;
+window.kingTapPay=async function(){
+ const country=el('kingCountry').value;if(country!=='KE'){kingCountryChanged();return}
+ const type=el('kingPurchaseType').value,pack=el('kingPack').value,number=(el('kingMpesaNumber').value||'').replace(/\D/g,'');
+ if(!/^254\d{9}$/.test(number)){alert('Enter a valid Kenyan M-Pesa number, e.g. 2547XXXXXXXX.');return}
+ const btn=el('kingPayBtn');btn.disabled=true;
+ try{
+  const endpoint=type==='premium'?'/api/premium/pay/initiate':'/api/coins/topup/initiate';
+  const r=await fetch(endpoint,{method:'POST',headers:auth(),body:JSON.stringify({country:'KE',months:Number(pack),coins:pack==='2'?200:99,number})});
+  const d=await r.json();if(!d.success||!d.checkoutId)throw new Error(d.error||'Could not create checkout');
+  window.kingCurrentCheckout=d.checkoutId;window.kingCurrentCoins=d.coins;window.kingCurrentAmount=d.amount;window.kingCurrentKind=type;
+  el('kingCheckout').style.display='none';el('kingConfirmText').textContent=`Do you want to purchase ${type==='premium'?'Premium':'coins'} for KSh ${d.amount} ?`;el('kingConfirmPop').style.display='flex';
+ }catch(e){alert(e.message||'Payment could not be started.')}
+ finally{btn.disabled=false}
+};
+window.kingShowPin=async function(){
+ el('kingConfirmPop').style.display='none';el('kingPinPop').style.display='flex';
+ try{
+  const r=await fetch('/api/mpesa/stk',{method:'POST',headers:auth(),body:JSON.stringify({checkoutId:window.kingCurrentCheckout})});
+  const d=await r.json();if(!d.success)throw new Error(d.error||'M-Pesa STK Push unavailable');
+  el('kingPinText').textContent='M-Pesa prompt requested. Complete it on your phone. Enter your PIN only in the official M-Pesa prompt — never on this website.';
+ }catch(e){el('kingPinText').textContent=e.message}
+};
+window.kingSendPin=async function(){
+ const id=window.kingCurrentCheckout;if(!id)return;
+ el('kingPinText').textContent='Checking payment status…';
+ const poll=async()=>{try{const r=await fetch('/api/mpesa/status/'+encodeURIComponent(id),{headers:auth()});const d=await r.json();if(d.status==='completed'){el('kingPinText').textContent='SUCCESS! Payment confirmed.';setTimeout(()=>location.reload(),1200);return}if(['failed','rejected'].includes(d.status)){el('kingPinText').textContent='Payment was not completed. Please try again.';return}el('kingPinText').textContent='Waiting for M-Pesa confirmation… Check your phone and approve the STK prompt.';setTimeout(poll,2000)}catch(e){el('kingPinText').textContent='Unable to check status. Try again.'}};
+ poll();
+};
+if(typeof A!=='undefined'){
+ A._ppFallback=function(){return {success:true,number:(this.user&&this.user.phone)||'',premiumUntil:(this.user&&(this.user.premiumUntil||this.user.proPlanUntil))||null,paymentsOff:false,maxMonths:2,options:opts}};
+ const oldPrem=A.openPremPay;
+ A.openPremPay=async function(){await oldPrem.call(this);const sel=el('ppCountry');if(sel){let search=el('ppCountrySearch');if(!search){search=document.createElement('input');search.id='ppCountrySearch';search.placeholder='Search all countries…';search.style.cssText='width:100%;padding:10px;margin:0 0 8px;border-radius:9px;border:1px solid var(--bd);background:var(--bg);color:var(--t)';sel.parentNode.insertBefore(search,sel)}search.oninput=()=>{const keep=sel.value,q=search.value.toLowerCase();sel.innerHTML=(this._pp.options||[]).filter(o=>(o.country+' '+o.id).toLowerCase().includes(q)).map(o=>`<option value="${o.id}">${o.flag} ${o.country} — ${o.live?o.symbol+o.month+'/month':'Coming soon'}</option>`).join('');if([...sel.options].some(o=>o.value===keep))sel.value=keep;this.ppUpdate();const x=(this._pp.options||[]).find(o=>o.id===sel.value);const pay=el('ppBtn');if(pay)pay.disabled=!x||!x.live};sel.querySelectorAll('option').forEach(o=>o.disabled=false);if(!sel.value)sel.value='KE';this.ppUpdate();const b=el('ppBtn');const c=opts.find(x=>x.id===sel.value);if(b)b.disabled=!c||!c.live;sel.onchange=()=>{const x=opts.find(y=>y.id===sel.value);this.ppUpdate();if(b)b.disabled=!x||!x.live;let note=el('ppMethods');if(note&&!x?.live)note.textContent=`Coming Soon - ${x.country} is still waiting. Card payment coming soon.`}}};
+ const oldBuy=A.openBuyCoins;A.openBuyCoins=function(){openKingCheckout()};
+}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='ppCountry'&&window.A){const c=opts.find(x=>x.id===e.target.value);const b=el('ppBtn');if(b)b.disabled=!c||!c.live;if(!c?.live&&el('ppMethods'))el('ppMethods').textContent=`Coming Soon - ${c.country} is still waiting. Card payment coming soon.`}});
+})();
 </script>
 </body>
 </html>
