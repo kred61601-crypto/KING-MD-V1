@@ -301,7 +301,16 @@ app.post('/api/admin/users/:userId/addspaces', requireUser, adminOnly, (req, res
 app.post('/api/admin/users/:userId/chatfreeze', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); u.chatBanned = !u.chatBanned; u.chatBanReason = u.chatBanned ? String(req.body.reason || '').slice(0, 200) : ''; saveUsers(); res.json({ success: true, chatBanned: u.chatBanned }); });
 app.post('/api/admin/users/:userId/:action', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); if (isOwner(u.email, u.phone) && req.params.action !== 'verify') return res.status(403).json({ success: false, error: 'Owner account is protected.' }); const action = req.params.action; if (action === 'verify') u.isVerified = !u.isVerified; else if (action === 'freeze') u.banned = !u.banned; else if (action === 'promote') u.isAdmin = !u.isAdmin; else return res.status(400).json({ success: false, error: 'Unsupported action.' }); saveUsers(); res.json({ success: true, user: publicUser(u) }); });
 app.delete('/api/admin/users/:userId', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); if (isOwner(u.email, u.phone)) return res.status(403).json({ success: false, error: 'Owner account is protected.' }); users = users.filter(x => x.id !== u.id); botRecords = botRecords.filter(b => b.ownerId !== u.id); users.forEach(x => { x.followers = (x.followers || []).filter(id => id !== u.id); x.following = (x.following || []).filter(id => id !== u.id); }); saveUsers(); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true }); });
-app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => { const all = users.flatMap(u => notificationList(u).map(n => ({ ...n, userId: u.id, username: u.username }))).sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))); res.json({ success: true, notifications: all.slice(0, 500) }); });
+app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
+  const all = [];
+  users.forEach(u => {
+    notificationList(u).forEach(n => {
+      all.push({ ...n, userId: u.id, username: u.username });
+    });
+  });
+  all.sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+  res.json({ success: true, notifications: all.slice(0, 500) });
+});
 app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => { users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; }); saveUsers(); res.json({ success: true }); });
 app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => { users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; }); saveUsers(); res.json({ success: true }); });
 app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => { const title = String(req.body.title || '').slice(0, 100), body = String(req.body.body || '').slice(0, 500); if (!title || !body) return res.status(400).json({ success: false, error: 'Title and message are required.' }); users.forEach(u => addUserNotification(u, 'broadcast', title, body, {})); saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 }); });
@@ -314,7 +323,7 @@ app.post('/api/spaces/buy', requireUser, (req, res) => { const cost = 15, balanc
 app.post('/api/db-full/report', requireUser, (req, res) => { const owner = users.find(u => isOwner(u.email, u.phone)); if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id }); saveUsers(); res.json({ success: true }); });
 app.get('/api/stats/deploys', async (_req, res) => { await syncBotRecordsWithEngine(); const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7); const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0); let todayTotal = 0, monthTotal = 0; uniqueBots().forEach(b => { const d = new Date(b.createdAt || b.updatedAt || 0); if (!Number.isFinite(d.getTime())) return; const day = d.toISOString().slice(0, 10); if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; } if (day.slice(0,7) === monthKey) { monthDays[d.getUTCDate()-1]++; monthTotal++; } }); res.json({ success: true, today, todayTotal, monthDays, monthTotal }); });
 
-// ===== KING - M-PESA - YOUR NUMBER - NO KEYS - NEW WAY =====
+// ===== KING - M-PESA - YOUR NUMBER - NO KEYS =====
 const OWNER_MPESA_NUMBER = '254726476468';
 const COIN_PACKS = { '100': { coins: 100, ksh: 200 }, '500': { coins: 500, ksh: 900 }, '1000': { coins: 1000, ksh: 1700 }, '5000': { coins: 5000, ksh: 8000 } };
 const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
