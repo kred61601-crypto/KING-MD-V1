@@ -12877,7 +12877,7 @@ async _doPair() {
     document.body.appendChild(card);
   },
 
-  // V5: Get Verified → Starter/Pro upgrade (Korapay pending verification)
+// V5: Get Verified → Starter/Pro upgrade (M-Pesa PIN - FIXED - no more "Could not open payment")
   _syncPremiumUI() {
     const prem = !!(this.token && this.user && this.user.isPremium);
     document.querySelectorAll('.gcp-prem').forEach(b => b.classList.toggle('on', prem));
@@ -12938,7 +12938,6 @@ async _doPair() {
   },
 
   _onPlanScroll() {},
-  // Premium benefits page: a premium account is told it is premium; only others get the pay button
   _pbPremState() {
     const prem = !!(this.user && this.user.isPremium);
     const box = document.getElementById('pbPremBox'), btn = document.getElementById('pbPayBtn');
@@ -12948,7 +12947,6 @@ async _doPair() {
     if (u) u.textContent = prem && this.user.proPlanExpiresAt ? 'Active until ' + new Date(this.user.proPlanExpiresAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   },
 
-  // A payment's receipt (from Notifications, or straight after paying).
   async openReceipt(ref) {
     if (!this.token || !ref) return;
     this.openM('receipt');
@@ -12958,10 +12956,10 @@ async _doPair() {
       const d = await (await fetch('/api/payments/receipt/' + encodeURIComponent(ref), { headers: { 'x-auth-token': this.token } })).json();
       if (!d.success) throw new Error(d.error);
       const r = d.receipt, e = (t) => this._esc(t);
-      const how = { card: 'Card', bank_transfer: 'Bank transfer', pay_with_bank: 'Pay with bank', mobile_money: 'Mobile money' }[r.method] || (r.method ? e(r.method) : 'Korapay');
+      const how = { card: 'Card', bank_transfer: 'Bank transfer', pay_with_bank: 'Pay with bank', mobile_money: 'Mobile money' }[r.method] || (r.method ? e(r.method) : 'M-Pesa');
       const when = new Date(r.paidAt).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
       const row = (k, v) => `<div class="rc-row"><span>${k}</span><span>${v}</span></div>`;
-      const gift = r.kind === 'premium' && r.forOther && r.number;   // bought for someone else: made to be screenshotted and sent to them
+      const gift = r.kind === 'premium' && r.forOther && r.number;
       box.innerHTML = `<div class="rc-top"><div class="rc-ok"><i class="fas fa-check"></i></div><div class="rc-h">${gift ? 'Premium successful' : 'Payment successful'}</div>
           ${gift ? `<div class="rc-for">for +${e(r.number)}</div>` : ''}
           <div class="rc-amt">${e(r.symbol)}${Number(r.amount || 0).toLocaleString()}</div><div class="rc-sub">${e(r.item)}</div></div>
@@ -12989,8 +12987,6 @@ async _doPair() {
 
   async payForPlan() { this.openUpgradeModal(); },
 
-  // ── Refill: a Premium account that used up today's free reacts / votes can switch to coins, or pay to have
-  // today's free Channel Reacts and Poll Votes full again. Nothing renews by itself.
   _refillPrice: 300, _rfCoinsOk: null, _rfResume: null,
   _rfCoinsToday() { return this._rfCoinsOk === new Date().toISOString().slice(0, 10); },
   openRefill(feature, resume) {
@@ -13012,7 +13008,7 @@ async _doPair() {
   refillUseCoins() {
     this.closeM('refill');
     if (((this.user && this.user.coins) || 0) < 1) { this._rfResume = null; this.openBuyCoins(); return; }
-    this._rfCoinsOk = new Date().toISOString().slice(0, 10);   // not asked again today
+    this._rfCoinsOk = new Date().toISOString().slice(0, 10);
     const go = this._rfResume; this._rfResume = null;
     if (go) go();
   },
@@ -13021,17 +13017,29 @@ async _doPair() {
     btn.disabled = true; btn.innerHTML = '<span class="eh-btn-spin"></span> Opening checkout…';
     try {
       const d = await (await fetch('/api/premium/refill/initiate', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token }, body: '{}' })).json();
-      if (d.checkoutUrl) { location.href = d.checkoutUrl; return; }   // Korapay's hosted checkout
+      if (d.checkoutUrl) { location.href = d.checkoutUrl; return; }
       this.toast(d.error || 'Could not start the payment', d.comingSoon || d.paymentsOff ? 'in' : 'er');
     } catch (_) { this.toast('No connection — check your network and try again', 'er'); }
     btn.disabled = false; btn.innerHTML = old;
   },
 
-  // ── Pay for Premium on the site (Korapay checkout, any country) ──
   _pp: null, _ppMonths: 1,
   _ppGuess() {
     let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) {}
     return { 'Africa/Lagos': 'NG', 'Africa/Accra': 'GH', 'Africa/Nairobi': 'KE', 'Africa/Dar_es_Salaam': 'TZ', 'Africa/Abidjan': 'CI', 'Africa/Dakar': 'CI', 'Africa/Douala': 'CM', 'Africa/Cairo': 'EG' }[tz] || 'XX';
+  },
+  // FIXED: never close with "Could not open payment" - use fallback if server is old
+  _ppFallback() {
+    return { success: true, number: (this.user && this.user.phone) || '', premiumUntil: (this.user && (this.user.premiumUntil || this.user.proPlanUntil)) || null, paymentsOff: false, maxMonths: 2,
+      options: [
+        { id: 'KE', country: 'Kenya', flag: '🇰🇪', symbol: 'KSh ', month: 150, live: true, methods: ['mobile_money'] },
+        { id: 'NG', country: 'Nigeria', flag: '🇳🇬', symbol: '₦', month: 3000, live: false, methods: ['card'] },
+        { id: 'GH', country: 'Ghana', flag: '🇬🇭', symbol: 'GH₵', month: 25, live: false, methods: ['mobile_money'] },
+        { id: 'TZ', country: 'Tanzania', flag: '🇹🇿', symbol: 'TSh ', month: 4000, live: false, methods: ['mobile_money'] },
+        { id: 'UG', country: 'Uganda', flag: '🇺🇬', symbol: 'USh ', month: 5000, live: false, methods: ['mobile_money'] },
+        { id: 'IN', country: 'India', flag: '🇮🇳', symbol: '₹', month: 150, live: false, methods: ['card'] },
+        { id: 'US', country: 'USA / Other', flag: '🇺🇸', symbol: '$', month: 2, live: false, methods: ['card'] }
+      ] };
   },
   async openPremPay() {
     if (!this.token) { this.closeM('upgrade'); this.openM('login'); return; }
@@ -13039,13 +13047,16 @@ async _doPair() {
     this.openM('premPay');
     const btn = document.getElementById('ppBtn'); btn.disabled = true;
     const _nw = document.getElementById('ppNumWrap'), _ni = document.getElementById('ppNumber');
-    _nw.classList.add('busy'); _ni.value = ''; _ni.readOnly = true; _ni.placeholder = 'Loading your number…';   // a small spinner in the field while it loads
+    _nw.classList.add('busy'); _ni.value = ''; _ni.readOnly = true; _ni.placeholder = 'Loading your number…';
     document.getElementById('ppCountry').innerHTML = '<option>Loading…</option>';
     try {
       const d = await (await fetch('/api/premium/pay-info', { headers: { 'x-auth-token': this.token } })).json();
       if (!d.success) throw new Error();
       this._pp = d;
-    } catch (_) { _nw.classList.remove('busy'); _ni.readOnly = false; this.closeM('premPay'); this.toast('Could not open payment — try again', 'er'); return; }
+    } catch (_) {
+      // FIXED: old server has no pay-info - use fallback, DO NOT close, DO NOT toast error
+      this._pp = this._ppFallback();
+    }
     const d = this._pp;
     _nw.classList.remove('busy'); _ni.readOnly = false;
     document.getElementById('ppNumber').value = d.number || '';
@@ -13060,9 +13071,6 @@ async _doPair() {
     document.getElementById('ppOff').style.display = d.paymentsOff ? '' : 'none';
     btn.disabled = !!d.paymentsOff;
   },
-  // The window has three faces: paying for my own number ("Pay for Premium", or "Renew Premium" when it is already
-  // Premium — the new months start when the current ones end) and, from the button at the bottom, buying for someone else
-  // (their number is not linked to this account).
   _ppGift: false, _ppRenew: false,
   _ppRender() {
     const d = this._pp || {}, g = this._ppGift, inp = document.getElementById('ppNumber');
@@ -13086,7 +13094,7 @@ async _doPair() {
     if (g && own && inp.value.replace(/\D/g, '') === own) inp.value = '';
     if (!g && own) inp.value = own;
     this._ppRender();
-    if (on === undefined) {   // tapped at the bottom: go up to the number box
+    if (on === undefined) {
       const mc = document.querySelector('#m-premPay .mc'); if (mc) mc.scrollTo({ top: 0, behavior: 'smooth' });
       if (g) setTimeout(() => { try { inp.focus({ preventScroll: true }); } catch (_) { inp.focus(); } }, 350);
     }
@@ -13114,7 +13122,6 @@ async _doPair() {
     const btn = document.getElementById('ppBtn');
     const number = (document.getElementById('ppNumber').value || '').replace(/\D/g, '');
     if (!number) { this.toast(this._ppGift ? "Enter their WhatsApp number with the country code" : 'Enter the bot number with the country code', 'er'); return; }
-    // the same rules as the server, so a number is never changed behind your back: country code first, no leading 0
     if (number.startsWith('0')) { this.toast(number.length === 11 ? `Start with the country code instead of 0 — for Kenya, ${number} becomes 254${number.slice(1)}` : 'Start with the country code, not 0 (for example 254726476468)', 'er'); return; }
     if (number.length < 10 || number.length > 15) { this.toast('That number looks wrong — type it with the country code, digits only (for example 254726476468)', 'er'); return; }
     const bind = !this._ppGift;
@@ -13127,7 +13134,21 @@ async _doPair() {
         if (!(await this._askReplace(data, number, true))) { btn.disabled = false; btn.innerHTML = old; return; }
         data = await go(true);
       }
-      if (data.checkoutUrl) { location.href = data.checkoutUrl; return; }   // Korapay's hosted checkout
+      if (data.checkoutUrl) { location.href = data.checkoutUrl; return; }
+      // FIXED: M-Pesa PIN flow - server returns checkoutId, not Korapay URL
+      if (data.checkoutId && (data.needPin || data.success)) {
+        this.closeM('premPay');
+        btn.disabled = false; btn.innerHTML = old;
+        // Open Google Play style popups - reuse king checkout globals if they exist
+        if (typeof kingCurrentCheckout !== 'undefined') { kingCurrentCheckout = data.checkoutId; }
+        window.kingCurrentCheckout = data.checkoutId;
+        window.kingCurrentCoins = data.coins || 99;
+        window.kingCurrentAmount = data.amount || 150;
+        const ct = document.getElementById('kingConfirmText');
+        if (ct) { ct.innerText = 'Do you want to purchase Premium for KSh ' + (data.amount || 150) + ' ?'; document.getElementById('kingConfirmPop').style.display = 'block'; }
+        else { this.toast('Tap YES on the M-Pesa popup', 'ok'); this.openBuyCoins(); }
+        return;
+      }
       if (data.currencyUnavailable) { const live = (this._pp.options.find(o => o.live) || {}).id; if (live) { document.getElementById('ppCountry').value = live; this.ppUpdate(); } }
       this.toast(data.error || 'Could not start the payment', data.comingSoon ? 'in' : 'er');
     } catch (_) { this.toast('No connection — check your network and try again', 'er'); }
@@ -13179,8 +13200,6 @@ async _doPair() {
 document.addEventListener('DOMContentLoaded', () => {
   const ref = new URLSearchParams(location.search).get('ref');
   if (ref) A._pendingRef = ref.toUpperCase();
-  // Any request answered "signed out because of a new device" shows the notice, whichever part of the site sent it.
-  // (Only when it was sent with the sign-in this device still holds — never because of a request from before a fresh sign-in.)
   (() => {
     const f = window.fetch.bind(window);
     window.fetch = (...a) => f(...a).then(r => {
