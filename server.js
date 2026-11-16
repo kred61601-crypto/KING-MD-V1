@@ -263,6 +263,51 @@ app.get('/api/pair-token', (req, res) => {
   for (const [k, expiry] of pairTokens) if (expiry < Date.now()) pairTokens.delete(k);
   res.json({ success: true, token });
 });
+app.post('/request-qr', async (req, res) => {
+  const body = req.body || {};
+  const token = String(body.pairToken || '');
+  const expiry = pairTokens.get(token);
+  if (!expiry || expiry < Date.now()) { pairTokens.delete(token); return res.status(403).json({ success:false, error:'Pairing request expired. Refresh and try again.' }); }
+  pairTokens.delete(token);
+  const phoneNumber = normalizePhone(body.phoneNumber || '');
+  if (!/^\d{8,15}$/.test(phoneNumber)) return res.status(400).json({ success:false, error:'Enter a valid phone number with country code.' });
+  const account = currentUser(req);
+  if (account) {
+    const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
+    const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber);
+    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
+    if (!alreadyOwned && myUnique.length >= allowed) return res.status(403).json({ success:false, code:'NO_BOT_SPACE', error:'You have used all ' + allowed + ' bot spaces.' });
+  }
+  try {
+    let lastError = 'QR engine is unavailable.';
+    for (const base of ENGINE_URLS) {
+      try {
+        const upstream = await fetch(base + '/api/qr?number=' + encodeURIComponent(phoneNumber), {
+          method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
+          signal: AbortSignal.timeout(30000)
+        });
+        const data = await upstream.json().catch(() => ({}));
+        if (!upstream.ok || !data.success || !data.qrImage) {
+          lastError = data.error || 'The engine could not create a QR code.';
+          if (upstream.status === 400 || upstream.status === 409 || upstream.status === 429) return res.status(upstream.status).json(data);
+          continue;
+        }
+        if (req.user && req.user.id) {
+          const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
+          const record = { ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: base, deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', createdAt: existing ? existing.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString() };
+          if (existing) Object.assign(existing, record); else botRecords.push(record);
+          dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
+        }
+        return res.json({ success:true, qrImage:data.qrImage, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD V4' } });
+      } catch (e) { lastError = e.message || lastError; }
+    }
+    return res.status(502).json({ success:false, error:lastError });
+  } catch (error) {
+    console.error('QR pairing request failed:', error.message);
+    return res.status(502).json({ success:false, error:'QR pairing engine is offline. Please try again shortly.' });
+  }
+});
+
 app.post('/request-pairing', async (req, res) => {
   const body = req.body || {};
   const token = String(body.pairToken || '');

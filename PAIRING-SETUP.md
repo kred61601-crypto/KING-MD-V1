@@ -24,3 +24,11 @@ The bot must continue running in the engine after the pairing code is entered. T
 ## Health check
 
 The website exposes `GET /api/health`.
+
+
+## QR scan pairing (KING MD V4)
+
+The app now offers both pairing-code linking and QR-code linking. Deploy the updated
+KING-MD-V4 engine and KING-MD-V1 app. Keep `PAIR_BRIDGE_KEY` identical on both
+Render services; the app uses `ENGINE_URL` (or `ENGINE_URLS`) to reach the engine.
+The engine's existing `qrcode` dependency is used to generate the WhatsApp QR image.
