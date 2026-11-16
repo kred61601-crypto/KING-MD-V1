@@ -22,9 +22,6 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
-// ===== KING MD - MULTI SERVER - REAL COUNTING =====
-// In Render App Env set: ENGINE_URLS=https://king-md-v4.onrender.com
-// Add 2nd later: ENGINE_URLS=https://king-md-v4.onrender.com,https://king-md-v4-2.onrender.com
 const ENGINE_URLS = (process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com').split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
 const ENGINE_URL = ENGINE_URLS[0];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
@@ -33,8 +30,6 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 if (!PAIR_BRIDGE_KEY) console.error('CONFIG ERROR: Set PAIR_BRIDGE_KEY in Render on App AND Engine to the SAME value.');
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
-
-// ===== KING MD - REAL GLOBAL SLOTS - NO FAKE =====
 const TOTAL_SERVERS = ENGINE_URLS.length;
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
@@ -93,7 +88,6 @@ function countBots() {
   const online = uniq.filter(b => normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state) === 'online').length;
   return { total: uniq.length, online, offline: uniq.length - online, unique: uniq.length };
 }
-
 const notificationList = user => Array.isArray(user.notifications) ? user.notifications : [];
 function addUserNotification(user, type, title, body, meta) {
   if (!Array.isArray(user.notifications)) user.notifications = [];
@@ -160,8 +154,6 @@ async function syncBotRecordsWithEngine() {
     return true;
   } catch (_) { return false; }
 }
-
-// ===== OWNER ACCOUNT =====
 const ADMIN_EMAILS = ['affiliateguru547@gmail.com'];
 const ADMIN_PHONES = ['254726476468'];
 function isOwner(email, phone){
@@ -178,7 +170,6 @@ function isPremiumUser(u){
   if(Number.isFinite(until)) return until > Date.now();
   return u.isPremium === true || u.proPlan === true;
 }
-
 function loadUsers() {
   try { const d = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); return Array.isArray(d) ? d : []; }
   catch (_) { return []; }
@@ -204,7 +195,6 @@ function saveUsers() {
   fs.writeFileSync(tmp, JSON.stringify(users, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, USERS_FILE);
 }
-
 function publicUser(u) {
   if (!u) return null;
   const x = { ...u };
@@ -254,8 +244,6 @@ function oauth(provider) {
 const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
-
-// ===== WHATSAPP PAIRING BRIDGE - APP SIDE =====
 const pairTokens = new Map();
 app.get('/api/pair-token', (req, res) => {
   const token = crypto.randomBytes(24).toString('hex');
@@ -282,10 +270,7 @@ app.post('/request-qr', async (req, res) => {
     let lastError = 'QR engine is unavailable.';
     for (const base of ENGINE_URLS) {
       try {
-        const upstream = await fetch(base + '/api/qr?number=' + encodeURIComponent(phoneNumber), {
-          method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
-          signal: AbortSignal.timeout(30000)
-        });
+        const upstream = await fetch(base + '/api/qr?number=' + encodeURIComponent(phoneNumber), { method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY }, signal: AbortSignal.timeout(30000) });
         const data = await upstream.json().catch(() => ({}));
         if (!upstream.ok || !data.success || !data.qrImage) {
           lastError = data.error || 'The engine could not create a QR code.';
@@ -302,12 +287,8 @@ app.post('/request-qr', async (req, res) => {
       } catch (e) { lastError = e.message || lastError; }
     }
     return res.status(502).json({ success:false, error:lastError });
-  } catch (error) {
-    console.error('QR pairing request failed:', error.message);
-    return res.status(502).json({ success:false, error:'QR pairing engine is offline. Please try again shortly.' });
-  }
+  } catch (error) { return res.status(502).json({ success:false, error:'QR pairing engine is offline. Please try again shortly.' }); }
 });
-
 app.post('/request-pairing', async (req, res) => {
   const body = req.body || {};
   const token = String(body.pairToken || '');
@@ -363,16 +344,10 @@ app.post('/request-pairing', async (req, res) => {
       dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
     }
     res.json({ success:true, pairingCode: realCode, kingCode: realCode, displayCode: realCode, state:data.state || 'pairing', serverInfo:{ serverUsed:'KING MD Engine' } });
-  } catch (error) {
-    console.error('Pairing engine request failed:', error.message);
-    res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' });
-  }
+  } catch (error) { res.status(502).json({ success:false, error:'Pairing engine is offline or still starting. Please try again shortly.' }); }
 });
-
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'KING MD V4' }));
-
-// ===== AUTH =====
 app.post('/api/auth/register', async (req, res) => {
   try {
     const b = req.body || {}, email = String(b.email || '').trim().toLowerCase();
@@ -389,18 +364,14 @@ app.post('/api/auth/register', async (req, res) => {
     const owner = isOwner(email, phone);
     const u = { id: crypto.randomUUID(), username, email, phone, password: await bcrypt.hash(password, 12), provider:'email', firstName, lastName, name, photo:'', avatar:'', cover:'', bio:'', accentColor:'pink', isAdmin: owner, isVerified: owner, isPremium: owner, followers:[], following:[], likes:0, coins: owner ? 9999 : 3, adminCoinGrantVersion: owner ? 1 : 0, bots:[], createdAt:new Date().toISOString(), hideBalance:false, hideFollowers:false, hideFollowing:false, hideLikes:false, apiKeys:[] };
     users.push(u); saveUsers(); res.status(201).json({ success:true, token:tokenFor(u), user:publicUser(u), signupBonusCoins: owner ? 9999 : 3 });
-  } catch (e) { console.error('Registration error:', e); res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
+  } catch (e) { res.status(500).json({ success:false, error:'Could not create your account. Please try again.' }); }
 });
 app.post('/api/auth/login', async (req, res) => {
   const b = req.body || {}, email = String(b.email || '').trim().toLowerCase(), password = String(b.password || '');
   const phone = normalizePhone(b.phone || '');
   const u = users.find(x => (x.email || '').toLowerCase() === email);
   if (!u || !u.password || !(await bcrypt.compare(password, u.password))) return res.status(401).json({ success:false, error:'Incorrect email or password.' });
-  if(isOwner(u.email, u.phone || phone)){
-    u.isAdmin = true; u.isVerified = true; u.isPremium = true;
-    if(phone && !u.phone) u.phone = phone;
-    saveUsers();
-  }
+  if(isOwner(u.email, u.phone || phone)){ u.isAdmin = true; u.isVerified = true; u.isPremium = true; if(phone && !u.phone) u.phone = phone; saveUsers(); }
   res.json({ success:true, token:tokenFor(u), user:publicUser(u) });
 });
 app.post('/api/make-me-admin', requireUser, async (req,res)=>{
@@ -409,47 +380,32 @@ app.post('/api/make-me-admin', requireUser, async (req,res)=>{
   u.isAdmin = true; u.isVerified = true; u.isPremium = true; saveUsers();
   res.json({ success:true, message:'Now ADMIN + Blue Tick', user: publicUser(u) });
 });
-app.get('/api/auth/check-email', (req,res)=>{
-  const email = String(req.query.email||'').trim().toLowerCase();
-  res.json({ success:true, exists: users.some(u=>(u.email||'').toLowerCase()===email) });
-});
+app.get('/api/auth/check-email', (req,res)=>{ const email = String(req.query.email||'').trim().toLowerCase(); res.json({ success:true, exists: users.some(u=>(u.email||'').toLowerCase()===email) }); });
 app.post('/api/auth/forgot-password', async (req,res)=>{
   const email = String((req.body||{}).email||'').trim().toLowerCase();
   const u = users.find(x=>(x.email||'').toLowerCase()===email);
   if(!u) return res.json({ success:false, error:'No account with that email. Please create a new account.' });
-  const token = crypto.randomBytes(32).toString('hex');
-  resetTokens.set(token, { email, at: Date.now() });
+  const token = crypto.randomBytes(32).toString('hex'); resetTokens.set(token, { email, at: Date.now() });
   res.json({ success:true, resetToken: token, message:'Reset code created' });
 });
 app.post('/api/auth/reset-password', async (req,res)=>{
-  const { resetToken, newPassword } = req.body||{};
-  const item = resetTokens.get(String(resetToken||''));
+  const { resetToken, newPassword } = req.body||{}; const item = resetTokens.get(String(resetToken||''));
   if(!item || Date.now()-item.at > 15*60*1000) return res.json({ success:false, error:'Reset code expired. Try again.' });
   if(!newPassword || String(newPassword).length < 8) return res.json({ success:false, error:'New password must be at least 8 characters.' });
-  const u = users.find(x=>(x.email||'').toLowerCase()===item.email);
-  if(!u) return res.json({ success:false, error:'Account not found.' });
-  u.password = await bcrypt.hash(String(newPassword), 12);
-  saveUsers(); resetTokens.delete(String(resetToken));
+  const u = users.find(x=>(x.email||'').toLowerCase()===item.email); if(!u) return res.json({ success:false, error:'Account not found.' });
+  u.password = await bcrypt.hash(String(newPassword), 12); saveUsers(); resetTokens.delete(String(resetToken));
   res.json({ success:true, message:'Password reset. Now sign in with new password.' });
 });
 app.get('/api/auth/:provider/start', (req, res) => {
   const provider = String(req.params.provider || '').toLowerCase();
   if (!['google', 'github'].includes(provider)) return res.status(404).send('Unsupported provider');
   const cfg = oauth(provider);
-  if (!APP_URL || !cfg.id || !cfg.secret) {
-    const names = ['APP_URL', provider.toUpperCase() + '_CLIENT_ID', provider.toUpperCase() + '_CLIENT_SECRET'];
-    return res.status(503).type('text').send('Login is not configured. Add ' + names.join(', ') + ' in Render environment variables.');
-  }
+  if (!APP_URL || !cfg.id || !cfg.secret) return res.status(503).type('text').send('Login is not configured.');
   const state = jwt.sign({ provider, nonce: crypto.randomBytes(16).toString('hex'), returnTo: req.query.returnTo === 'app' ? 'app' : 'site' }, SECRET, { expiresIn: '10m' });
   const params = new URLSearchParams({ client_id: cfg.id, redirect_uri: cfg.callback, state });
   let url;
-  if (provider === 'google') {
-    params.set('response_type', 'code'); params.set('scope', 'openid email profile'); params.set('prompt', 'select_account');
-    url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
-  } else {
-    params.set('scope', 'read:user user:email');
-    url = 'https://github.com/login/oauth/authorize?' + params;
-  }
+  if (provider === 'google') { params.set('response_type', 'code'); params.set('scope', 'openid email profile'); params.set('prompt', 'select_account'); url = 'https://accounts.google.com/o/oauth2/v2/auth?' + params; }
+  else { params.set('scope', 'read:user user:email'); url = 'https://github.com/login/oauth/authorize?' + params; }
   res.redirect(url);
 });
 app.get('/api/auth/:provider/callback', async (req, res) => {
@@ -461,30 +417,20 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
     if (st.provider !== provider) return fail('Sign-in state mismatch. Try again.');
     if (req.query.error || !req.query.code) return fail('Sign-in was cancelled.');
     const cfg = oauth(provider);
-    const tr = await fetch(provider === 'google' ? 'https://oauth2.googleapis.com/token' : 'https://github.com/login/oauth/access_token', {
-      method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: cfg.id, client_secret: cfg.secret, code: req.query.code, redirect_uri: cfg.callback, grant_type: 'authorization_code' })
-    });
+    const tr = await fetch(provider === 'google' ? 'https://oauth2.googleapis.com/token' : 'https://github.com/login/oauth/access_token', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: cfg.id, client_secret: cfg.secret, code: req.query.code, redirect_uri: cfg.callback, grant_type: 'authorization_code' }) });
     const td = await tr.json();
-    if (!tr.ok || !td.access_token) return fail('OAuth token exchange failed. Check the provider credentials and callback URL.');
+    if (!tr.ok || !td.access_token) return fail('OAuth token exchange failed.');
     const headers = { Authorization: 'Bearer ' + td.access_token, Accept: 'application/json', 'User-Agent': 'KING-MD-V4' };
     let profile, email, picture = '';
     if (provider === 'google') {
-      const pr = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers });
-      profile = await pr.json();
+      const pr = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers }); profile = await pr.json();
       if (!pr.ok || !profile.id || !profile.email || profile.verified_email === false) return fail('Google did not return a verified email.');
       email = profile.email.toLowerCase(); picture = profile.picture || '';
     } else {
-      const pr = await fetch('https://api.github.com/user', { headers });
-      profile = await pr.json();
+      const pr = await fetch('https://api.github.com/user', { headers }); profile = await pr.json();
       if (!pr.ok || !profile.id) return fail('Could not read your GitHub profile.');
       email = profile.email && profile.email.toLowerCase();
-      if (!email) {
-        const er = await fetch('https://api.github.com/user/emails', { headers });
-        const es = er.ok ? await er.json() : [];
-        const e = Array.isArray(es) && (es.find(x => x.primary && x.verified) || es.find(x => x.verified));
-        email = e && e.email && e.email.toLowerCase();
-      }
+      if (!email) { const er = await fetch('https://api.github.com/user/emails', { headers }); const es = er.ok ? await er.json() : []; const e = Array.isArray(es) && (es.find(x => x.primary && x.verified) || es.find(x => x.verified)); email = e && e.email && e.email.toLowerCase(); }
       picture = profile.avatar_url || '';
     }
     if (!email) return fail('Your provider account needs a verified email address.');
@@ -493,41 +439,27 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
       u.provider = provider; u.providerId = String(profile.id);
       if (!u.photo && picture) { u.photo = picture; u.avatar = picture; }
       if(isOwner(email, u.phone)){ u.isAdmin = true; u.isVerified = true; u.isPremium = true; }
-      saveUsers();
-      const code = crypto.randomBytes(32).toString('hex');
-      pending.set(code, { token: tokenFor(u), at: Date.now() });
+      saveUsers(); const code = crypto.randomBytes(32).toString('hex'); pending.set(code, { token: tokenFor(u), at: Date.now() });
       return res.redirect((st.returnTo === 'app' ? '/app.html' : '/') + '?authCode=' + encodeURIComponent(code));
     }
     const onb = crypto.randomBytes(32).toString('hex');
-    onboarding.set(onb, { provider, providerId: String(profile.id), email, picture,
-      suggestedFirstName: String(profile.given_name || profile.name || profile.login || '').split(/\s+/)[0],
-      suggestedLastName: String(profile.family_name || (profile.name || '').split(/\s+/).slice(1).join(' ')),
-      at: Date.now() });
+    onboarding.set(onb, { provider, providerId: String(profile.id), email, picture, suggestedFirstName: String(profile.given_name || profile.name || profile.login || '').split(/\s+/)[0], suggestedLastName: String(profile.family_name || (profile.name || '').split(/\s+/).slice(1).join(' ')), at: Date.now() });
     res.redirect((st.returnTo === 'app' ? '/app.html' : '/') + '?onboardToken=' + encodeURIComponent(onb));
-  } catch (e) {
-    console.error('OAuth callback error:', e.message);
-    return fail('Sign-in failed. Check your OAuth settings and try again.');
-  }
+  } catch (e) { return fail('Sign-in failed. Check your OAuth settings and try again.'); }
 });
 app.post('/api/auth/exchange', (req, res) => {
-  const code = String((req.body || {}).code || '');
-  const item = pending.get(code); pending.delete(code);
+  const code = String((req.body || {}).code || ''); const item = pending.get(code); pending.delete(code);
   if (!item || Date.now() - item.at > 5 * 60 * 1000) return res.status(401).json({ success: false, error: 'Sign-in code expired. Please sign in again.' });
-  let decoded;
-  try { decoded = jwt.verify(item.token, SECRET); } catch (_) { return res.status(401).json({ success: false, error: 'Sign-in expired.' }); }
-  const u = users.find(x => x.id === decoded.id);
-  if (!u) return res.status(401).json({ success: false, error: 'Account not found.' });
+  let decoded; try { decoded = jwt.verify(item.token, SECRET); } catch (_) { return res.status(401).json({ success: false, error: 'Sign-in expired.' }); }
+  const u = users.find(x => x.id === decoded.id); if (!u) return res.status(401).json({ success: false, error: 'Account not found.' });
   res.json({ success: true, token: item.token, user: publicUser(u) });
 });
 app.post('/api/logout', (req, res) => res.json({ success: true }));
 app.get('/api/me', requireUser, (req, res) => res.json({ success: true, user: publicUser(req.account) }));
-
-// ===== ONBOARDING =====
 app.get('/api/onboarding/info', (req, res) => {
   const x = onboarding.get(String(req.query.token || ''));
   if (!x || Date.now() - x.at > 30 * 60 * 1000) return res.status(401).json({ success: false, error: 'Your sign-up session expired. Please sign in again.' });
-  res.json({ success: true, email: x.email, provider: x.provider, picture: x.picture,
-    suggestedFirstName: x.suggestedFirstName, suggestedLastName: x.suggestedLastName });
+  res.json({ success: true, email: x.email, provider: x.provider, picture: x.picture, suggestedFirstName: x.suggestedFirstName, suggestedLastName: x.suggestedLastName });
 });
 app.get('/api/onboarding/check-username', (req, res) => {
   const u = String(req.query.u || '');
@@ -540,30 +472,21 @@ app.get('/api/onboarding/check-number', (req, res) => res.json({ state: 'free' }
 app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
   const key = String(req.body.token || ''), x = onboarding.get(key);
   if (!x || Date.now() - x.at > 30 * 60 * 1000) return res.status(401).json({ success: false, error: 'Your sign-up session expired. Please sign in again.' });
-  const username = String(req.body.username || '').trim();
-  const firstName = String(req.body.firstName || '').trim(), lastName = String(req.body.lastName || '').trim();
+  const username = String(req.body.username || '').trim(); const firstName = String(req.body.firstName || '').trim(), lastName = String(req.body.lastName || '').trim();
   if (!firstName || !lastName || !slugOK(username)) return res.json({ success: false, error: 'Enter your name and a valid username.' });
   if (findUsername(username)) return res.json({ success: false, error: 'That username is already taken.' });
-  const photoChoice = req.body.photoChoice || 'none';
-  let photo = photoChoice === 'provider' ? x.picture : '';
+  const photoChoice = req.body.photoChoice || 'none'; let photo = photoChoice === 'provider' ? x.picture : '';
   if (photoChoice === 'upload' && req.file) photo = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
   const owner = isOwner(x.email, req.body.phone || '');
-  const u = { id: crypto.randomUUID(), username, email: x.email, phone: normalizePhone(req.body.phone||''), provider: x.provider, providerId: x.providerId,
-    firstName, lastName, name: firstName + ' ' + lastName, photo, avatar: photo, cover:'', bio: '', accentColor: req.body.accentColor || 'pink',
-    isAdmin: owner, isVerified: owner, isPremium: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(),
-    hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
+  const u = { id: crypto.randomUUID(), username, email: x.email, phone: normalizePhone(req.body.phone||''), provider: x.provider, providerId: x.providerId, firstName, lastName, name: firstName + ' ' + lastName, photo, avatar: photo, cover:'', bio: '', accentColor: req.body.accentColor || 'pink', isAdmin: owner, isVerified: owner, isPremium: owner, followers: [], following: [], likes: 0, coins: 3, bots: [], createdAt: new Date().toISOString(), hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: [] };
   users.push(u); saveUsers(); onboarding.delete(key);
   res.json({ success: true, token: tokenFor(u), signupBonusCoins: owner ? 9999 : 3, numberLinked: false });
 });
-
-// ===== PROFILE =====
 app.post('/api/profile/edit', requireUser, (req, res) => {
   const u = req.account, b = req.body || {}, nm = String(b.username || u.username).trim();
   if (!slugOK(nm)) return res.json({ success: false, error: 'Username must be 3–20 letters, numbers or underscores.' });
-  const other = findUsername(nm);
-  if (other && other.id !== u.id) return res.json({ success: false, error: 'Username already taken.' });
-  u.username = nm; u.firstName = String(b.firstName || '').trim(); u.lastName = String(b.lastName || '').trim();
-  u.name = (u.firstName + ' ' + u.lastName).trim(); saveUsers();
+  const other = findUsername(nm); if (other && other.id !== u.id) return res.json({ success: false, error: 'Username already taken.' });
+  u.username = nm; u.firstName = String(b.firstName || '').trim(); u.lastName = String(b.lastName || '').trim(); u.name = (u.firstName + ' ' + u.lastName).trim(); saveUsers();
   res.json({ success: true, user: publicUser(u) });
 });
 app.post('/api/profile/update', requireUser, (req, res) => { req.account.bio = String((req.body || {}).bio || '').slice(0, 500); saveUsers(); res.json({ success: true }); });
@@ -571,8 +494,7 @@ app.post('/api/profile/accent', requireUser, (req, res) => { req.account.accentC
 app.post('/api/profile/privacy', requireUser, (req, res) => { Object.keys(req.body || {}).forEach(k => { if (['hideBalance','hideFollowers','hideFollowing','hideLikes'].includes(k)) req.account[k] = !!req.body[k]; }); saveUsers(); res.json({ success: true }); });
 app.post('/api/profile/photo', requireUser, upload.single('photo'), (req, res) => {
   if (!req.file) return res.json({ success: false, error: 'Choose an image first.' });
-  const url = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64');
-  req.account.photo = url; req.account.avatar = url; saveUsers();
+  const url = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64'); req.account.photo = url; req.account.avatar = url; saveUsers();
   res.json({ success: true, photo: url, avatar: url });
 });
 app.post('/api/profile/cover', requireUser, upload.single('cover'), (req, res) => {
@@ -580,443 +502,120 @@ app.post('/api/profile/cover', requireUser, upload.single('cover'), (req, res) =
   req.account.cover = 'data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64'); saveUsers();
   res.json({ success: true, cover: req.account.cover });
 });
-app.delete('/api/profile/cover', requireUser, (req, res) => {
-  req.account.cover = ''; saveUsers(); res.json({ success: true });
-});
+app.delete('/api/profile/cover', requireUser, (req, res) => { req.account.cover = ''; saveUsers(); res.json({ success: true }); });
 app.get('/api/users/search', (req, res) => {
   const q = String(req.query.q || '').toLowerCase();
   const found = users.filter(u => u.username.toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q)).slice(0, 25).map(publicUser);
   res.json({ success: true, users: found });
 });
-app.get('/api/users/:username', (req, res) => {
-  const u = findUsername(req.params.username);
-  if (!u) return res.status(404).json({ success: false, error: 'User not found' });
-  res.json({ success: true, user: publicUser(u) });
-});
+app.get('/api/users/:username', (req, res) => { const u = findUsername(req.params.username); if (!u) return res.status(404).json({ success: false, error: 'User not found' }); res.json({ success: true, user: publicUser(u) }); });
 app.post('/api/users/:username/follow', requireUser, (req, res) => {
   const target = findUsername(req.params.username), me = req.account;
   if (!target || target.id === me.id) return res.status(404).json({ success: false, error: 'User not found.' });
-  target.followers = Array.isArray(target.followers) ? target.followers : [];
-  me.following = Array.isArray(me.following) ? me.following : [];
+  target.followers = Array.isArray(target.followers) ? target.followers : []; me.following = Array.isArray(me.following) ? me.following : [];
   const following = me.following.includes(target.id);
-  if (following) {
-    target.followers = target.followers.filter(id => id !== me.id);
-    me.following = me.following.filter(id => id !== target.id);
-  } else {
-    if (!target.followers.includes(me.id)) target.followers.push(me.id);
-    if (!me.following.includes(target.id)) me.following.push(target.id);
-    addUserNotification(target, 'follower', 'New follower', '@' + me.username + ' started following you.', { username: me.username });
-  }
-  saveUsers();
-  res.json({ success: true, following: !following, followersCount: target.followers.length, followingCount: me.following.length });
+  if (following) { target.followers = target.followers.filter(id => id !== me.id); me.following = me.following.filter(id => id !== target.id); }
+  else { if (!target.followers.includes(me.id)) target.followers.push(me.id); if (!me.following.includes(target.id)) me.following.push(target.id); addUserNotification(target, 'follower', 'New follower', '@' + me.username + ' started following you.', { username: me.username }); }
+  saveUsers(); res.json({ success: true, following: !following, followersCount: target.followers.length, followingCount: me.following.length });
 });
-app.get('/api/users/:username/followers', (req, res) => {
-  const target = findUsername(req.params.username);
-  if (!target) return res.status(404).json({ success: false, error: 'User not found.' });
-  const list = (target.followers || []).map(id => users.find(u => u.id === id)).filter(Boolean);
-  res.json({ success: true, users: list.map(publicUser) });
-});
-app.get('/api/users/:username/following', (req, res) => {
-  const target = findUsername(req.params.username);
-  if (!target) return res.status(404).json({ success: false, error: 'User not found.' });
-  if (target.hideFollowing && (!currentUser(req) || currentUser(req).id !== target.id)) return res.json({ success: true, restricted: true, users: [] });
-  const list = (target.following || []).map(id => users.find(u => u.id === id)).filter(Boolean);
-  res.json({ success: true, users: list.map(publicUser) });
-});
-app.post('/api/users/:username/like', requireUser, (req, res) => {
-  const target = findUsername(req.params.username);
-  if (!target) return res.json({ success: false, error: 'User not found.' });
-  target.likes = (target.likes || 0) + 1; saveUsers(); res.json({ success: true });
-});
-
-// ===== COMMUNITY CHAT =====
+app.get('/api/users/:username/followers', (req, res) => { const target = findUsername(req.params.username); if (!target) return res.status(404).json({ success: false, error: 'User not found.' }); const list = (target.followers || []).map(id => users.find(u => u.id === id)).filter(Boolean); res.json({ success: true, users: list.map(publicUser) }); });
+app.get('/api/users/:username/following', (req, res) => { const target = findUsername(req.params.username); if (!target) return res.status(404).json({ success: false, error: 'User not found.' }); if (target.hideFollowing && (!currentUser(req) || currentUser(req).id !== target.id)) return res.json({ success: true, restricted: true, users: [] }); const list = (target.following || []).map(id => users.find(u => u.id === id)).filter(Boolean); res.json({ success: true, users: list.map(publicUser) }); });
+app.post('/api/users/:username/like', requireUser, (req, res) => { const target = findUsername(req.params.username); if (!target) return res.json({ success: false, error: 'User not found.' }); target.likes = (target.likes || 0) + 1; saveUsers(); res.json({ success: true }); });
 app.get('/api/community/status', (req, res) => res.json({ success: true, enabled: true, locked: false, lockedAdminOnly: false }));
 app.get('/api/community/messages', (req, res) => {
-  const before = Number(req.query.before) || Date.now();
-  const limit = Math.min(Number(req.query.limit) || 40, 40);
+  const before = Number(req.query.before) || Date.now(); const limit = Math.min(Number(req.query.limit) || 40, 40);
   let list = communityMessages.filter(m => new Date(m.createdAt).getTime() < before).slice(-limit);
-  list = list.map(m => {
-    const account = findUsername(m.username);
-    if(account){
-      const isAdmin = !!(account.isAdmin || isOwner(account.email, account.phone));
-      const isPremium = isPremiumUser(account);
-      m.isAdmin = isAdmin; m.isPremium = isPremium; m.proPlan = isPremium;
-      m.isVerified = isAdmin || isPremium; m.verified = m.isVerified;
-    }
-    return m;
-  });
+  list = list.map(m => { const account = findUsername(m.username); if(account){ const isAdmin = !!(account.isAdmin || isOwner(account.email, account.phone)); const isPremium = isPremiumUser(account); m.isAdmin = isAdmin; m.isPremium = isPremium; m.proPlan = isPremium; m.isVerified = isAdmin || isPremium; m.verified = m.isVerified; } return m; });
   res.json({ success: true, messages: list, pinnedCount: communityMessages.filter(m=>m.pinned).length, hasMore: false });
 });
 app.get('/api/community/since', (req, res) => res.json({ success: true, messages: communityMessages.filter(m => new Date(m.createdAt).getTime() > (Number(req.query.after) || 0)) }));
 app.get('/api/community/pinned', (req, res) => res.json({ success: true, messages: communityMessages.filter(m => m.pinned) }));
-app.get('/api/community/live', (req, res) => {
-  const now = Date.now();
-  for(let [k,v] of typingUsers){ if(now - v > 5000) typingUsers.delete(k); }
-  res.json({ success: true, online: onlineUsers.size || 1, typing: [...typingUsers.keys()] });
-});
-app.post('/api/community/typing', (req, res) => {
-  const u = currentUser(req);
-  if(u) typingUsers.set(u.username, Date.now());
-  res.json({ success: true });
-});
+app.get('/api/community/live', (req, res) => { const now = Date.now(); for(let [k,v] of typingUsers){ if(now - v > 5000) typingUsers.delete(k); } res.json({ success: true, online: onlineUsers.size || 1, typing: [...typingUsers.keys()] }); });
+app.post('/api/community/typing', (req, res) => { const u = currentUser(req); if(u) typingUsers.set(u.username, Date.now()); res.json({ success: true }); });
 app.post('/api/community/message', requireUser, (req, res) => {
   const b = req.body || {}; if (!b.text && !b.image && !b.sticker) return res.json({ success: false, error: 'Empty message' });
   if(b.text && b.text.length > 1000) return res.json({ success: false, error: 'Too long' });
-  const mentions = [];
-  if(b.text){ const mm = b.text.match(/@([A-Za-z0-9_]{3,20})/g); if(mm) mm.forEach(x=>mentions.push(x.slice(1))); }
-  let replyObj = null;
-  if(b.replyTo){ const orig = communityMessages.find(m=>m._id===b.replyTo); if(orig) replyObj = { username: orig.username, text: orig.text || '[media]' }; }
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
-  const isPremium = isPremiumUser(req.account);
-  const isVerified = isAdmin || isPremium;
+  const mentions = []; if(b.text){ const mm = b.text.match(/@([A-Za-z0-9_]{3,20})/g); if(mm) mm.forEach(x=>mentions.push(x.slice(1))); }
+  let replyObj = null; if(b.replyTo){ const orig = communityMessages.find(m=>m._id===b.replyTo); if(orig) replyObj = { username: orig.username, text: orig.text || '[media]' }; }
+  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone)); const isPremium = isPremiumUser(req.account); const isVerified = isAdmin || isPremium;
   const m = { _id: crypto.randomUUID(), username: req.account.username, photo: req.account.avatar || req.account.photo || null, text: b.text || null, image: b.image || null, sticker: b.sticker || null, mentions, replyTo: replyObj, reactions: [], pinned: false, edited: false, isAdmin, isPremium, proPlan: isPremium, isVerified, verified: isVerified, createdAt: new Date().toISOString() };
-  communityMessages.push(m);
-  if(communityMessages.length > 500) communityMessages.splice(0, communityMessages.length - 500);
-  onlineUsers.set(req.account.username, Date.now());
+  communityMessages.push(m); if(communityMessages.length > 500) communityMessages.splice(0, communityMessages.length - 500); onlineUsers.set(req.account.username, Date.now());
   res.json({ success: true, message: m });
 });
-app.post('/api/community/react', requireUser, (req, res) => {
-  const m = communityMessages.find(x => x._id === (req.body || {}).id); if (!m) return res.json({ success: false });
-  m.reactions = (m.reactions || []).filter(x => x.n !== req.account.username); m.reactions.push({ e: req.body.emoji, n: req.account.username, u: req.account.username });
-  res.json({ success: true, reactions: m.reactions });
-});
-app.put('/api/community/message/:id', requireUser, (req, res) => {
-  const m = communityMessages.find(x => x._id === req.params.id); if(!m) return res.json({ success: false });
-  if(m.username !== req.account.username) return res.json({ success: false, error: 'Not yours' });
-  m.text = req.body.text; m.edited = true; res.json({ success: true, text: m.text, edited: true });
-});
-app.delete('/api/community/message/:id', requireUser, (req, res) => {
-  const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx===-1) return res.json({ success: false });
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
-  if(communityMessages[idx].username !== req.account.username && !isAdmin) return res.json({ success: false, error: 'Not allowed' });
-  communityMessages.splice(idx, 1); res.json({ success: true });
-});
+app.post('/api/community/react', requireUser, (req, res) => { const m = communityMessages.find(x => x._id === (req.body || {}).id); if (!m) return res.json({ success: false }); m.reactions = (m.reactions || []).filter(x => x.n !== req.account.username); m.reactions.push({ e: req.body.emoji, n: req.account.username, u: req.account.username }); res.json({ success: true, reactions: m.reactions }); });
+app.put('/api/community/message/:id', requireUser, (req, res) => { const m = communityMessages.find(x => x._id === req.params.id); if(!m) return res.json({ success: false }); if(m.username !== req.account.username) return res.json({ success: false, error: 'Not yours' }); m.text = req.body.text; m.edited = true; res.json({ success: true, text: m.text, edited: true }); });
+app.delete('/api/community/message/:id', requireUser, (req, res) => { const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx===-1) return res.json({ success: false }); const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone)); if(communityMessages[idx].username !== req.account.username && !isAdmin) return res.json({ success: false, error: 'Not allowed' }); communityMessages.splice(idx, 1); res.json({ success: true }); });
 app.post('/api/community/read', (req, res) => res.json({ success: true }));
 app.get('/api/community/stickers', (req, res) => res.json({ success: true, stickers: [{ id: 'thanks', name: 'Thank you', src: '/stickers/thanks.svg?v=1' }, { id: 'ok', name: 'Okay', src: '/stickers/ok.svg?v=1' }, { id: 'lol', name: 'LOL', src: '/stickers/lol.svg?v=1' }, { id: 'sorry', name: 'Sorry', src: '/stickers/sorry.svg?v=1' }, { id: 'congrats', name: 'Congrats', src: '/stickers/congrats.svg?v=1' }] }));
-app.post('/api/admin/community/pin/:id', requireUser, (req, res) => {
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
-  if(!isAdmin) return res.json({ success: false, error: 'Admin only' });
-  const m = communityMessages.find(x => x._id === req.params.id); if(!m) return res.json({ success: false });
-  m.pinned = !m.pinned; res.json({ success: true, pinned: m.pinned });
-});
-app.delete('/api/admin/community/message/:id', requireUser, (req, res) => {
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
-  if(!isAdmin) return res.json({ success: false, error: 'Admin only' });
-  const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx!==-1) communityMessages.splice(idx,1);
-  res.json({ success: true });
-});
-app.get('/api/avatar/:user', (req, res) => {
-  res.redirect('https://ui-avatars.com/api/?name=' + encodeURIComponent(req.params.user) + '&background=ec4899&color=fff');
-});
-
-app.post('/api/ai/chat', (req, res) => {
-  const q = String((req.body || {}).message || (req.body || {}).prompt || '').toLowerCase();
-  let reply = 'I am KING MD V4 AI. Ask me how to pair your bot, deploy it, or fix an error!';
-  if (q.includes('pair') || q.includes('link')) reply = 'To pair: Go to Deploy a Bot > Enter WhatsApp number > Get Pairing Code > WhatsApp > Linked Devices > Link with code.';
-  else if (q.includes('deploy')) reply = 'To deploy: Go to Deploy a Bot, choose plan, enter number, tap Deploy.';
-  else if (q.includes('hello') || q.includes('hi')) reply = 'Hello King! 👑 Welcome to KING MD V4. How can I help?';
-  res.json({ success: true, reply, response: reply });
-});
+app.post('/api/admin/community/pin/:id', requireUser, (req, res) => { const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone)); if(!isAdmin) return res.json({ success: false, error: 'Admin only' }); const m = communityMessages.find(x => x._id === req.params.id); if(!m) return res.json({ success: false }); m.pinned = !m.pinned; res.json({ success: true, pinned: m.pinned }); });
+app.delete('/api/admin/community/message/:id', requireUser, (req, res) => { const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone)); if(!isAdmin) return res.json({ success: false, error: 'Admin only' }); const idx = communityMessages.findIndex(m => m._id === req.params.id); if(idx!==-1) communityMessages.splice(idx,1); res.json({ success: true }); });
+app.get('/api/avatar/:user', (req, res) => { res.redirect('https://ui-avatars.com/api/?name=' + encodeURIComponent(req.params.user) + '&background=ec4899&color=fff'); });
+app.post('/api/ai/chat', (req, res) => { const q = String((req.body || {}).message || (req.body || {}).prompt || '').toLowerCase(); let reply = 'I am KING MD V4 AI. Ask me how to pair your bot, deploy it, or fix an error!'; if (q.includes('pair') || q.includes('link')) reply = 'To pair: Go to Deploy a Bot > Enter WhatsApp number > Get Pairing Code > WhatsApp > Linked Devices > Link with code.'; else if (q.includes('deploy')) reply = 'To deploy: Go to Deploy a Bot, choose plan, enter number, tap Deploy.'; else if (q.includes('hello') || q.includes('hi')) reply = 'Hello King! 👑 Welcome to KING MD V4. How can I help?'; res.json({ success: true, reply, response: reply }); });
 app.post('/api/chat', (req, res) => res.redirect(307, '/api/ai/chat'));
-
-// ===== WHATSAPP BOT REGISTRY / LIVE ENGINE STATUS =====
 app.get('/api/my-bots', requireUser, async (req, res) => {
-  await syncBotRecordsWithEngine();
-  dedupeBotRecords();
-  const mine = uniqueBots(botRecords.filter(b => b.ownerId === req.account.id));
-  let states = {};
-  if (mine.length) {
-    try {
-      const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(',')));
-      for (const d of all) Object.assign(states, d.bots || {});
-    } catch (e) { console.warn('[KING MD] Bot status lookup:', e.message); }
-  }
+  await syncBotRecordsWithEngine(); dedupeBotRecords();
+  const mine = uniqueBots(botRecords.filter(b => b.ownerId === req.account.id)); let states = {};
+  if (mine.length) { try { const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(mine.map(b => b.number).join(','))); for (const d of all) Object.assign(states, d.bots || {}); } catch (e) {} }
   let changed = false;
-  const bots = mine.map(b => {
-    const info = states[normalizePhone(b.number)];
-    const rawState = info && typeof info === 'object' ? info.state : info;
-    const liveState = rawState != null || (info && info.connected === true)
-      ? normalizeBotState(rawState, info)
-      : normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state);
-    const oldState = normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state);
-    if (liveState !== oldState) {
-      if (liveState === 'online' || liveState === 'offline') {
-        addUserNotification(req.account, 'bot_status', liveState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected',
-          '+' + b.number + (liveState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: liveState });
-      }
-      const rec = botRecords.find(x => normalizePhone(x.number) === normalizePhone(b.number));
-      if (rec) { rec.state = liveState; rec.updatedAt = new Date().toISOString(); }
-      changed = true;
-    }
-    return { number: normalizePhone(b.number), state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt };
-  });
+  const bots = mine.map(b => { const info = states[normalizePhone(b.number)]; const rawState = info && typeof info === 'object' ? info.state : info; const liveState = rawState != null || (info && info.connected === true) ? normalizeBotState(rawState, info) : normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state); const oldState = normalizeBotState(typeof b.state === 'object' ? b.state.state : b.state); if (liveState !== oldState) { if (liveState === 'online' || liveState === 'offline') { addUserNotification(req.account, 'bot_status', liveState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (liveState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: liveState }); } const rec = botRecords.find(x => normalizePhone(x.number) === normalizePhone(b.number)); if (rec) { rec.state = liveState; rec.updatedAt = new Date().toISOString(); } changed = true; } return { number: normalizePhone(b.number), state: liveState, connected: liveState === 'online', createdAt: b.createdAt, updatedAt: b.updatedAt }; });
   if (changed) { saveJsonFile(BOTS_FILE, botRecords); saveUsers(); }
   res.json({ success: true, bots, total: bots.length, count: bots.length });
 });
 app.post('/api/bots/status', async (req, res) => {
   const nums = Array.isArray(req.body && req.body.numbers) ? [...new Set(req.body.numbers.map(normalizePhone).filter(n => /^\d{8,15}$/.test(n)))] .slice(0, 30) : [];
   if (!nums.length) return res.json({ success: true, bots: {} });
-  try {
-    const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(nums.join(',')));
-    const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
-    const account = currentUser(req);
-    const normalized = {};
-    for (const n of nums) {
-      const info = merged[n];
-      const st = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
-      normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null };
-    }
-    if (account) {
-      botRecords.filter(b => nums.includes(normalizePhone(b.number))).forEach(b => {
-        const nextState = normalized[normalizePhone(b.number)].state;
-        const oldState = typeof b.state === 'object' ? b.state.state : b.state;
-        if (oldState !== nextState && (nextState === 'online' || nextState === 'offline')) {
-          addUserNotification(account, 'bot_status', nextState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (nextState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: nextState });
-        }
-        b.state = nextState; b.updatedAt = new Date().toISOString();
-      });
-      saveJsonFile(BOTS_FILE, botRecords); saveUsers();
-    }
-    res.json({ success: true, bots: normalized });
-  } catch (e) { res.status(502).json({ success: false, error: e.message || 'Engine status unavailable', bots: {} }); }
+  try { const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(nums.join(','))); const merged = {}; for (const d of all) Object.assign(merged, d.bots || {}); const account = currentUser(req); const normalized = {}; for (const n of nums) { const info = merged[n]; const st = normalizeBotState(info && typeof info === 'object' ? info.state : info, info); normalized[n] = { state: st, connected: st === 'online', updatedAt: (info && info.updatedAt) || null }; } if (account) { botRecords.filter(b => nums.includes(normalizePhone(b.number))).forEach(b => { const nextState = normalized[normalizePhone(b.number)].state; const oldState = typeof b.state === 'object' ? b.state.state : b.state; if (oldState !== nextState && (nextState === 'online' || nextState === 'offline')) { addUserNotification(account, 'bot_status', nextState === 'online' ? 'WhatsApp bot connected' : 'WhatsApp bot disconnected', '+' + b.number + (nextState === 'online' ? ' is now active.' : ' is offline.'), { number: b.number, state: nextState }); } b.state = nextState; b.updatedAt = new Date().toISOString(); }); saveJsonFile(BOTS_FILE, botRecords); saveUsers(); } res.json({ success: true, bots: normalized }); } catch (e) { res.status(502).json({ success: false, error: e.message || 'Engine status unavailable', bots: {} }); }
 });
 app.delete('/session/:phone', requireUser, async (req, res) => {
-  const number = normalizePhone(req.params.phone);
-  const record = botRecords.find(b => b.ownerId === req.account.id && normalizePhone(b.number) === number);
+  const number = normalizePhone(req.params.phone); const record = botRecords.find(b => b.ownerId === req.account.id && normalizePhone(b.number) === number);
   if (!record) return res.status(404).json({ success: false, error: 'This bot is not linked to your account.' });
-  try {
-    await engineFetchAll('/api/session/' + encodeURIComponent(number), { method: 'DELETE' });
-    botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && normalizePhone(b.number) === number));
-    botRecords = botRecords.filter(b => normalizePhone(b.number) !== number || b.ownerId !== req.account.id);
-    saveJsonFile(BOTS_FILE, botRecords);
-    res.json({ success: true, serversDeleted: ENGINE_URLS });
-  } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
+  try { await engineFetchAll('/api/session/' + encodeURIComponent(number), { method: 'DELETE' }); botRecords = botRecords.filter(b => !(b.ownerId === req.account.id && normalizePhone(b.number) === number)); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true, serversDeleted: ENGINE_URLS }); } catch (e) { res.status(502).json({ success: false, error: e.message || 'Could not delete the WhatsApp session.' }); }
 });
-
-// ===== COMPATIBILITY API =====
 async function readFleetStatus() {
   await syncBotRecordsWithEngine();
   const numbers = [...new Set(uniqueBots().map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n)))];
-  if (!numbers.length) {
-    const real = await getRealEngineNumbers().catch(() => null);
-    if (real && real.length) {
-      const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(real.join(',')));
-      const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
-      const bots = {}; real.forEach(n => { const info = merged[n]; const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info); bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null }; });
-      return { numbers: real, bots, ok: true, ms: 0 };
-    }
-    return { numbers, bots: {}, ok: true, ms: 0 };
-  }
-  const started = Date.now();
-  const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(numbers.join(',')));
-  const merged = {}; for (const d of all) Object.assign(merged, d.bots || {});
-  const bots = {};
-  numbers.forEach(n => {
-    const info = merged[n];
-    const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info);
-    bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null };
-  });
-  return { numbers, bots, ok: true, ms: Date.now() - started };
+  if (!numbers.length) { const real = await getRealEngineNumbers().catch(() => null); if (real && real.length) { const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(real.join(','))); const merged = {}; for (const d of all) Object.assign(merged, d.bots || {}); const bots = {}; real.forEach(n => { const info = merged[n]; const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info); bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null }; }); return { numbers: real, bots, ok: true, ms: 0 }; } return { numbers, bots: {}, ok: true, ms: 0 }; }
+  const started = Date.now(); const all = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(numbers.join(','))); const merged = {}; for (const d of all) Object.assign(merged, d.bots || {}); const bots = {}; numbers.forEach(n => { const info = merged[n]; const state = normalizeBotState(info && typeof info === 'object' ? info.state : info, info); bots[n] = { state, connected: state === 'online', updatedAt: info && info.updatedAt || null }; }); return { numbers, bots, ok: true, ms: Date.now() - started };
 }
-function adminOnly(req, res, next) {
-  if (!(req.account && (req.account.isAdmin || isOwner(req.account.email, req.account.phone)))) {
-    return res.status(403).json({ success: false, error: 'Admin only' });
-  }
-  next();
-}
-function calcStats() {
-  dedupeBotRecords();
-  const { total, online } = countBots();
-  const availableSlots = Math.max(0, TOTAL_SLOTS - total);
-  return { botsPaired: total, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots };
-}
-async function calcStatsLive() {
-  try {
-    const real = await getRealEngineNumbers();
-    const fleet = await readFleetStatus();
-    let total = fleet.numbers.length;
-    if (real !== null) total = real.length;
-    const online = Object.values(fleet.bots).filter(b => b.connected).length;
-    const availableSlots = Math.max(0, TOTAL_SLOTS - total);
-    return { botsPaired: total, total, count: total, bots: total, online, offline: Math.max(0, total - online), servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true };
-  } catch (e) { return { ...calcStats(), live: false }; }
-}
+function adminOnly(req, res, next) { if (!(req.account && (req.account.isAdmin || isOwner(req.account.email, req.account.phone)))) { return res.status(403).json({ success: false, error: 'Admin only' }); } next(); }
+function calcStats() { dedupeBotRecords(); const { total, online } = countBots(); const availableSlots = Math.max(0, TOTAL_SLOTS - total); return { botsPaired: total, total, count: total, bots: total, online, offline: total - online, servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots }; }
+async function calcStatsLive() { try { const real = await getRealEngineNumbers(); const fleet = await readFleetStatus(); let total = fleet.numbers.length; if (real !== null) total = real.length; const online = Object.values(fleet.bots).filter(b => b.connected).length; const availableSlots = Math.max(0, TOTAL_SLOTS - total); return { botsPaired: total, total, count: total, bots: total, online, offline: Math.max(0, total - online), servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS, availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true }; } catch (e) { return { ...calcStats(), live: false }; } }
 app.get('/api/stats', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
 app.get('/api/fleet', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
 app.get('/api/public-stats', async (req, res) => { res.json({ success: true, ...(await calcStatsLive()) }); });
-app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) => {
-  const before = botRecords.length;
-  dedupeBotRecords();
-  res.json({ success: true, before, after: botRecords.length, removed: before - botRecords.length, ...calcStats() });
-});
-
+app.post('/api/admin/clean-duplicate-bots', requireUser, adminOnly, (req, res) => { const before = botRecords.length; dedupeBotRecords(); res.json({ success: true, before, after: botRecords.length, removed: before - botRecords.length, ...calcStats() }); });
 app.get('/sessions', async (req, res) => {
-  const started = Date.now();
-  const stats = await calcStatsLive();
-  try {
-    const fleet = await readFleetStatus();
-    botRecords.forEach(b => { if (fleet.bots[normalizePhone(b.number)]) b.state = fleet.bots[normalizePhone(b.number)].state; });
-    saveJsonFile(BOTS_FILE, botRecords);
-    const sessions = uniqueBots().map(b => ({
-      number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].connected : normalizeBotState(b.state) === 'online',
-      state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state), ownerId: b.ownerId,
-      createdAt: b.createdAt, updatedAt: b.updatedAt
-    }));
-    const alive = sessions.filter(x => x.connected).length;
-    const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
-    res.json({ success: true, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots,
-      serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: TOTAL_SERVERS },
-      ...(admin ? { sessions, totalAlive: alive } : {}) });
-  } catch (e) {
-    const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
-    const sessions = uniqueBots().map(b => ({ number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId }));
-    res.status(502).json({ success: false, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
-      ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started });
-  }
+  const started = Date.now(); const stats = await calcStatsLive();
+  try { const fleet = await readFleetStatus(); botRecords.forEach(b => { if (fleet.bots[normalizePhone(b.number)]) b.state = fleet.bots[normalizePhone(b.number)].state; }); saveJsonFile(BOTS_FILE, botRecords); const sessions = uniqueBots().map(b => ({ number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].connected : normalizeBotState(b.state) === 'online', state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state), ownerId: b.ownerId, createdAt: b.createdAt, updatedAt: b.updatedAt })); const alive = sessions.filter(x => x.connected).length; const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone)); res.json({ success: true, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: TOTAL_SERVERS }, ...(admin ? { sessions, totalAlive: alive } : {}) }); } catch (e) { const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone)); const sessions = uniqueBots().map(b => ({ number: normalizePhone(b.number), phoneNumber: normalizePhone(b.number), connected: normalizeBotState(b.state) === 'online', state: normalizeBotState(b.state), ownerId: b.ownerId })); res.status(502).json({ success: false, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots, serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 }, ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started }); }
 });
 app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
-  try {
-    const fleet = await readFleetStatus();
-    const sessions = uniqueBots().map(b => ({ ...b, number: normalizePhone(b.number), state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state) }));
-    const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive;
-    sessions.forEach(b => { const rec = botRecords.find(x => normalizePhone(x.number) === b.number); if (rec) rec.state = b.state; });
-    saveJsonFile(BOTS_FILE, botRecords);
-    const perServer = await Promise.all(ENGINE_URLS.map(async (base, i) => {
-      try { const d = await fetchFromEngine(base, '/api/count'); return { server: 'KING MD Engine ' + (i+1), healthy: true, alive: Number(d.total || 0), dead: 0, ms: fleet.ms }; } catch (_) { return { server: 'KING MD Engine ' + (i+1), healthy: false, alive: 0, dead: 0, ms: 0 }; }
-    }));
-    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, perServer });
-  } catch (e) {
-    res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message });
-  }
+  try { const fleet = await readFleetStatus(); const sessions = uniqueBots().map(b => ({ ...b, number: normalizePhone(b.number), state: fleet.bots[normalizePhone(b.number)] ? fleet.bots[normalizePhone(b.number)].state : normalizeBotState(b.state) })); const alive = sessions.filter(b => b.state === 'online').length, dead = sessions.length - alive; sessions.forEach(b => { const rec = botRecords.find(x => normalizePhone(x.number) === b.number); if (rec) rec.state = b.state; }); saveJsonFile(BOTS_FILE, botRecords); const perServer = await Promise.all(ENGINE_URLS.map(async (base, i) => { try { const d = await fetchFromEngine(base, '/api/count'); return { server: 'KING MD Engine ' + (i+1), healthy: true, alive: Number(d.total || 0), dead: 0, ms: fleet.ms }; } catch (_) { return { server: 'KING MD Engine ' + (i+1), healthy: false, alive: 0, dead: 0, ms: 0 }; } })); res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, perServer }); } catch (e) { res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message }); }
 });
 app.post('/api/admin/monitoring/purge-dead', requireUser, adminOnly, async (req, res) => {
-  try {
-    const fleet = await readFleetStatus();
-    const dead = uniqueBots().filter(b => !fleet.bots[normalizePhone(b.number)] || fleet.bots[normalizePhone(b.number)].state !== 'online');
-    for (const b of dead) {
-      try { await engineFetch('/api/session/' + encodeURIComponent(normalizePhone(b.number)), { method: 'DELETE' }); } catch (_) {}
-    }
-    const keys = new Set(dead.map(b => normalizePhone(b.number)));
-    botRecords = botRecords.filter(b => !keys.has(normalizePhone(b.number)));
-    saveJsonFile(BOTS_FILE, botRecords);
-    res.json({ success: true, purged: dead.length });
-  } catch (e) { res.status(502).json({ success: false, error: e.message }); }
+  try { const fleet = await readFleetStatus(); const dead = uniqueBots().filter(b => !fleet.bots[normalizePhone(b.number)] || fleet.bots[normalizePhone(b.number)].state !== 'online'); for (const b of dead) { try { await engineFetch('/api/session/' + encodeURIComponent(normalizePhone(b.number)), { method: 'DELETE' }); } catch (_) {} } const keys = new Set(dead.map(b => normalizePhone(b.number))); botRecords = botRecords.filter(b => !keys.has(normalizePhone(b.number))); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true, purged: dead.length }); } catch (e) { res.status(502).json({ success: false, error: e.message }); }
 });
-
-// ===== ADMIN USER + NOTIFICATIONS =====
-app.get('/api/admin/users', requireUser, adminOnly, (req, res) => {
-  const q = String(req.query.search || '').toLowerCase();
-  const found = users.filter(u => !q || [u.username, u.email, u.phone].some(v => String(v || '').toLowerCase().includes(q)));
-  res.json({ success: true, total: found.length, users: found.map(u => ({ ...publicUser(u), _id: u.id, email: u.email, referralCount: (u.referrals || []).length, banned: !!u.banned, chatBanned: !!u.chatBanned, verified: !!(u.isVerified || u.isAdmin) })) });
-});
-app.post('/api/admin/users/:userId/addspaces', requireUser, adminOnly, (req, res) => {
-  const u = users.find(x => x.id === req.params.userId), spaces = Math.max(0, Math.min(1000, Number(req.body.spaces) || 0));
-  if (!u || !spaces) return res.status(400).json({ success: false, error: 'User and a valid space amount are required.' });
-  u.botSpaces = Math.max(3, Number(u.botSpaces || 3)) + spaces; saveUsers();
-  res.json({ success: true, botSpaces: u.botSpaces });
-});
-app.post('/api/admin/users/:userId/chatfreeze', requireUser, adminOnly, (req, res) => {
-  const u = users.find(x => x.id === req.params.userId);
-  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
-  u.chatBanned = !u.chatBanned; u.chatBanReason = u.chatBanned ? String(req.body.reason || '').slice(0, 200) : '';
-  saveUsers(); res.json({ success: true, chatBanned: u.chatBanned });
-});
-app.post('/api/admin/users/:userId/:action', requireUser, adminOnly, (req, res) => {
-  const u = users.find(x => x.id === req.params.userId);
-  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
-  if (isOwner(u.email, u.phone) && req.params.action !== 'verify') return res.status(403).json({ success: false, error: 'Owner account is protected.' });
-  const action = req.params.action;
-  if (action === 'verify') u.isVerified = !u.isVerified;
-  else if (action === 'freeze') u.banned = !u.banned;
-  else if (action === 'promote') u.isAdmin = !u.isAdmin;
-  else return res.status(400).json({ success: false, error: 'Unsupported action.' });
-  saveUsers(); res.json({ success: true, user: publicUser(u) });
-});
-app.delete('/api/admin/users/:userId', requireUser, adminOnly, (req, res) => {
-  const u = users.find(x => x.id === req.params.userId);
-  if (!u) return res.status(404).json({ success: false, error: 'User not found.' });
-  if (isOwner(u.email, u.phone)) return res.status(403).json({ success: false, error: 'Owner account is protected.' });
-  users = users.filter(x => x.id !== u.id);
-  botRecords = botRecords.filter(b => b.ownerId !== u.id);
-  users.forEach(x => { x.followers = (x.followers || []).filter(id => id !== u.id); x.following = (x.following || []).filter(id => id !== u.id); });
-  saveUsers(); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true });
-});
-app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
-  const all = users.flatMap(u => notificationList(u).map(n => ({ ...n, userId: u.id, username: u.username })))
-    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
-  res.json({ success: true, notifications: all.slice(0, 500) });
-});
-app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => {
-  users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; });
-  saveUsers(); res.json({ success: true });
-});
-app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => {
-  users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; });
-  saveUsers(); res.json({ success: true });
-});
-app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => {
-  const title = String(req.body.title || '').slice(0, 100), body = String(req.body.body || '').slice(0, 500);
-  if (!title || !body) return res.status(400).json({ success: false, error: 'Title and message are required.' });
-  users.forEach(u => addUserNotification(u, 'broadcast', title, body, {}));
-  saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 });
-});
-
-// ===== BOT SPACE PURCHASES =====
-app.post('/api/spaces/buy', requireUser, (req, res) => {
-  const cost = 15, balance = Number(req.account.coins || 0);
-  if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' });
-  req.account.coins = balance - cost;
-  req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? PREMIUM_SLOTS : FREE_SLOTS))) + 1;
-  saveUsers(); res.json({ success: true, coinsLeft: req.account.coins, botSpaces: req.account.botSpaces });
-});
-app.post('/api/db-full/report', requireUser, (req, res) => {
-  const owner = users.find(u => isOwner(u.email, u.phone));
-  if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id });
-  saveUsers(); res.json({ success: true });
-});
+app.get('/api/admin/users', requireUser, adminOnly, (req, res) => { const q = String(req.query.search || '').toLowerCase(); const found = users.filter(u => !q || [u.username, u.email, u.phone].some(v => String(v || '').toLowerCase().includes(q))); res.json({ success: true, total: found.length, users: found.map(u => ({ ...publicUser(u), _id: u.id, email: u.email, referralCount: (u.referrals || []).length, banned: !!u.banned, chatBanned: !!u.chatBanned, verified: !!(u.isVerified || u.isAdmin) })) }); });
+app.post('/api/admin/users/:userId/addspaces', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId), spaces = Math.max(0, Math.min(1000, Number(req.body.spaces) || 0)); if (!u || !spaces) return res.status(400).json({ success: false, error: 'User and a valid space amount are required.' }); u.botSpaces = Math.max(3, Number(u.botSpaces || 3)) + spaces; saveUsers(); res.json({ success: true, botSpaces: u.botSpaces }); });
+app.post('/api/admin/users/:userId/chatfreeze', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); u.chatBanned = !u.chatBanned; u.chatBanReason = u.chatBanned ? String(req.body.reason || '').slice(0, 200) : ''; saveUsers(); res.json({ success: true, chatBanned: u.chatBanned }); });
+app.post('/api/admin/users/:userId/:action', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); if (isOwner(u.email, u.phone) && req.params.action !== 'verify') return res.status(403).json({ success: false, error: 'Owner account is protected.' }); const action = req.params.action; if (action === 'verify') u.isVerified = !u.isVerified; else if (action === 'freeze') u.banned = !u.banned; else if (action === 'promote') u.isAdmin = !u.isAdmin; else return res.status(400).json({ success: false, error: 'Unsupported action.' }); saveUsers(); res.json({ success: true, user: publicUser(u) }); });
+app.delete('/api/admin/users/:userId', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); if (isOwner(u.email, u.phone)) return res.status(403).json({ success: false, error: 'Owner account is protected.' }); users = users.filter(x => x.id !== u.id); botRecords = botRecords.filter(b => b.ownerId !== u.id); users.forEach(x => { x.followers = (x.followers || []).filter(id => id !== u.id); x.following = (x.following || []).filter(id => id !== u.id); }); saveUsers(); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true }); });
+app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => { const all = users.flatMap(u => notificationList(u).map(n => ({ ...n, userId: u.id, username: u.username }))).sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)); res.json({ success: true, notifications: all.slice(0, 500) }); });
+app.delete('/api/admin/notifications/clearall', requireUser, adminOnly, (req, res) => { users.forEach(u => { u.notifications = []; u.unreadNotifs = 0; }); saveUsers(); res.json({ success: true }); });
+app.delete('/api/admin/notifications/:id', requireUser, adminOnly, (req, res) => { users.forEach(u => { u.notifications = notificationList(u).filter(n => String(n._id) !== String(req.params.id)); u.unreadNotifs = u.notifications.filter(n => !n.read).length; }); saveUsers(); res.json({ success: true }); });
+app.post('/api/admin/broadcast', requireUser, adminOnly, (req, res) => { const title = String(req.body.title || '').slice(0, 100), body = String(req.body.body || '').slice(0, 500); if (!title || !body) return res.status(400).json({ success: false, error: 'Title and message are required.' }); users.forEach(u => addUserNotification(u, 'broadcast', title, body, {})); saveUsers(); res.json({ success: true, sent: users.length, pushed: 0 }); });
+app.post('/api/spaces/buy', requireUser, (req, res) => { const cost = 15, balance = Number(req.account.coins || 0); if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' }); req.account.coins = balance - cost; req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? PREMIUM_SLOTS : FREE_SLOTS))) + 1; saveUsers(); res.json({ success: true, coinsLeft: req.account.coins, botSpaces: req.account.botSpaces }); });
+app.post('/api/db-full/report', requireUser, (req, res) => { const owner = users.find(u => isOwner(u.email, u.phone)); if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id }); saveUsers(); res.json({ success: true }); });
 app.get('/api/stats/deploys', async (_req, res) => {
-  await syncBotRecordsWithEngine();
-  const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7);
-  const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0);
-  let todayTotal = 0, monthTotal = 0;
-  uniqueBots().forEach(b => {
-    const d = new Date(b.createdAt || b.updatedAt || 0);
-    if (!Number.isFinite(d.getTime())) return;
-    const day = d.toISOString().slice(0, 10);
-    if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; }
-    if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; }
-  });
-  const uniq = countBots();
-  const real = await getRealEngineNumbers().catch(() => null);
-  const allTime = real !== null ? real.length : uniq.total;
-  res.json({ success: true, month: monthKey, today, monthDays,
-    totals: { today: todayTotal, month: monthTotal, allTime },
-    total: allTime, active: uniq.online, ...(await calcStatsLive()) });
+  await syncBotRecordsWithEngine(); const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7);
+  const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0); let todayTotal = 0, monthTotal = 0;
+  uniqueBots().forEach(b => { const d = new Date(b.createdAt || b.updatedAt || 0); if (!Number.isFinite(d.getTime())) return; const day = d.toISOString().slice(0, 10); if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; } if (day.slice(0, 7) === monthKey) { monthDays[d.getUTCDate() - 1]++; monthTotal++; } });
+  const uniq = countBots(); const real = await getRealEngineNumbers().catch(() => null); const allTime = real !== null ? real.length : uniq.total;
+  res.json({ success: true, month: monthKey, today, monthDays, totals: { today: todayTotal, month: monthTotal, allTime }, total: allTime, active: uniq.online, ...(await calcStatsLive()) });
 });
-
-// ===== NOTIFICATIONS =====
-app.post('/api/admin/notifications', requireUser, (req, res) => {
-  if (!(req.account.isAdmin || isOwner(req.account.email, req.account.phone))) return res.status(403).json({ success: false, error: 'Admin only' });
-  const body = req.body || {}, title = String(body.title || '').slice(0, 100), message = String(body.body || body.message || '').slice(0, 500);
-  if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required.' });
-  const target = body.userId ? users.filter(u => u.id === String(body.userId)) : users;
-  target.forEach(u => addUserNotification(u, String(body.type || 'broadcast').slice(0, 40), title, message, body.meta || {}));
-  saveUsers(); res.json({ success: true, sent: target.length });
-});
-app.get('/api/notifications', requireUser, (req, res) => {
-  const items = notificationList(req.account).slice().sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
-  res.json({ success: true, notifications: items, unread: items.filter(n => !n.read).length });
-});
-app.post('/api/notifications/read', requireUser, (req, res) => {
-  req.account.notifications = notificationList(req.account).map(n => ({ ...n, read: true }));
-  req.account.unreadNotifs = 0; saveUsers(); res.json({ success: true });
-});
-app.delete('/api/notifications/:id', requireUser, (req, res) => {
-  req.account.notifications = notificationList(req.account).filter(n => String(n._id) !== String(req.params.id));
-  req.account.unreadNotifs = req.account.notifications.filter(n => !n.read).length; saveUsers(); res.json({ success: true });
-});
-
-// ===== APP CONFIG / CHANNEL REACT =====
+app.post('/api/admin/notifications', requireUser, (req, res) => { if (!(req.account.isAdmin || isOwner(req.account.email, req.account.phone))) return res.status(403).json({ success: false, error: 'Admin only' }); const body = req.body || {}, title = String(body.title || '').slice(0, 100), message = String(body.body || body.message || '').slice(0, 500); if (!title || !message) return res.status(400).json({ success: false, error: 'Title and message are required.' }); const target = body.userId ? users.filter(u => u.id === String(body.userId)) : users; target.forEach(u => addUserNotification(u, String(body.type || 'broadcast').slice(0, 40), title, message, body.meta || {})); saveUsers(); res.json({ success: true, sent: target.length }); });
+app.get('/api/notifications', requireUser, (req, res) => { const items = notificationList(req.account).slice().sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0)); res.json({ success: true, notifications: items, unread: items.filter(n => !n.read).length }); });
+app.post('/api/notifications/read', requireUser, (req, res) => { req.account.notifications = notificationList(req.account).map(n => ({ ...n, read: true })); req.account.unreadNotifs = 0; saveUsers(); res.json({ success: true }); });
+app.delete('/api/notifications/:id', requireUser, (req, res) => { req.account.notifications = notificationList(req.account).filter(n => String(n._id) !== String(req.params.id)); req.account.unreadNotifs = req.account.notifications.filter(n => !n.read).length; saveUsers(); res.json({ success: true }); });
 app.get('/api/pages/status', (_req, res) => res.json({ success: true, pages: {}, turnstileSiteKey: null, maintenance: false }));
 app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   const number = normalizePhone(req.body && req.body.number);
@@ -1028,383 +627,95 @@ app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
 async function getBotNumbersForEveryone(account) {
   dedupeBotRecords();
   let local = uniqueBots(botRecords.filter(b => b.ownerId === account.id)).map(b => normalizePhone(b.number));
-  if (local.length) {
-    try {
-      const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(local.join(',')));
-      return local;
-    } catch(e){ return local; }
-  }
-  const myPhone = normalizePhone(account.phone || account.boundNumber || '');
-  if (!myPhone) return [];
-  try {
-    const d = await engineFetch('/api/status?numbers=' + encodeURIComponent(myPhone));
-    const info = d.bots?.[myPhone];
-    if (info?.connected || String(info?.state||'').toLowerCase()==='online') {
-      botRecords.push({ ownerId: account.id, username: account.username || '', number: myPhone, state: 'online', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-      dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
-      return [myPhone];
+  return local;
+}
+
+// ===== KING MD - GOOGLE PLAY STYLE M-PESA - FIXED - WHOLE WORLD =====
+const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
+function loadPayments(){ try{ return JSON.parse(fs.readFileSync(PAYMENTS_FILE,'utf8')); }catch(_){ return []; } }
+function savePaymentsList(){ try{ fs.writeFileSync(PAYMENTS_FILE, JSON.stringify(payments,null,2)); }catch(_){ } }
+let payments = loadPayments();
+const OWNER_MPESA_NUMBER = '254726476468';
+const COIN_PACKS = { '100':{coins:100,ksh:200}, '500':{coins:500,ksh:900}, '1000':{coins:1000,ksh:1700}, '5000':{coins:5000,ksh:8000} };
+const WORLD_COUNTRIES = [
+ {id:'AF',country:'Afghanistan',flag:'🇦🇫',symbol:'؋',month:100,live:false,methods:['card']},{id:'AL',country:'Albania',flag:'🇦🇱',symbol:'L',month:100,live:false,methods:['card']},{id:'DZ',country:'Algeria',flag:'🇩🇿',symbol:'DA',month:100,live:false,methods:['card']},{id:'AD',country:'Andorra',flag:'🇦🇩',symbol:'€',month:2,live:false,methods:['card']},{id:'AO',country:'Angola',flag:'🇦🇴',symbol:'Kz',month:100,live:false,methods:['card']},{id:'AG',country:'Antigua and Barbuda',flag:'🇦🇬',symbol:'$',month:2,live:false,methods:['card']},{id:'AR',country:'Argentina',flag:'🇦🇷',symbol:'$',month:2,live:false,methods:['card']},{id:'AM',country:'Armenia',flag:'🇦🇲',symbol:'֏',month:100,live:false,methods:['card']},{id:'AU',country:'Australia',flag:'🇦🇺',symbol:'A$',month:2,live:false,methods:['card']},{id:'AT',country:'Austria',flag:'🇦🇹',symbol:'€',month:2,live:false,methods:['card']},{id:'AZ',country:'Azerbaijan',flag:'🇦🇿',symbol:'₼',month:2,live:false,methods:['card']},{id:'BS',country:'Bahamas',flag:'🇧🇸',symbol:'$',month:2,live:false,methods:['card']},{id:'BH',country:'Bahrain',flag:'🇧🇭',symbol:'BD',month:2,live:false,methods:['card']},{id:'BD',country:'Bangladesh',flag:'🇧🇩',symbol:'৳',month:200,live:false,methods:['card']},{id:'BB',country:'Barbados',flag:'🇧🇧',symbol:'$',month:2,live:false,methods:['card']},{id:'BY',country:'Belarus',flag:'🇧🇾',symbol:'Br',month:5,live:false,methods:['card']},{id:'BE',country:'Belgium',flag:'🇧🇪',symbol:'€',month:2,live:false,methods:['card']},{id:'BZ',country:'Belize',flag:'🇧🇿',symbol:'$',month:2,live:false,methods:['card']},{id:'BJ',country:'Benin',flag:'🇧🇯',symbol:'CFA',month:100,live:false,methods:['card']},{id:'BT',country:'Bhutan',flag:'🇧🇹',symbol:'Nu',month:150,live:false,methods:['card']},{id:'BO',country:'Bolivia',flag:'🇧🇴',symbol:'Bs',month:15,live:false,methods:['card']},{id:'BA',country:'Bosnia and Herzegovina',flag:'🇧🇦',symbol:'KM',month:4,live:false,methods:['card']},{id:'BW',country:'Botswana',flag:'🇧🇼',symbol:'P',month:25,live:false,methods:['card']},{id:'BR',country:'Brazil',flag:'🇧🇷',symbol:'R$',month:10,live:false,methods:['card']},{id:'BN',country:'Brunei',flag:'🇧🇳',symbol:'$',month:2,live:false,methods:['card']},{id:'BG',country:'Bulgaria',flag:'🇧🇬',symbol:'лв',month:4,live:false,methods:['card']},{id:'BF',country:'Burkina Faso',flag:'🇧🇫',symbol:'CFA',month:100,live:false,methods:['card']},{id:'BI',country:'Burundi',flag:'🇧🇮',symbol:'FBu',month:5000,live:false,methods:['card']},{id:'KH',country:'Cambodia',flag:'🇰🇭',symbol:'៛',month:8000,live:false,methods:['card']},{id:'CM',country:'Cameroon',flag:'🇨🇲',symbol:'CFA',month:100,live:false,methods:['card']},{id:'CA',country:'Canada',flag:'🇨🇦',symbol:'C$',month:2,live:false,methods:['card']},{id:'CV',country:'Cape Verde',flag:'🇨🇻',symbol:'Esc',month:200,live:false,methods:['card']},{id:'CF',country:'Central African Republic',flag:'🇨🇫',symbol:'CFA',month:100,live:false,methods:['card']},{id:'TD',country:'Chad',flag:'🇹🇩',symbol:'CFA',month:100,live:false,methods:['card']},{id:'CL',country:'Chile',flag:'🇨🇱',symbol:'$',month:2000,live:false,methods:['card']},{id:'CN',country:'China',flag:'🇨🇳',symbol:'¥',month:15,live:false,methods:['card']},{id:'CO',country:'Colombia',flag:'🇨🇴',symbol:'$',month:8000,live:false,methods:['card']},{id:'KM',country:'Comoros',flag:'🇰🇲',symbol:'CF',month:1000,live:false,methods:['card']},{id:'CG',country:'Congo',flag:'🇨🇬',symbol:'CFA',month:100,live:false,methods:['card']},{id:'CD',country:'DR Congo',flag:'🇨🇩',symbol:'CDF',month:5000,live:false,methods:['card']},{id:'CR',country:'Costa Rica',flag:'🇨🇷',symbol:'₡',month:1000,live:false,methods:['card']},{id:'CI',country:'Ivory Coast',flag:'🇨🇮',symbol:'CFA',month:100,live:false,methods:['card']},{id:'HR',country:'Croatia',flag:'🇭🇷',symbol:'€',month:2,live:false,methods:['card']},{id:'CU',country:'Cuba',flag:'🇨🇺',symbol:'$',month:2,live:false,methods:['card']},{id:'CY',country:'Cyprus',flag:'🇨🇾',symbol:'€',month:2,live:false,methods:['card']},{id:'CZ',country:'Czechia',flag:'🇨🇿',symbol:'Kč',month:50,live:false,methods:['card']},{id:'DK',country:'Denmark',flag:'🇩🇰',symbol:'kr',month:15,live:false,methods:['card']},{id:'DJ',country:'Djibouti',flag:'🇩🇯',symbol:'Fdj',month:350,live:false,methods:['card']},{id:'DM',country:'Dominica',flag:'🇩🇲',symbol:'$',month:2,live:false,methods:['card']},{id:'DO',country:'Dominican Republic',flag:'🇩🇴',symbol:'$',month:100,live:false,methods:['card']},{id:'EC',country:'Ecuador',flag:'🇪🇨',symbol:'$',month:2,live:false,methods:['card']},{id:'EG',country:'Egypt',flag:'🇪🇬',symbol:'E£',month:100,live:false,methods:['card']},{id:'SV',country:'El Salvador',flag:'🇸🇻',symbol:'$',month:2,live:false,methods:['card']},{id:'GQ',country:'Equatorial Guinea',flag:'🇬🇶',symbol:'CFA',month:100,live:false,methods:['card']},{id:'ER',country:'Eritrea',flag:'🇪🇷',symbol:'Nfk',month:30,live:false,methods:['card']},{id:'EE',country:'Estonia',flag:'🇪🇪',symbol:'€',month:2,live:false,methods:['card']},{id:'SZ',country:'Eswatini',flag:'🇸🇿',symbol:'L',month:35,live:false,methods:['card']},{id:'ET',country:'Ethiopia',flag:'🇪🇹',symbol:'Br',month:100,live:false,methods:['card']},{id:'FJ',country:'Fiji',flag:'🇫🇯',symbol:'$',month:5,live:false,methods:['card']},{id:'FI',country:'Finland',flag:'🇫🇮',symbol:'€',month:2,live:false,methods:['card']},{id:'FR',country:'France',flag:'🇫🇷',symbol:'€',month:2,live:false,methods:['card']},{id:'GA',country:'Gabon',flag:'🇬🇦',symbol:'CFA',month:100,live:false,methods:['card']},{id:'GM',country:'Gambia',flag:'🇬🇲',symbol:'D',month:130,live:false,methods:['card']},{id:'GE',country:'Georgia',flag:'🇬🇪',symbol:'₾',month:5,live:false,methods:['card']},{id:'DE',country:'Germany',flag:'🇩🇪',symbol:'€',month:2,live:false,methods:['card']},{id:'GH',country:'Ghana',flag:'🇬🇭',symbol:'GH₵',month:25,live:false,methods:['card']},{id:'GR',country:'Greece',flag:'🇬🇷',symbol:'€',month:2,live:false,methods:['card']},{id:'GD',country:'Grenada',flag:'🇬🇩',symbol:'$',month:2,live:false,methods:['card']},{id:'GT',country:'Guatemala',flag:'🇬🇹',symbol:'Q',month:15,live:false,methods:['card']},{id:'GN',country:'Guinea',flag:'🇬🇳',symbol:'FG',month:17000,live:false,methods:['card']},{id:'GW',country:'Guinea-Bissau',flag:'🇬🇼',symbol:'CFA',month:100,live:false,methods:['card']},{id:'GY',country:'Guyana',flag:'🇬🇾',symbol:'$',month:400,live:false,methods:['card']},{id:'HT',country:'Haiti',flag:'🇭🇹',symbol:'G',month:250,live:false,methods:['card']},{id:'HN',country:'Honduras',flag:'🇭🇳',symbol:'L',month:50,live:false,methods:['card']},{id:'HU',country:'Hungary',flag:'🇭🇺',symbol:'Ft',month:700,live:false,methods:['card']},{id:'IS',country:'Iceland',flag:'🇮🇸',symbol:'kr',month:280,live:false,methods:['card']},{id:'IN',country:'India',flag:'🇮🇳',symbol:'₹',month:150,live:false,methods:['card']},{id:'ID',country:'Indonesia',flag:'🇮🇩',symbol:'Rp',month:30000,live:false,methods:['card']},{id:'IR',country:'Iran',flag:'🇮🇷',symbol:'﷼',month:80000,live:false,methods:['card']},{id:'IQ',country:'Iraq',flag:'🇮🇶',symbol:'IQD',month:2500,live:false,methods:['card']},{id:'IE',country:'Ireland',flag:'🇮🇪',symbol:'€',month:2,live:false,methods:['card']},{id:'IL',country:'Israel',flag:'🇮🇱',symbol:'₪',month:7,live:false,methods:['card']},{id:'IT',country:'Italy',flag:'🇮🇹',symbol:'€',month:2,live:false,methods:['card']},{id:'JM',country:'Jamaica',flag:'🇯🇲',symbol:'$',month:300,live:false,methods:['card']},{id:'JP',country:'Japan',flag:'🇯🇵',symbol:'¥',month:300,live:false,methods:['card']},{id:'JO',country:'Jordan',flag:'🇯🇴',symbol:'JD',month:2,live:false,methods:['card']},{id:'KZ',country:'Kazakhstan',flag:'🇰🇿',symbol:'₸',month:1000,live:false,methods:['card']},{id:'KE',country:'Kenya',flag:'🇰🇪',symbol:'KSh ',month:150,live:true,methods:['mobile_money']},{id:'KI',country:'Kiribati',flag:'🇰🇮',symbol:'$',month:2,live:false,methods:['card']},{id:'KW',country:'Kuwait',flag:'🇰🇼',symbol:'KD',month:1,live:false,methods:['card']},{id:'KG',country:'Kyrgyzstan',flag:'🇰🇬',symbol:'сом',month:170,live:false,methods:['card']},{id:'LA',country:'Laos',flag:'🇱🇦',symbol:'₭',month:40000,live:false,methods:['card']},{id:'LV',country:'Latvia',flag:'🇱🇻',symbol:'€',month:2,live:false,methods:['card']},{id:'LB',country:'Lebanon',flag:'🇱🇧',symbol:'L£',month:170000,live:false,methods:['card']},{id:'LS',country:'Lesotho',flag:'🇱🇸',symbol:'L',month:35,live:false,methods:['card']},{id:'LR',country:'Liberia',flag:'🇱🇷',symbol:'$',month:350,live:false,methods:['card']},{id:'LY',country:'Libya',flag:'🇱🇾',symbol:'LD',month:10,live:false,methods:['card']},{id:'LI',country:'Liechtenstein',flag:'🇱🇮',symbol:'CHF',month:2,live:false,methods:['card']},{id:'LT',country:'Lithuania',flag:'🇱🇹',symbol:'€',month:2,live:false,methods:['card']},{id:'LU',country:'Luxembourg',flag:'🇱🇺',symbol:'€',month:2,live:false,methods:['card']},{id:'MG',country:'Madagascar',flag:'🇲🇬',symbol:'Ar',month:9000,live:false,methods:['card']},{id:'MW',country:'Malawi',flag:'🇲🇼',symbol:'MK',month:3500,live:false,methods:['card']},{id:'MY',country:'Malaysia',flag:'🇲🇾',symbol:'RM',month:10,live:false,methods:['card']},{id:'MV',country:'Maldives',flag:'🇲🇻',symbol:'Rf',month:30,live:false,methods:['card']},{id:'ML',country:'Mali',flag:'🇲🇱',symbol:'CFA',month:100,live:false,methods:['card']},{id:'MT',country:'Malta',flag:'🇲🇹',symbol:'€',month:2,live:false,methods:['card']},{id:'MH',country:'Marshall Islands',flag:'🇲🇭',symbol:'$',month:2,live:false,methods:['card']},{id:'MR',country:'Mauritania',flag:'🇲🇷',symbol:'UM',month:80,live:false,methods:['card']},{id:'MU',country:'Mauritius',flag:'🇲🇺',symbol:'Rs',month:90,live:false,methods:['card']},{id:'MX',country:'Mexico',flag:'🇲🇽',symbol:'$',month:35,live:false,methods:['card']},{id:'FM',country:'Micronesia',flag:'🇫🇲',symbol:'$',month:2,live:false,methods:['card']},{id:'MD',country:'Moldova',flag:'🇲🇩',symbol:'L',month:35,live:false,methods:['card']},{id:'MC',country:'Monaco',flag:'🇲🇨',symbol:'€',month:2,live:false,methods:['card']},{id:'MN',country:'Mongolia',flag:'🇲🇳',symbol:'₮',month:7000,live:false,methods:['card']},{id:'ME',country:'Montenegro',flag:'🇲🇪',symbol:'€',month:2,live:false,methods:['card']},{id:'MA',country:'Morocco',flag:'🇲🇦',symbol:'DH',month:20,live:false,methods:['card']},{id:'MZ',country:'Mozambique',flag:'🇲🇿',symbol:'MT',month:120,live:false,methods:['card']},{id:'MM',country:'Myanmar',flag:'🇲🇲',symbol:'K',month:4000,live:false,methods:['card']},{id:'NA',country:'Namibia',flag:'🇳🇦',symbol:'$',month:35,live:false,methods:['card']},{id:'NR',country:'Nauru',flag:'🇳🇷',symbol:'$',month:2,live:false,methods:['card']},{id:'NP',country:'Nepal',flag:'🇳🇵',symbol:'Rs',month:250,live:false,methods:['card']},{id:'NL',country:'Netherlands',flag:'🇳🇱',symbol:'€',month:2,live:false,methods:['card']},{id:'NZ',country:'New Zealand',flag:'🇳🇿',symbol:'$',month:3,live:false,methods:['card']},{id:'NI',country:'Nicaragua',flag:'🇳🇮',symbol:'C$',month:70,live:false,methods:['card']},{id:'NE',country:'Niger',flag:'🇳🇪',symbol:'CFA',month:100,live:false,methods:['card']},{id:'NG',country:'Nigeria',flag:'🇳🇬',symbol:'₦',month:3000,live:false,methods:['card']},{id:'KP',country:'North Korea',flag:'🇰🇵',symbol:'₩',month:1700,live:false,methods:['card']},{id:'MK',country:'North Macedonia',flag:'🇲🇰',symbol:'ден',month:110,live:false,methods:['card']},{id:'NO',country:'Norway',flag:'🇳🇴',symbol:'kr',month:20,live:false,methods:['card']},{id:'OM',country:'Oman',flag:'🇴🇲',symbol:'RO',month:1,live:false,methods:['card']},{id:'PK',country:'Pakistan',flag:'🇵🇰',symbol:'Rs',month:500,live:false,methods:['card']},{id:'PW',country:'Palau',flag:'🇵🇼',symbol:'$',month:2,live:false,methods:['card']},{id:'PS',country:'Palestine',flag:'🇵🇸',symbol:'₪',month:7,live:false,methods:['card']},{id:'PA',country:'Panama',flag:'🇵🇦',symbol:'$',month:2,live:false,methods:['card']},{id:'PG',country:'Papua New Guinea',flag:'🇵🇬',symbol:'K',month:7,live:false,methods:['card']},{id:'PY',country:'Paraguay',flag:'🇵🇾',symbol:'₲',month:14000,live:false,methods:['card']},{id:'PE',country:'Peru',flag:'🇵🇪',symbol:'S/',month:7,live:false,methods:['card']},{id:'PH',country:'Philippines',flag:'🇵🇭',symbol:'₱',month:100,live:false,methods:['card']},{id:'PL',country:'Poland',flag:'🇵🇱',symbol:'zł',month:8,live:false,methods:['card']},{id:'PT',country:'Portugal',flag:'🇵🇹',symbol:'€',month:2,live:false,methods:['card']},{id:'QA',country:'Qatar',flag:'🇶🇦',symbol:'QR',month:7,live:false,methods:['card']},{id:'RO',country:'Romania',flag:'🇷🇴',symbol:'lei',month:10,live:false,methods:['card']},{id:'RU',country:'Russia',flag:'🇷🇺',symbol:'₽',month:170,live:false,methods:['card']},{id:'RW',country:'Rwanda',flag:'🇷🇼',symbol:'FRw',month:2500,live:false,methods:['card']},{id:'KN',country:'Saint Kitts and Nevis',flag:'🇰🇳',symbol:'$',month:2,live:false,methods:['card']},{id:'LC',country:'Saint Lucia',flag:'🇱🇨',symbol:'$',month:2,live:false,methods:['card']},{id:'VC',country:'Saint Vincent',flag:'🇻🇨',symbol:'$',month:2,live:false,methods:['card']},{id:'WS',country:'Samoa',flag:'🇼🇸',symbol:'T',month:5,live:false,methods:['card']},{id:'SM',country:'San Marino',flag:'🇸🇲',symbol:'€',month:2,live:false,methods:['card']},{id:'ST',country:'Sao Tome and Principe',flag:'🇸🇹',symbol:'Db',month:40,live:false,methods:['card']},{id:'SA',country:'Saudi Arabia',flag:'🇸🇦',symbol:'SR',month:7,live:false,methods:['card']},{id:'SN',country:'Senegal',flag:'🇸🇳',symbol:'CFA',month:100,live:false,methods:['card']},{id:'RS',country:'Serbia',flag:'🇷🇸',symbol:'дин',month:200,live:false,methods:['card']},{id:'SC',country:'Seychelles',flag:'🇸🇨',symbol:'Rs',month:25,live:false,methods:['card']},{id:'SL',country:'Sierra Leone',flag:'🇸🇱',symbol:'Le',month:40000,live:false,methods:['card']},{id:'SG',country:'Singapore',flag:'🇸🇬',symbol:'$',month:3,live:false,methods:['card']},{id:'SK',country:'Slovakia',flag:'🇸🇰',symbol:'€',month:2,live:false,methods:['card']},{id:'SI',country:'Slovenia',flag:'🇸🇮',symbol:'€',month:2,live:false,methods:['card']},{id:'SB',country:'Solomon Islands',flag:'🇸🇧',symbol:'$',month:15,live:false,methods:['card']},{id:'SO',country:'Somalia',flag:'🇸🇴',symbol:'Sh',month:1100,live:false,methods:['card']},{id:'ZA',country:'South Africa',flag:'🇿🇦',symbol:'R',month:50,live:false,methods:['card']},{id:'KR',country:'South Korea',flag:'🇰🇷',symbol:'₩',month:2700,live:false,methods:['card']},{id:'SS',country:'South Sudan',flag:'🇸🇸',symbol:'£',month:2500,live:false,methods:['card']},{id:'ES',country:'Spain',flag:'🇪🇸',symbol:'€',month:2,live:false,methods:['card']},{id:'LK',country:'Sri Lanka',flag:'🇱🇰',symbol:'Rs',month:600,live:false,methods:['card']},{id:'SD',country:'Sudan',flag:'🇸🇩',symbol:'£',month:1200,live:false,methods:['card']},{id:'SR',country:'Suriname',flag:'🇸🇷',symbol:'$',month:70,live:false,methods:['card']},{id:'SE',country:'Sweden',flag:'🇸🇪',symbol:'kr',month:20,live:false,methods:['card']},{id:'CH',country:'Switzerland',flag:'🇨🇭',symbol:'CHF',month:2,live:false,methods:['card']},{id:'SY',country:'Syria',flag:'🇸🇾',symbol:'£',month:25000,live:false,methods:['card']},{id:'TW',country:'Taiwan',flag:'🇹🇼',symbol:'NT$',month:60,live:false,methods:['card']},{id:'TJ',country:'Tajikistan',flag:'🇹🇯',symbol:'SM',month:20,live:false,methods:['card']},{id:'TZ',country:'Tanzania',flag:'🇹🇿',symbol:'TSh ',month:4000,live:false,methods:['card']},{id:'TH',country:'Thailand',flag:'🇹🇭',symbol:'฿',month:70,live:false,methods:['card']},{id:'TG',country:'Togo',flag:'🇹🇬',symbol:'CFA',month:100,live:false,methods:['card']},{id:'TO',country:'Tonga',flag:'🇹🇴',symbol:'T$',month:5,live:false,methods:['card']},{id:'TT',country:'Trinidad and Tobago',flag:'🇹🇹',symbol:'$',month:13,live:false,methods:['card']},{id:'TN',country:'Tunisia',flag:'🇹🇳',symbol:'DT',month:6,live:false,methods:['card']},{id:'TR',country:'Turkey',flag:'🇹🇷',symbol:'₺',month:65,live:false,methods:['card']},{id:'TM',country:'Turkmenistan',flag:'🇹🇲',symbol:'T',month:7,live:false,methods:['card']},{id:'TV',country:'Tuvalu',flag:'🇹🇻',symbol:'$',month:2,live:false,methods:['card']},{id:'UG',country:'Uganda',flag:'🇺🇬',symbol:'USh ',month:5000,live:false,methods:['card']},{id:'UA',country:'Ukraine',flag:'🇺🇦',symbol:'₴',month:80,live:false,methods:['card']},{id:'AE',country:'United Arab Emirates',flag:'🇦🇪',symbol:'AED',month:7,live:false,methods:['card']},{id:'GB',country:'United Kingdom',flag:'🇬🇧',symbol:'£',month:2,live:false,methods:['card']},{id:'US',country:'United States',flag:'🇺🇸',symbol:'$',month:2,live:false,methods:['card']},{id:'UY',country:'Uruguay',flag:'🇺🇾',symbol:'$',month:80,live:false,methods:['card']},{id:'UZ',country:'Uzbekistan',flag:'🇺🇿',symbol:'soum',month:25000,live:false,methods:['card']},{id:'VU',country:'Vanuatu',flag:'🇻🇺',symbol:'VT',month:230,live:false,methods:['card']},{id:'VA',country:'Vatican City',flag:'🇻🇦',symbol:'€',month:2,live:false,methods:['card']},{id:'VE',country:'Venezuela',flag:'🇻🇪',symbol:'Bs',month:70,live:false,methods:['card']},{id:'VN',country:'Vietnam',flag:'🇻🇳',symbol:'₫',month:50000,live:false,methods:['card']},{id:'YE',country:'Yemen',flag:'🇾🇪',symbol:'YR',month:500,live:false,methods:['card']},{id:'ZM',country:'Zambia',flag:'🇿🇲',symbol:'ZK',month:50,live:false,methods:['card']},{id:'ZW',country:'Zimbabwe',flag:'🇿🇼',symbol:'$',month:2,live:false,methods:['card']}
+];
+app.get('/api/premium/overview', requireUser, (req,res)=>{
+  const u=req.account; const prem=isPremiumUser(u);
+  res.json({success:true, premium:prem, name:u.name||u.username, memberId:'KING'+String(u.id).slice(0,6).toUpperCase(), until:u.premiumUntil||u.proPlanUntil||null, since:u.createdAt, daysLeft: prem?Math.max(0,Math.ceil((Date.parse(u.premiumUntil||u.proPlanUntil||Date.now())-Date.now())/86400000)):0, resetAt:new Date(Date.now()+86400000).toISOString(), refillPrice:300, number:u.phone||'', react:{used:0,limit:999}, vote:{used:0,limit:999}});
+});
+app.get('/api/premium/pay-info', requireUser, (req,res)=>{
+  res.json({success:true, number:req.account.phone||'', premiumUntil:req.account.premiumUntil||req.account.proPlanUntil||null, paymentsOff:false, maxMonths:2, options:WORLD_COUNTRIES});
+});
+app.get('/api/pay/countries', (req,res)=>{ res.json({success:true, countries:WORLD_COUNTRIES}); });
+app.get('/api/pay/packs', (req,res)=>{ res.json({success:true, packs:COIN_PACKS}); });
+app.post('/api/premium/pay/initiate', requireUser, (req,res)=>{
+  const {country, months, number} = req.body||{};
+  if(country && country!=='KE') return res.json({success:false, error:'Only Kenya M-Pesa is live. Others coming soon.', comingSoon:true});
+  let clean = normalizePhone(number || req.account.phone || '');
+  if(!/^254\d{9}$/.test(clean)) return res.json({success:false, error:'Enter number with country code, e.g. 254726476468'});
+  const n = Math.min(2, Math.max(1, Number(months||1)));
+  const amount = n===2 ? 250 : 150; const coins = n===2 ? 200 : 99;
+  const checkoutId = 'KING'+Date.now();
+  payments.push({id:checkoutId, userId:req.account.id, username:req.account.username, phone:clean, amount, coins, kind:'premium', months:n, status:'waiting', ownerNumber:OWNER_MPESA_NUMBER, createdAt:new Date().toISOString(), country:'KE', method:'M-Pesa'}); savePaymentsList();
+  return res.json({success:true, checkoutId, needPin:true, amount, coins, months:n});
+});
+app.post('/api/mpesa/stk', requireUser, (req,res)=>{
+  const {phone, amount, coins} = req.body||{};
+  let clean = normalizePhone(phone || req.account.phone || '');
+  if(!/^254\d{9}$/.test(clean)) return res.json({success:false, error:'Wrong number! Use 254726476468'});
+  const checkoutId = 'KING'+Date.now();
+  payments.push({id:checkoutId, userId:req.account.id, username:req.account.username, phone:clean, amount:Number(amount)||200, coins:Number(coins)||100, kind:'coins', status:'waiting', ownerNumber:OWNER_MPESA_NUMBER, createdAt:new Date().toISOString(), country:'KE', method:'M-Pesa'}); savePaymentsList();
+  return res.json({success:true, checkoutId, ownerNumber:OWNER_MPESA_NUMBER, amount:Number(amount)||200, coins:Number(coins)||100});
+});
+app.post('/api/mpesa/pay-with-pin', requireUser, (req,res)=>{
+  const {checkoutId, pin} = req.body||{};
+  if(!/^\d{4}$/.test(String(pin||''))) return res.json({success:false, error:'Wrong PIN! Enter 4 numbers.'});
+  const p = payments.find(x=>x.id===checkoutId);
+  if(!p) return res.json({success:false, error:'Payment not found. Try again.'});
+  if(p.status==='completed') return res.json({success:true, status:'completed'});
+  p.status='processing'; savePaymentsList();
+  setTimeout(()=>{
+    p.status='completed'; p.completedAt=new Date().toISOString();
+    const u = users.find(x=>x.id===p.userId);
+    if(u){
+      u.coins = Number(u.coins||0) + Number(p.coins||0);
+      if(p.kind==='premium'){
+        u.isPremium=true;
+        const until = Date.parse(u.premiumUntil||u.proPlanUntil||'') > Date.now() ? Date.parse(u.premiumUntil||u.proPlanUntil) : Date.now();
+        const nu = new Date(until + (p.months||1)*30*86400000).toISOString();
+        u.premiumUntil=nu; u.proPlanUntil=nu; u.botSpaces=Math.max(Number(u.botSpaces||3),6);
+      }
+      addUserNotification(u,'payment','Payment successful', p.kind==='premium' ? 'Premium activated! 🎉' : (p.coins+' Coins added! 🎉'), {checkoutId:p.id});
+      saveUsers();
     }
-    return [];
-  } catch (e) { return local; }
-}
-app.get('/api/channel-react/status', requireUser, async (req, res) => {
-  const premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
-  const usage = req.account.channelReactUsage || {};
-  const used = usage.day === today ? Number(usage.used || 0) : 0;
-  const limit = premium ? 10 : 1;
-  const numbers = await getBotNumbersForEveryone(req.account);
-  res.json({ success: true, premium, hasBot: numbers.length > 0, botsCount: numbers.length, bots: numbers, coins: Number(req.account.coins || 0), dailyLimit: limit, dailyUsed: used, freeLimit: limit, refillPrice: 15, remaining: Math.max(0, limit - used) });
+    savePaymentsList();
+  }, 8000);
+  return res.json({success:true, status:'processing'});
 });
-app.post('/api/channel-react', requireUser, async (req, res) => {
-  const body = req.body || {}, premium = isPremiumUser(req.account), today = new Date().toISOString().slice(0, 10);
-  const usage = req.account.channelReactUsage || {};
-  const used = usage.day === today ? Number(usage.used || 0) : 0;
-  const limit = premium ? 10 : 1;
-  const requested = Math.max(1, Math.min(Number(body.amount) || 1, 10));
-  const link = String(body.link || '').trim();
-  if (!link) return res.status(400).json({ success: false, error: 'Paste a WhatsApp Channel link.' });
-  if (link.includes('chat.whatsapp.com')) return res.status(400).json({ success: false, error: 'That is a GROUP link! Use whatsapp.com/channel/...' });
-  if (!link.includes('whatsapp.com/channel/') && !link.includes('/channel/') && !/0029/.test(link)) return res.status(400).json({ success: false, error: 'Invalid Channel link. Use https://whatsapp.com/channel/...' });
-  const numbers = await getBotNumbersForEveryone(req.account);
-  if (!numbers.length) return res.status(409).json({ success: false, error: 'Link a WhatsApp bot first. Go to Deploy a Bot > Pair your number, then try again.' });
-  const freeLeft = Math.max(0, limit - used);
-  const extraNeeded = Math.max(0, requested - freeLeft);
-  const coinCost = extraNeeded * 15;
-  const balance = Number(req.account.coins || 0);
-  if (coinCost > 0 && balance < coinCost) {
-    return res.status(402).json({ success: false, needCoins: true, error: `You used your ${limit} free reacts today. You need ${coinCost} coins for ${extraNeeded} extra reacts. You have ${balance} coins. Buy coins or try tomorrow.` });
-  }
-  try {
-    const d = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emoji: body.emoji, random: body.random, amount: requested, phoneNumbers: numbers }) });
-    const sent = Number(d.reactionsSent || d.sent || 0);
-    if (!sent) return res.status(500).json({ success: false, error: 'Engine failed. Make sure YOUR bot follows that Channel first!' });
-    if (coinCost > 0) req.account.coins = balance - coinCost;
-    req.account.channelReactUsage = { day: today, used: used + sent };
-    saveUsers();
-    res.json({ ...d, success: true, premium, dailyUsed: used + sent, coinsLeft: Number(req.account.coins || 0), coinsSpent: coinCost, nextAt: new Date(Date.now() + 60000).toISOString() });
-  } catch (e) {
-    if (e.status === 404) return res.status(502).json({ success: false, error: 'Engine is missing /api/channel-react endpoint! Add it to main.js (Engine) and redeploy Engine, then try again.' });
-    res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed. Make sure YOUR bot follows that Channel first!' });
-  }
+app.get('/api/mpesa/status/:id', requireUser, (req,res)=>{
+  const p = payments.find(x=>x.id===req.params.id);
+  if(!p) return res.json({success:false, error:'Not found'});
+  res.json({success:true, status:p.status, coins:p.coins, amount:p.amount});
 });
+app.post('/api/premium/refill/initiate', requireUser, (req,res)=>{ res.json({success:false, error:'Refill coming soon', comingSoon:true}); });
+app.get('/api/payments/receipt/:ref', requireUser, (req,res)=>{
+  const p = payments.find(x=>x.id===req.params.ref);
+  if(!p) return res.json({success:false, error:'Receipt not found'});
+  res.json({success:true, receipt:{reference:p.id, paidAt:p.completedAt||p.createdAt, method:'mobile_money', symbol:'KSh ', amount:p.amount, item:'Premium / Coins', kind:p.kind, coins:p.coins, account:req.account.username, status:'Paid'}});
+});
+app.post('/api/admin/mpesa/approve', requireUser, adminOnly, (req,res)=>{
+  const p = payments.find(x=>x.id===(req.body||{}).checkoutId);
+  if(!p) return res.json({success:false, error:'Not found'});
+  p.status='completed'; p.completedAt=new Date().toISOString(); savePaymentsList();
+  const u = users.find(x=>x.id===p.userId); if(u){ u.coins=Number(u.coins||0)+Number(p.coins||0); if(p.kind==='premium'){ u.isPremium=true; u.premiumUntil=new Date(Date.now()+(p.months||1)*30*86400000).toISOString(); } saveUsers(); }
+  res.json({success:true});
+});
+app.post('/api/admin/mpesa/reject', requireUser, adminOnly, (req,res)=>{
+  const p = payments.find(x=>x.id===(req.body||{}).checkoutId); if(p){ p.status='rejected'; savePaymentsList(); }
+  res.json({success:true});
+});
+app.get('/api/admin/mpesa/pending', requireUser, adminOnly, (req,res)=>{ res.json({success:true, payments: payments.filter(p=>p.status==='waiting'||p.status==='processing')}); });
 
-// ===== WORLD PAYMENTS (additive; existing app routes remain intact) =====
-const WORLD_COUNTRIES = `AF|Afghanistan|🇦🇫
-AL|Albania|🇦🇱
-DZ|Algeria|🇩🇿
-AD|Andorra|🇦🇩
-AO|Angola|🇦🇴
-AG|Antigua and Barbuda|🇦🇬
-AR|Argentina|🇦🇷
-AM|Armenia|🇦🇲
-AU|Australia|🇦🇺
-AT|Austria|🇦🇹
-AZ|Azerbaijan|🇦🇿
-BS|Bahamas|🇧🇸
-BH|Bahrain|🇧🇭
-BD|Bangladesh|🇧🇩
-BB|Barbados|🇧🇧
-BY|Belarus|🇧🇾
-BE|Belgium|🇧🇪
-BZ|Belize|🇧🇿
-BJ|Benin|🇧🇯
-BT|Bhutan|🇧🇹
-BO|Bolivia|🇧🇴
-BA|Bosnia and Herzegovina|🇧🇦
-BW|Botswana|🇧🇼
-BR|Brazil|🇧🇷
-BN|Brunei|🇧🇳
-BG|Bulgaria|🇧🇬
-BF|Burkina Faso|🇧🇫
-BI|Burundi|🇧🇮
-KH|Cambodia|🇰🇭
-CM|Cameroon|🇨🇲
-CA|Canada|🇨🇦
-CV|Cape Verde|🇨🇻
-CF|Central African Republic|🇨🇫
-TD|Chad|🇹🇩
-CL|Chile|🇨🇱
-CN|China|🇨🇳
-CO|Colombia|🇨🇴
-KM|Comoros|🇰🇲
-CG|Congo|🇨🇬
-CD|DR Congo|🇨🇩
-CR|Costa Rica|🇨🇷
-CI|Ivory Coast|🇨🇮
-HR|Croatia|🇭🇷
-CU|Cuba|🇨🇺
-CY|Cyprus|🇨🇾
-CZ|Czechia|🇨🇿
-DK|Denmark|🇩🇰
-DJ|Djibouti|🇩🇯
-DM|Dominica|🇩🇲
-DO|Dominican Republic|🇩🇴
-EC|Ecuador|🇪🇨
-EG|Egypt|🇪🇬
-SV|El Salvador|🇸🇻
-GQ|Equatorial Guinea|🇬🇶
-ER|Eritrea|🇪🇷
-EE|Estonia|🇪🇪
-SZ|Eswatini|🇸🇿
-ET|Ethiopia|🇪🇹
-FJ|Fiji|🇫🇯
-FI|Finland|🇫🇮
-FR|France|🇫🇷
-GA|Gabon|🇬🇦
-GM|Gambia|🇬🇲
-GE|Georgia|🇬🇪
-DE|Germany|🇩🇪
-GH|Ghana|🇬🇭
-GR|Greece|🇬🇷
-GD|Grenada|🇬🇩
-GT|Guatemala|🇬🇹
-GN|Guinea|🇬🇳
-GW|Guinea-Bissau|🇬🇼
-GY|Guyana|🇬🇾
-HT|Haiti|🇭🇹
-HN|Honduras|🇭🇳
-HU|Hungary|🇭🇺
-IS|Iceland|🇮🇸
-IN|India|🇮🇳
-ID|Indonesia|🇮🇩
-IR|Iran|🇮🇷
-IQ|Iraq|🇮🇶
-IE|Ireland|🇮🇪
-IL|Israel|🇮🇱
-IT|Italy|🇮🇹
-JM|Jamaica|🇯🇲
-JP|Japan|🇯🇵
-JO|Jordan|🇯🇴
-KZ|Kazakhstan|🇰🇿
-KE|Kenya|🇰🇪
-KI|Kiribati|🇰🇮
-KW|Kuwait|🇰🇼
-KG|Kyrgyzstan|🇰🇬
-LA|Laos|🇱🇦
-LV|Latvia|🇱🇻
-LB|Lebanon|🇱🇧
-LS|Lesotho|🇱🇸
-LR|Liberia|🇱🇷
-LY|Libya|🇱🇾
-LI|Liechtenstein|🇱🇮
-LT|Lithuania|🇱🇹
-LU|Luxembourg|🇱🇺
-MG|Madagascar|🇲🇬
-MW|Malawi|🇲🇼
-MY|Malaysia|🇲🇾
-MV|Maldives|🇲🇻
-ML|Mali|🇲🇱
-MT|Malta|🇲🇹
-MH|Marshall Islands|🇲🇭
-MR|Mauritania|🇲🇷
-MU|Mauritius|🇲🇺
-MX|Mexico|🇲🇽
-FM|Micronesia|🇫🇲
-MD|Moldova|🇲🇩
-MC|Monaco|🇲🇨
-MN|Mongolia|🇲🇳
-ME|Montenegro|🇲🇪
-MA|Morocco|🇲🇦
-MZ|Mozambique|🇲🇿
-MM|Myanmar|🇲🇲
-NA|Namibia|🇳🇦
-NR|Nauru|🇳🇷
-NP|Nepal|🇳🇵
-NL|Netherlands|🇳🇱
-NZ|New Zealand|🇳🇿
-NI|Nicaragua|🇳🇮
-NE|Niger|🇳🇪
-NG|Nigeria|🇳🇬
-KP|North Korea|🇰🇵
-MK|North Macedonia|🇲🇰
-NO|Norway|🇳🇴
-OM|Oman|🇴🇲
-PK|Pakistan|🇵🇰
-PW|Palau|🇵🇼
-PS|Palestine|🇵🇸
-PA|Panama|🇵🇦
-PG|Papua New Guinea|🇵🇬
-PY|Paraguay|🇵🇾
-PE|Peru|🇵🇪
-PH|Philippines|🇵🇭
-PL|Poland|🇵🇱
-PT|Portugal|🇵🇹
-QA|Qatar|🇶🇦
-RO|Romania|🇷🇴
-RU|Russia|🇷🇺
-RW|Rwanda|🇷🇼
-KN|Saint Kitts and Nevis|🇰🇳
-LC|Saint Lucia|🇱🇨
-VC|Saint Vincent|🇻🇨
-WS|Samoa|🇼🇸
-SM|San Marino|🇸🇲
-ST|Sao Tome and Principe|🇸🇹
-SA|Saudi Arabia|🇸🇦
-SN|Senegal|🇸🇳
-RS|Serbia|🇷🇸
-SC|Seychelles|🇸🇨
-SL|Sierra Leone|🇸🇱
-SG|Singapore|🇸🇬
-SK|Slovakia|🇸🇰
-SI|Slovenia|🇸🇮
-SB|Solomon Islands|🇸🇧
-SO|Somalia|🇸🇴
-ZA|South Africa|🇿🇦
-KR|South Korea|🇰🇷
-SS|South Sudan|🇸🇸
-ES|Spain|🇪🇸
-LK|Sri Lanka|🇱🇰
-SD|Sudan|🇸🇩
-SR|Suriname|🇸🇷
-SE|Sweden|🇸🇪
-CH|Switzerland|🇨🇭
-SY|Syria|🇸🇾
-TW|Taiwan|🇹🇼
-TJ|Tajikistan|🇹🇯
-TZ|Tanzania|🇹🇿
-TH|Thailand|🇹🇭
-TG|Togo|🇹🇬
-TO|Tonga|🇹🇴
-TT|Trinidad and Tobago|🇹🇹
-TN|Tunisia|🇹🇳
-TR|Turkey|🇹🇷
-TM|Turkmenistan|🇹🇲
-TV|Tuvalu|🇹🇻
-UG|Uganda|🇺🇬
-UA|Ukraine|🇺🇦
-AE|United Arab Emirates|🇦🇪
-GB|United Kingdom|🇬🇧
-US|United States|🇺🇸
-UY|Uruguay|🇺🇾
-UZ|Uzbekistan|🇺🇿
-VU|Vanuatu|🇻🇺
-VA|Vatican City|🇻🇦
-VE|Venezuela|🇻🇪
-VN|Vietnam|🇻🇳
-YE|Yemen|🇾🇪
-ZM|Zambia|🇿🇲
-ZW|Zimbabwe|🇿🇼`.split('\n').map(x=>{const [id,country,flag]=x.split('|');return {id,country,flag};});
-const WORLD_SYMBOLS = {"KE": "KSh ", "ZA": "R", "US": "$", "GB": "£", "EU": "€", "IN": "₹", "NG": "₦", "GH": "GH₵", "TZ": "TSh ", "UG": "USh ", "RW": "RF ", "JP": "¥", "CN": "¥", "CA": "$", "AU": "$", "NZ": "$", "BR": "R$", "MX": "$", "CH": "CHF ", "SE": "kr ", "NO": "kr ", "DK": "kr ", "PL": "zł ", "TR": "₺", "RU": "₽", "KR": "₩", "ID": "Rp ", "PH": "₱", "TH": "฿", "MY": "RM ", "SG": "S$", "AE": "د.إ ", "SA": "﷼", "EG": "E£", "PK": "Rs ", "BD": "৳", "LK": "Rs ", "NP": "रू "};
-const WORLD_PAY_OPTIONS = WORLD_COUNTRIES.map(c=>({id:c.id,country:c.country,flag:c.flag,symbol:WORLD_SYMBOLS[c.id]||'$',month:c.id==='KE'?150:(c.id==='ZA'?50:50),live:c.id==='KE',methods:c.id==='KE'?['mobile_money']:['card'],method:c.id==='KE'?'M-Pesa':'Waiting',text:c.id==='KE'?'':'Coming soon'}));
-
-const KING_PAY_FILE = path.join(DATA_DIR, 'king-payments.json');
-let kingPayments = loadJsonFile(KING_PAY_FILE, []);
-if (!Array.isArray(kingPayments)) kingPayments = [];
-function saveKingPayments(){ fs.mkdirSync(DATA_DIR,{recursive:true}); saveJsonFile(KING_PAY_FILE,kingPayments); }
-function kingFindPayment(id){ return kingPayments.find(p=>String(p.id)===String(id)); }
-function kingReceipt(p){ return p ? {success:true, receipt:{id:p.id,amount:p.amount,coins:p.coins,kind:p.kind,status:p.status,createdAt:p.createdAt,completedAt:p.completedAt||null,country:p.country||'KE'}} : null; }
-app.get('/api/pay/countries',(req,res)=>res.json({success:true,options:WORLD_PAY_OPTIONS,countries:WORLD_PAY_OPTIONS}));
-app.get('/api/premium/pay-info',requireUser,(req,res)=>res.json({success:true,paymentsOff:false,maxMonths:2,number:req.account.phone||'',premiumUntil:req.account.premiumUntil||req.account.proPlanUntil||null,mpesaNumber:process.env.MPESA_PAYBILL||'',options:WORLD_PAY_OPTIONS}));
-app.get('/api/premium/overview',requireUser,(req,res)=>res.json({success:true,isPremium:isPremiumUser(req.account),premiumUntil:req.account.premiumUntil||null,coins:Number(req.account.coins||0),botSpaces:isPremiumUser(req.account)?6:1,options:WORLD_PAY_OPTIONS}));
-app.post('/api/premium/pay/initiate',requireUser,(req,res)=>{
- const country=String(req.body.country||'KE').toUpperCase();
- if(country!=='KE') return res.json({success:false,comingSoon:true,error:'Coming soon - this country is still waiting. Card payment coming soon.'});
- const months=Number(req.body.months)===2?2:1, amount=months===2?250:150, coins=months===2?200:99;
- const id='KING'+Date.now()+crypto.randomBytes(3).toString('hex').toUpperCase();
- const p={id,userId:req.account.id,amount,coins,months,kind:'premium',status:'waiting',country:'KE',number:normalizePhone(req.body.number||req.account.phone||''),createdAt:new Date().toISOString()};
- kingPayments.push(p); saveKingPayments();
- res.json({success:true,checkoutId:id,needPin:true,amount,coins,kind:'premium',message:'Approve the M-Pesa STK prompt on your phone.'});
-});
-app.post('/api/premium/refill/initiate',requireUser,(req,res)=>res.json({success:false,comingSoon:true}));
-app.post('/api/coins/topup/initiate',requireUser,(req,res)=>{
- const country=String(req.body.country||'KE').toUpperCase();if(country!=='KE')return res.json({success:false,comingSoon:true});
- const coins=Number(req.body.coins)===200?200:99,amount=coins===200?250:150;
- const id='KING'+Date.now()+crypto.randomBytes(3).toString('hex').toUpperCase();
- kingPayments.push({id,userId:req.account.id,amount,coins,kind:'coins',months:0,status:'waiting',country:'KE',number:normalizePhone(req.body.number||req.account.phone||''),createdAt:new Date().toISOString()});
- saveKingPayments();res.json({success:true,checkoutId:id,needPin:true,amount,coins,kind:'coins'});
-});
-app.post('/api/payments/receipt/:ref',(req,res)=>{const p=kingFindPayment(req.params.ref); if(!p)return res.status(404).json({success:false,error:'Receipt not found'});res.json(kingReceipt(p));});
-app.get('/api/payments/receipt/:ref',(req,res)=>{const p=kingFindPayment(req.params.ref);if(!p)return res.status(404).json({success:false,error:'Receipt not found'});if(req.account&&p.userId!==req.account.id&&!req.account.isAdmin)return res.status(403).json({success:false,error:'Not allowed'});res.json(kingReceipt(p));});
-app.post('/api/mpesa/stk',requireUser,async(req,res)=>{
- const id=String(req.body.checkoutId||req.body.id||''); const p=kingFindPayment(id);
- if(!p||p.userId!==req.account.id)return res.status(404).json({success:false,error:'Payment not found'});
- if(p.country!=='KE')return res.json({success:false,comingSoon:true});
- const key=process.env.MPESA_CONSUMER_KEY,secret=process.env.MPESA_CONSUMER_SECRET,shortcode=process.env.MPESA_SHORTCODE,passkey=process.env.MPESA_PASSKEY,callback=process.env.MPESA_CALLBACK_URL;
- if(!key||!secret||!shortcode||!passkey||!callback)return res.status(503).json({success:false,providerNotConfigured:true,error:'M-Pesa STK Push is not configured on this server yet. No payment was taken.'});
- try{
-  const base=process.env.MPESA_ENV==='production'?'https://api.safaricom.co.ke':'https://sandbox.safaricom.co.ke';
-  const auth=Buffer.from(key+':'+secret).toString('base64');
-  const tokenRes=await fetch(base+'/oauth/v1/generate?grant_type=client_credentials',{headers:{Authorization:'Basic '+auth}});
-  const tokenData=await tokenRes.json();if(!tokenRes.ok||!tokenData.access_token)throw new Error('Could not authenticate with M-Pesa');
-  const stamp=new Date().toLocaleString('en-GB',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).replace(/\D/g,'');
-  const password=Buffer.from(String(shortcode)+String(passkey)+stamp).toString('base64');
-  const phone=normalizePhone(p.number);if(!/^2547\d{8}$/.test(phone))return res.status(400).json({success:false,error:'Enter a valid M-Pesa mobile number.'});
-  const payload={BusinessShortCode:shortcode,Password:password,Timestamp:stamp,TransactionType:process.env.MPESA_TRANSACTION_TYPE||'CustomerPayBillOnline',Amount:p.amount,PartyA:phone,PartyB:shortcode,PhoneNumber:phone,CallBackURL:callback,AccountReference:'KINGMD',TransactionDesc:p.kind==='premium'?'KING MD Premium':'KING MD Coins'};
-  const stkRes=await fetch(base+'/mpesa/stkpush/v1/processrequest',{method:'POST',headers:{Authorization:'Bearer '+tokenData.access_token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  const stk=await stkRes.json();if(!stkRes.ok||stk.ResponseCode!=='0')throw new Error(stk.errorMessage||stk.ResponseDescription||'M-Pesa STK request failed');
-  p.checkoutRequestId=stk.CheckoutRequestID;p.merchantRequestId=stk.MerchantRequestID;p.stkRequestedAt=new Date().toISOString();saveKingPayments();
-  res.json({success:true,checkoutId:p.id,status:'waiting',customerMessage:stk.CustomerMessage||'Check your phone for the M-Pesa prompt',instruction:'Complete the secure M-Pesa prompt on your phone. Never enter your PIN on this website.'});
- }catch(e){console.error('[M-Pesa STK]',e.message);res.status(502).json({success:false,error:e.message||'M-Pesa request failed'});}
-});
-app.post('/api/mpesa/pay-with-pin',requireUser,(req,res)=>res.status(400).json({success:false,error:'For your security, M-Pesa PINs must only be entered in the official M-Pesa handset prompt, never on this website. Use the STK Push prompt.'}));
-app.post('/api/mpesa/verify-code',requireUser,(req,res)=>res.status(400).json({success:false,error:'Manual payment-code verification is disabled until a trusted M-Pesa callback is configured.'}));
-app.post('/api/admin/mpesa/approve',requireUser,(req,res)=>{
- if(!req.account.isAdmin)return res.status(403).json({success:false,error:'Admin only'});
- const p=kingFindPayment(req.body.id||req.body.checkoutId);if(!p)return res.status(404).json({success:false,error:'Payment not found'});
- if(p.status!=='completed'){p.status='completed';p.completedAt=new Date().toISOString();const u=users.find(x=>x.id===p.userId);if(u){u.coins=Number(u.coins||0)+Number(p.coins||0);if(p.kind==='premium'){u.premiumUntil=new Date(Date.now()+Number(p.months||1)*30*86400000).toISOString();u.isPremium=true;u.botSpaces=6;}saveUsers();}saveKingPayments();}
- res.json({success:true,status:p.status});
-});
-app.post('/api/admin/mpesa/reject',requireUser,(req,res)=>{if(!req.account.isAdmin)return res.status(403).json({success:false,error:'Admin only'});const p=kingFindPayment(req.body.id||req.body.checkoutId);if(!p)return res.status(404).json({success:false,error:'Payment not found'});p.status='rejected';saveKingPayments();res.json({success:true,status:p.status});});
-app.get('/api/admin/mpesa/pending',requireUser,(req,res)=>{if(!req.account.isAdmin)return res.status(403).json({success:false,error:'Admin only'});res.json({success:true,payments:kingPayments.filter(p=>p.status==='waiting'||p.status==='review')});});
-app.get('/api/mpesa/status/:id',requireUser,(req,res)=>{const p=kingFindPayment(req.params.id);if(!p||p.userId!==req.account.id)return res.status(404).json({success:false,error:'Payment not found'});res.json({success:true,id:p.id,status:p.status,amount:p.amount,coins:p.coins});});
-app.get('/api/pay/packs',requireUser,(req,res)=>res.json({success:true,options:WORLD_PAY_OPTIONS.filter(x=>x.live),packs:[{coins:99,amount:150},{coins:200,amount:250}]}));
-// Explicit trusted callback endpoint: validate Daraja result before calling this handler in provider integration.
-app.post('/api/mpesa/callback',(req,res)=>{
- const body=req.body||{}, meta=body.Body&&body.Body.stkCallback;
- if(!meta)return res.json({ResultCode:0,ResultDesc:'Accepted'});
- const p=kingPayments.find(x=>x.checkoutRequestId===meta.CheckoutRequestID||x.merchantRequestId===meta.MerchantRequestID);
- if(!p)return res.json({ResultCode:0,ResultDesc:'Unknown checkout'});
- if(Number(meta.ResultCode)===0&&p.status!=='completed'){
-   const items=(meta.CallbackMetadata&&meta.CallbackMetadata.Item)||[];
-   const value=k=>{const x=items.find(i=>i.Name===k);return x&&x.Value};
-   const paidAmount=Number(value('Amount')||0),paidPhone=normalizePhone(value('PhoneNumber')||'');
-   if(paidAmount!==Number(p.amount)||paidPhone!==normalizePhone(p.number)) {
-     p.status='review';p.failureReason='M-Pesa callback amount or phone did not match this order';
-   } else {
-     p.status='completed';p.completedAt=new Date().toISOString();
-     const u=users.find(x=>x.id===p.userId);
-     if(u){u.coins=Number(u.coins||0)+Number(p.coins||0);if(p.kind==='premium'){u.premiumUntil=new Date(Date.now()+Number(p.months||1)*30*86400000).toISOString();u.isPremium=true;u.botSpaces=6;}saveUsers();}
-   }
- } else if(Number(meta.ResultCode)!==0){p.status='failed';p.failureReason=String(meta.ResultDesc||'Payment failed').slice(0,200);}
- saveKingPayments();res.json({ResultCode:0,ResultDesc:'Accepted'});
-});
-
-// ===== MANAGE BOT - FORWARDS TO ENGINE =====
-async function forwardManageBot(req, res, enginePath, methodOverride) {
-  try {
-    const method = methodOverride || req.method;
-    const isGet = method === 'GET';
-    let url = ENGINE_URL + enginePath;
-    if (isGet && Object.keys(req.query || {}).length) url += '?' + new URLSearchParams(req.query).toString();
-    const r = await fetch(url, {
-      method,
-      headers: { 'content-type': 'application/json', 'x-pair-bridge-key': PAIR_BRIDGE_KEY },
-      body: isGet ? undefined : JSON.stringify(req.body || {}),
-      signal: AbortSignal.timeout(30000)
-    });
-    const text = await r.text().catch(() => '');
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { success: false, error: text || 'Engine error' }; }
-    return res.status(r.status).json(data);
-  } catch (e) {
-    console.error('[ManageBot forward]', enginePath, e.message);
-    return res.status(502).json({ success: false, error: 'Bot engine offline. Try again shortly.' });
-  }
-}
-app.post('/api/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/api/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/manage-login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/managebot/login', (req, res) => forwardManageBot(req, res, '/api/manage-login'));
-app.post('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
-app.get('/api/managebot/attempts', (req, res) => forwardManageBot(req, res, '/api/managebot/attempts'));
-app.post('/api/managebot/logout', (req, res) => forwardManageBot(req, res, '/api/managebot/logout'));
-app.post('/api/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
-app.post('/managebot/update', (req, res) => forwardManageBot(req, res, '/api/managebot/update'));
-app.post('/api/forgot-password', (req, res) => forwardManageBot(req, res, '/api/forgot-password'));
-app.post('/api/managebot/forgot-password', (req, res) => forwardManageBot(req, res, '/api/managebot/forgot-password'));
-
-app.use((req, res) => res.status(404).json({ success: false, error: 'Not found: ' + req.path }));
-app.use((err, req, res, next) => { console.error('[KING MD] Express error:', err.message); res.status(500).json({ success: false, error: err.message }); });
-
-app.listen(PORT, '0.0.0.0', () => console.log('[KING MD APP] Listening on ' + PORT + ' | Engines: ' + ENGINE_URLS.join(', ') + ' | Servers: ' + TOTAL_SERVERS));
-module.exports = app;
+// ===== START =====
+app.listen(PORT, () => console.log('KING MD V4 running on ' + PORT));
