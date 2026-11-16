@@ -2118,6 +2118,18 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 /* small loader used inside a page / card while its data comes in */
 .eh-inline{display:flex;flex-direction:column;align-items:center;gap:.6rem;padding:1.4rem 0;color:var(--t2);font-size:.8rem}
 </style>
+
+<style id="king-md-qr-linking-styles">
+/* Shared WhatsApp linking controls used by both the website and installed-app entry pages. */
+.dp-methods{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 16px;width:100%}
+.dp-methods .dp-method{display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;width:100%;border-radius:13px;font-weight:800;white-space:nowrap}
+.dp-methods .dp-method.active{box-shadow:0 5px 0 rgba(0,0,0,.16);outline:2px solid color-mix(in srgb,var(--p) 30%,transparent)}
+.dp-methods .dp-method:focus-visible{outline:3px solid var(--p);outline-offset:3px}
+.dp-code [data-qr-image]{display:block;width:260px;max-width:100%;height:auto;image-rendering:pixelated}
+.dp-code [data-qr-image] img{max-width:100%}
+@media(max-width:360px){.dp-methods{gap:8px}.dp-methods .dp-method{font-size:.88rem;padding-inline:8px}}
+</style>
+
 </head>
 <body>
 <div class="bg-wrap" id="bgWrap"></div>
