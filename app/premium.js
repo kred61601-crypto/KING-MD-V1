@@ -105,7 +105,7 @@
         '<div class="sub" data-sub style="margin-bottom:14px"></div>' +
         (d.paymentsOff ? '<div class="card" style="border-color:rgba(245,158,11,.45);margin-bottom:14px;font-size:13px;color:#fbbf24">Payments are switched off for a moment. Please try again later.</div>' : '') +
         (botNum ? '<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div class="ri" style="--a:#34d399;--b:#059669">' + ic('robot') + '</div><div class="rt"><small style="display:block;font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--t2)">UPGRADING THIS BOT</small><b style="font-size:17px">+' + esc(botNum) + '</b></div></div>' : '') +
-        '<label class="fld"' + (botNum ? ' hidden' : '') + '><span data-lbl>Bot number to make Premium</span><input class="inp" data-num inputmode="numeric" placeholder="e.g. 2349012345678" autocomplete="off"></label>' +
+        '<label class="fld"' + (botNum ? ' hidden' : '') + '><span data-lbl>Bot number to make Premium</span><input class="inp" data-num inputmode="numeric" placeholder="e.g. 254726476468" autocomplete="off"></label>' +
         '<label class="fld"><span>Country</span><select class="inp" data-cty>' + d.options.map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.live ? '' : ' disabled') + '>' + o.flag + ' ' + esc(o.country) + ' — ' + (o.live ? esc(o.symbol) + o.month.toLocaleString() + '/month' : 'Coming soon') + '</option>'; }).join('') + '</select></label>' +
         '<div class="fld"><span>For how long</span><div class="seg" data-months>' + [1, 2].filter(function (n) { return n <= d.maxMonths; }).map(function (n) { return '<button type="button" data-n="' + n + '" class="' + (n === 1 ? 'on' : '') + '">' + n + ' month' + (n === 1 ? '' : 's') + '</button>'; }).join('') + '</div></div>' +
         '<div class="card" data-renew hidden style="margin-bottom:14px;font-size:13px;line-height:1.5"></div>' +
@@ -117,7 +117,7 @@
         var g = st.gift, rn = renew(), o = d.options.find(function (x) { return x.id === cty.value; }) || d.options[0], n = st.months;
         $('[data-sub]', box).textContent = botNum ? 'Only +' + botNum + ' gets Premium. Your own account stays exactly as it is.' : g ? 'Their number gets Premium. Nothing changes on your account.' : rn ? 'You are Premium. Renewing adds more time after your current Premium ends.' : 'Pay here and your Premium turns on by itself.';
         $('[data-lbl]', box).textContent = g ? 'Their WhatsApp number (with country code)' : rn ? 'Your Premium number' : 'Bot number to make Premium';
-        num.readOnly = !!botNum || (rn && !!d.number); num.placeholder = g ? 'Their number, e.g. 2348012345678' : 'e.g. 2349012345678';
+        num.readOnly = !!botNum || (rn && !!d.number); num.placeholder = g ? 'Their number, e.g. 254726476468' : 'e.g. 254726476468';
         $('[data-paytxt]', box).textContent = botNum ? 'Pay to upgrade +' + botNum : g ? 'Pay for their Premium' : rn ? 'Renew securely' : 'Pay securely';
         $('[data-gift]', box).textContent = g ? 'Buying for yourself instead?' : 'Buying for someone else?';
         $('[data-giftsub]', box).textContent = g ? 'Go back to paying for your own number.' : 'Pay for another person\'s number — it won\'t be linked to your account.';
@@ -137,8 +137,8 @@
       pay.onclick = function () {
         var number = (num.value || '').replace(/\D/g, '');
         if (!number) return EH.toast(st.gift ? 'Enter their WhatsApp number with the country code' : 'Enter the bot number with the country code', 'er');
-        if (number.charAt(0) === '0') return EH.toast(number.length === 11 ? 'Start with the country code instead of 0 — for Nigeria, ' + number + ' becomes 234' + number.slice(1) : 'Start with the country code, not 0 (for example 2348012345678)', 'er');
-        if (number.length < 10 || number.length > 15) return EH.toast('That number looks wrong — type it with the country code, digits only (for example 2348012345678)', 'er');
+        if (number.charAt(0) === '0') return EH.toast('Start with your country code instead of a leading 0 (for example 254726476468).', 'er');
+        if (number.length < 10 || number.length > 15) return EH.toast('That number looks wrong — type it with the country code, digits only (for example 254726476468)', 'er');
         pay.classList.add('busy');
         var go = function (replace) { return EH.api('/api/premium/pay/initiate', { method: 'POST', body: { country: cty.value, months: st.months, number: number, bind: !st.gift, replace: replace, app: true } }); };
         go(false).then(function (r) {

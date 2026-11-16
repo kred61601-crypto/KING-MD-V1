@@ -67,20 +67,35 @@
 
   EH.screen('deploy', { mount: function (scr) {
     var f = EH.frame(scr, { bar: 'push', title: 'Deploy Bot', sub: 'Link your WhatsApp number', icon: 'rocket', ia: '#ff2e93', ib: '#7c2bff' }), body = f.body, alive = true, pairToken = null, cfSite = null, cfId = null, cfTok = null, cfWaiters = [], busy = false, watch = null;
+    var audioCtx = null;
+    function cue(kind) {
+      try { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; audioCtx = audioCtx || new AC();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        var notes = kind === 'error' ? [180, 125] : kind === 'success' ? [520, 760] : [360];
+        notes.forEach(function (hz, i) { var osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), at = audioCtx.currentTime + i * .13; osc.type = 'sine'; osc.frequency.value = hz; gain.gain.setValueAtTime(.0001, at); gain.gain.exponentialRampToValueAtTime(.075, at + .025); gain.gain.exponentialRampToValueAtTime(.0001, at + .12); osc.connect(gain); gain.connect(audioCtx.destination); osc.start(at); osc.stop(at + .13); });
+      } catch (e) {}
+    }
+    function setLoading(on, title, copy) { var el = $('[data-dp-loading]', body); if (!el) return; el.classList.toggle('hide', !on); if (title) $('[data-loading-title]', el).textContent = title; if (copy) $('[data-loading-copy]', el).textContent = copy; }
     body.innerHTML =
       '<div class="dp-hero rise"><div class="dp-hl"><div class="svc-logo"><img src="/logo.png" alt=""></div><div><h2>Deploy your bot</h2><p>Enter your number, get a pairing code and link it in WhatsApp. Live in about a minute.</p></div></div>' +
         '<div class="dp-st"><div><b data-st="bots"><i class="sk"></i></b><span>Bots paired</span></div><div><b data-st="srv"><i class="sk"></i></b><span>Servers</span></div><div><b data-st="slots"><i class="sk"></i></b><span>Free slots</span></div></div>' +
         '<button class="svc-how tap" data-tut type="button" style="--g2:var(--p)">' + ic('play') + ' Watch the tutorial</button></div>' +
       EH.adCard() +
       '<form class="card rise" data-form style="--i:1;margin-top:14px" autocomplete="off">' +
-        '<label class="fld"><span>Your WhatsApp number</span><div class="inwrap"><span class="pre">' + ic('phone') + '</span><input class="inp big" data-phone type="tel" inputmode="numeric" placeholder="2349012345678" autocomplete="off"></div></label>' +
-        '<div class="note" style="margin:-6px 4px 14px">Start with the country code, no + and no leading 0. Example for Nigeria: <b>2349012345678</b>.</div>' +
+        '<div class="dp-choice-label">Choose how to link your bot</div>' +
+        '<div class="dp-methods" role="group" aria-label="Choose WhatsApp linking method">' +
+          '<button class="btn tap dp-method active" type="button" data-go-btn>' + ic('key') + ' Pair code</button>' +
+          '<button class="btn alt tap dp-method" type="button" data-qr-btn>' + '▦' + ' QR code</button>' +
+        '</div>' +
+        '<label class="fld"><span>Phone number (with country code)</span><div class="inwrap"><span class="pre">' + ic('phone') + '</span><input class="inp big" data-phone type="tel" inputmode="numeric" placeholder="e.g. 254726476468" autocomplete="off"></div></label>' +
+        '<div class="note" style="margin:-6px 4px 14px">Start with the country code, no + and no leading 0. Example: <b>254726476468</b>.</div>' +
         '<div data-cf style="margin-bottom:14px;display:none;justify-content:center"></div>' +
         '<div class="dp-bar" data-bar hidden><i data-fill></i></div>' +
-        '<button class="btn block tap" type="submit" data-go-btn>' + ic('bolt') + ' Generate pairing code</button>' +
-        '<div class="note" style="text-align:center">By continuing you accept our <a data-terms style="color:var(--p);font-weight:700">Terms</a> and <a data-privacy style="color:var(--p);font-weight:700">Privacy Policy</a>.</div>' +
+        '<button class="btn block tap dp-generate" type="submit" data-generate>' + ic('zap') + ' Generate Pairing Code</button>' +
+        '<div class="note" style="text-align:center;margin-top:14px">By continuing you accept our <a data-privacy style="color:var(--p);font-weight:700">Privacy Policy</a> and <a data-terms style="color:var(--p);font-weight:700">Terms &amp; Conditions</a>.</div>' +
       '</form>' +
       '<div data-result class="hide"></div>' +
+      '<div class="dp-loading hide" data-dp-loading role="status" aria-live="polite"><div class="dp-loader"></div><b data-loading-title>Connecting to WhatsApp…</b><span data-loading-copy>Please keep this screen open while we prepare your link.</span></div>' +
       '<div class="sec"><h3>Your bot spaces</h3><span data-spaces></span></div><div class="card" data-slots></div>' +
       '<div class="sec"><h3>My bots</h3></div><div data-bots></div>';
     $('[data-terms]', body).onclick = function () { EH.go('terms'); }; $('[data-privacy]', body).onclick = function () { EH.go('privacy'); }; $$('[data-tut]', body).forEach(function (t) { t.onclick = function () { EH.go('tutorial'); }; });
@@ -152,15 +167,57 @@
         });
       }, 5000);
     }
+    function showQr(qrImage, phone) {
+      var box = $('[data-result]', body); box.classList.remove('hide');
+      box.innerHTML = '<div class="card dp-code" style="text-align:center"><small>SCAN WITH WHATSAPP</small><div style="background:#fff;border-radius:14px;padding:12px;display:inline-block;margin:12px auto"><img data-qr-image src="' + esc(qrImage) + '" alt="WhatsApp linking QR code" style="display:block;width:260px;max-width:100%;height:auto"></div><p class="note">Open WhatsApp → Linked devices → Link a device, then scan this QR code.</p><div class="dp-live" data-live><i class="live off"></i><span>Waiting for QR scan…</span></div><button class="btn sm alt tap" data-hide style="margin-top:12px">' + ic('x') + ' Close</button></div>';
+      $('[data-hide]', box).onclick = function () { box.classList.add('hide'); clearInterval(watch); };
+      EH.reveal(box, 'center');
+      var n = digits(phone), tries = 0; clearInterval(watch);
+      watch = setInterval(function () {
+        if (!alive || ++tries > 60) { clearInterval(watch); return; }
+        pollStates().then(function () {
+          var st = online[n], live = $('[data-live]', box); if (!live) return;
+          if (st === 'online') { live.innerHTML = '<i class="live"></i><span class="okc"><b>Linked!</b> Your bot is online. Send <b>.menu</b> in WhatsApp.</span>'; clearInterval(watch); EH.buzz(25); }
+          paintBots();
+        });
+      }, 5000);
+    }
+    function pairQr(phone) {
+      if (busy) return;
+      var u = EH.user, b = EH.botSpaces(), activeLocal = sess().filter(function (s) { return s.status === 'active'; }).length;
+      if (!u && activeLocal >= GUEST_SPACES) { EH.login('You have used your free spaces. Sign in for more space.'); return; }
+      if (u && b.used >= b.total) { EH.spaceFull(); return; }
+      busy = true; cue('loading'); setLoading(true, 'Preparing your QR code…', 'Keep this screen open. This may take a few seconds.');
+      var btn = $('[data-qr-btn]', body); btn.classList.add('busy'); btn.disabled = true;
+      var go = pairToken ? Promise.resolve() : getToken();
+      go.then(cfEnsure).then(function (cf) {
+        if (cfSite && !cf) throw new Error('Please complete the security check.');
+        var bar = $('[data-bar]', body), fill = $('[data-fill]', body); bar.hidden = false; fill.style.width = '12%';
+        return EH.api('/request-qr', { method: 'POST', auth: false, timeout: 40000, body: { phoneNumber: phone, deviceId: EH.devId(), username: u ? u.username : null, pairToken: pairToken, cfToken: cf } });
+      }).then(function (r) {
+        pairToken = null; getToken(); if (cfId != null && window.turnstile) { try { window.turnstile.reset(cfId); } catch (e) {} } cfTok = null;
+        $('[data-bar]', body).hidden = true;
+        var d = r.d || {};
+        if (!r.ok || !d.success) { cue('error'); if (d.code === 'NO_BOT_SPACE') EH.spaceFull(); else EH.toast(d.error || 'QR pairing failed', 'er'); return; }
+        var list = sess(), x = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: EH.devId() }, i = list.findIndex(function (s) { return digits(s.phoneNumber) === phone; });
+        if (i >= 0) list[i] = x; else list.push(x); saveSess(list); online[digits(phone)] = 'pairing';
+        setLoading(false); showQr(d.qrImage, phone); paintBots(); cue('success'); EH.toast('WhatsApp QR code ready', 'ok');
+        if (EH.user) EH.refreshUser().then(paintBots);
+      }).catch(function (e) {
+        $('[data-bar]', body).hidden = true; cue('error');
+        EH.toast(e && e.message ? e.message : 'QR pairing request failed. Try again.', 'er');
+      }).then(function () { setLoading(false); busy = false; btn.classList.remove('busy'); btn.disabled = false; });
+    }
+
     function pair(phone) {
       if (busy) return; var u = EH.user, b = EH.botSpaces();
       var activeLocal = sess().filter(function (s) { return s.status === 'active'; }).length;
       if (!u && activeLocal >= GUEST_SPACES) { EH.login('You have used your free spaces. Sign in for more space.'); return; }
       if (u && b.used >= b.total) { EH.spaceFull(); return; }
-      busy = true; var btn = $('[data-go-btn]', body); btn.classList.add('busy');
+      busy = true; cue('loading'); setLoading(true, 'Generating pairing code…', 'Connecting to the bot engine. Please wait.'); var btn = $('[data-go-btn]', body); btn.classList.add('busy');
       var go = pairToken ? Promise.resolve() : getToken();
       go.then(cfEnsure).then(function (cf) {
-        if (cfSite && !cf) { busy = false; btn.classList.remove('busy'); return null; }
+        if (cfSite && !cf) { busy = false; setLoading(false); btn.classList.remove('busy'); return null; }
         var bar = $('[data-bar]', body), fill = $('[data-fill]', body); bar.hidden = false; var prog = 0; fill.style.width = '0';
         var iv = setInterval(function () { prog = Math.min(90, prog + Math.random() * 15); fill.style.width = prog + '%'; }, 200);
         return EH.api('/request-pairing', { method: 'POST', auth: false, timeout: 60000, body: { phoneNumber: phone, deviceId: EH.devId(), username: u ? u.username : null, pairToken: pairToken, cfToken: cf } }).then(function (r) {
@@ -170,20 +227,29 @@
           if (d.success) {
             var list = sess(), x = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: EH.devId() }, i = -1; list.forEach(function (s, k) { if (s.phoneNumber === phone) i = k; });
             if (i >= 0) list[i] = x; else list.push(x); saveSess(list); online[digits(phone)] = 'pairing';
-            showCode(d.pairingCode, phone); paintBots(); EH.buzz(25);
+            showCode(d.pairingCode, phone); paintBots(); cue('success'); EH.buzz(25);
             EH.toast('Pairing code ready!' + (d.serverInfo && d.serverInfo.serverUsed ? ' Server: ' + d.serverInfo.serverUsed : ''), 'ok');
             if (EH.user) EH.refreshUser().then(paintBots); $('[data-phone]', body).value = '';
           } else if (d.code === 'NO_BOT_SPACE') EH.spaceFull();
           else if (d.code === 'DB_FULL') EH.dbFull();
-          else EH.toast(d.error || 'Pairing failed', 'er');
+          else { cue('error'); EH.toast(d.error || 'Pairing failed', 'er'); }
         });
-      }).catch(function () { busy = false; btn.classList.remove('busy'); EH.toast('Network error. Try again.', 'er'); });
+      }).catch(function () { busy = false; setLoading(false); btn.classList.remove('busy'); cue('error'); EH.toast('Network error. Try again.', 'er'); }).then(function () { setLoading(false); });
     }
     $('[data-form]', body).addEventListener('submit', function (e) {
       e.preventDefault(); var phone = $('[data-phone]', body).value.trim().replace(/\s+/g, '');
       if (!phone) return EH.toast('Enter your phone number', 'er');
-      var n = digits(phone); if (n.charAt(0) === '0') return EH.toast('Start with the country code instead of the leading 0 (for Nigeria: 234…)', 'er');
-      pair(n);
+      var n = digits(phone); if (n.charAt(0) === '0') return EH.toast('Start with your country code instead of a leading 0.', 'er');
+      if ($('[data-qr-btn]', body).classList.contains('active')) pairQr(n);
+      else pair(n);
+    });
+    $('[data-qr-btn]', body).addEventListener('click', function () {
+      $('[data-go-btn]', body).classList.remove('active'); this.classList.add('active');
+      $('[data-generate]', body).innerHTML = ic('qr-code') + ' Generate QR Code';
+    });
+    $('[data-go-btn]', body).addEventListener('click', function () {
+      $('[data-qr-btn]', body).classList.remove('active'); this.classList.add('active');
+      $('[data-generate]', body).innerHTML = ic('zap') + ' Generate Pairing Code';
     });
 
     var cs = EH.ls.json('eh_app_stats', {});

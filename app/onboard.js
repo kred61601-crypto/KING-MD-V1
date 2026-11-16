@@ -19,7 +19,7 @@
         '<form data-form autocomplete="off">' +
         '<div class="btns"><label class="fld"><span>First name</span><input class="inp" data-f value="' + esc(d.suggestedFirstName || '') + '" placeholder="First name"></label><label class="fld"><span>Last name</span><input class="inp" data-l value="' + esc(d.suggestedLastName || '') + '" placeholder="Last name"></label></div>' +
         '<label class="fld"><span>Username</span><input class="inp" data-un maxlength="20" placeholder="3-20 letters, numbers or _" autocapitalize="none" autocomplete="off"></label><div class="note" data-us style="margin:-6px 4px 6px"></div><div class="chips" data-sug style="margin:0 2px 14px"></div>' +
-        '<label class="fld"><span>Bot number (optional)</span><div class="inwrap"><span class="pre">' + ic('phone') + '</span><input class="inp" data-num type="tel" inputmode="numeric" placeholder="e.g. 2349012345678" autocomplete="off"></div></label><div class="note" data-ns style="margin:-6px 4px 4px">Link it now and Premium works on this account straight away if the number is Premium. You can unbind it any time from your profile.</div>' +
+        '<label class="fld"><span>Bot number (optional)</span><div class="inwrap"><span class="pre">' + ic('phone') + '</span><input class="inp" data-num type="tel" inputmode="numeric" placeholder="e.g. 254726476468" autocomplete="off"></div></label><div class="note" data-ns style="margin:-6px 4px 4px">Link it now and Premium works on this account straight away if the number is Premium. You can unbind it any time from your profile.</div>' +
         '<div class="fld" style="margin-top:14px"><span>Profile picture (optional)</span><div class="opts" data-ph>' +
           (d.picture ? '<label class="opt tap"><input type="radio" name="ph" value="provider" checked><i></i><img src="' + esc(d.picture) + '" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover"><span>Use my ' + esc(d.provider || '') + ' photo</span></label>' : '') +
           '<label class="opt tap"><input type="radio" name="ph" value="upload"' + (d.picture ? '' : '') + '><i></i><span class="pv" style="width:34px;height:34px;border-radius:50%;background:var(--fill);display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden">' + ic('camera') + '</span><span data-upl>Upload my own</span></label>' +
@@ -42,7 +42,7 @@
       num.oninput = function () {
         clearTimeout(tmN); st.numOk = true; var n = num.value.replace(/\D/g, '');
         if (!n) { ns.className = 'note'; ns.textContent = 'Link it now and Premium works on this account straight away if the number is Premium. You can unbind it any time from your profile.'; return; }
-        if (n.length < 10 || n.length > 15 || n.charAt(0) === '0') { ns.className = 'note err'; ns.textContent = 'Use the country code, e.g. 2349012345678'; st.numOk = false; return; }
+        if (n.length < 10 || n.length > 15 || n.charAt(0) === '0') { ns.className = 'note err'; ns.textContent = 'Use the country code, e.g. 254726476468'; st.numOk = false; return; }
         ns.className = 'note'; ns.textContent = 'Checking…';
         tmN = setTimeout(function () { EH.api('/api/onboarding/check-number?n=' + encodeURIComponent(n), { auth: false }).then(function (r) { var x = r.d || {};
           if (x.state === 'used') { ns.className = 'note err'; ns.textContent = 'This number is already used by an account'; st.numOk = false; } else if (x.state === 'free') { ns.className = 'note okc'; ns.textContent = '✓ Available'; } else ns.textContent = ''; }); }, 450);

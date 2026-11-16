@@ -376,11 +376,23 @@
     function playTapSound() {
       try {
         var Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
-        if (!audioCtx) audioCtx = new Ctx(); if (audioCtx.state === 'suspended') audioCtx.resume();
-        var t = audioCtx.currentTime, osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-        osc.type = 'sine'; osc.frequency.setValueAtTime(520, t); osc.frequency.linearRampToValueAtTime(680, t + 0.045); osc.frequency.linearRampToValueAtTime(340, t + 0.12);
-        gain.gain.setValueAtTime(0.0001, t); gain.gain.exponentialRampToValueAtTime(0.16, t + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-        osc.connect(gain); gain.connect(audioCtx.destination); osc.start(t); osc.stop(t + 0.15);
+        if (!audioCtx) audioCtx = new Ctx();
+        var play = function () {
+          try {
+            var t = audioCtx.currentTime, osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, t);
+            osc.frequency.linearRampToValueAtTime(680, t + 0.045);
+            osc.frequency.linearRampToValueAtTime(340, t + 0.12);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(0.12, t + 0.008);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(t); osc.stop(t + 0.15);
+          } catch (e) {}
+        };
+        if (audioCtx.state === 'suspended') audioCtx.resume().then(play).catch(function () {});
+        else play();
       } catch (e) {}
     }
     document.addEventListener('click', function (e) {

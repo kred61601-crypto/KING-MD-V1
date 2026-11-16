@@ -63,7 +63,7 @@
       return '<div class="card rcard prem"><div class="pf-t" style="color:#4ade80">' + ic('check') + ' Bot linked — ' + o.free + ' free ' + o.what + ' a day</div><div class="sub">Your bot: <b>+' + esc(o.botNumber || u.boundNumber || '') + '</b> · Free accounts get ' + o.free + ' a day. Extra costs 1 coin each.' + botLine + '</div></div>';
     }
     return '<div class="card rcard prem" data-unbox><div class="pf-t" style="color:#f5b417">' + ic('crown') + ' Are you a premium user?</div><div class="sub" style="margin-bottom:12px">Premium? Enter your premium bot number to unlock ' + o.more + '.<br><b>Not Premium?</b> You can still use Channel React with YOUR OWN bots — deploy them first, it is FREE. Every bot you deploy = 1 more react!</div>' +
-      '<div class="btns"><input class="inp" data-un type="tel" inputmode="numeric" placeholder="e.g. 2349012345678" autocomplete="off" style="flex:2;height:50px"><button class="btn gold tap" data-unlock style="flex:1;height:50px">' + ic('lock') + ' Unlock</button></div>' +
+      '<div class="btns"><input class="inp" data-un type="tel" inputmode="numeric" placeholder="e.g. 254726476468" autocomplete="off" style="flex:2;height:50px"><button class="btn gold tap" data-unlock style="flex:1;height:50px">' + ic('lock') + ' Unlock</button></div>' +
       '<button class="btn alt block tap" data-godeploy style="margin-top:10px">' + ic('plus') + ' Deploy MY bots (Free)</button></div>';
   }
   function balRow(o) {
