@@ -2238,7 +2238,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
           <button type="button" class="link-choice-btn selected" id="choosePair"><i class="fas fa-key"></i> Pair code</button>
           <button type="button" class="link-choice-btn" id="chooseQR"><i class="fas fa-qrcode"></i> QR code</button>
         </div>
-        <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 254726476468"></div>
+        <div class="fg" id="phoneInputRow"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 254726476468"></div>
         <div class="fg" id="pairVerifyRow" style="display:none"><label class="fl">Security Check</label><div class="cf-wrap" id="pairVerifyBox"></div></div>
         <div class="pbar" id="pairBar" style="display:none"><div class="pfill" id="pairFill"></div></div>
         <div style="font-size:.72rem;color:var(--t2);text-align:center;margin-bottom:.7rem">By continuing you accept our <a href="#" onclick="A.go('privacy');return false" style="color:var(--p);font-weight:600">Privacy Policy</a> and <a href="#" onclick="A.go('terms');return false" style="color:var(--p);font-weight:600">Terms &amp; Conditions</a>.</div>
@@ -3328,6 +3328,14 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       <div class="ctitle"><i class="fas fa-bolt" style="color:#f5b417"></i> Channel Auto React <span class="gold-badge" style="font-size:.58rem;padding:.08rem .45rem;border-radius:100px;margin-left:.3rem;letter-spacing:.6px">PREMIUM</span></div>
       <div style="font-size:.8rem;color:var(--t2);margin:-.4rem 0 .9rem">Add your channel once. Every new post you make gets your reactions automatically — no bot needed.</div>
       <div id="arBody"><div class="empty"><p>Loading…</p></div></div>
+    </div>
+    <div class="card" id="crFollowCard" style="margin-top:.9rem">
+      <div class="ctitle"><i class="fab fa-whatsapp" style="color:#25d366"></i> Follow WhatsApp Channel</div>
+      <div style="font-size:.8rem;color:var(--t2);margin:-.4rem 0 .9rem">Connect a bot you created in this app to a WhatsApp Channel. The bot engine will receive the invite link and follow the channel so it can be used for channel reactions or poll voting.</div>
+      <div class="fg"><label class="fl">Your created bot number</label><input type="tel" id="followBotNumber" class="fi" inputmode="numeric" placeholder="e.g. 2547XXXXXXXX"></div>
+      <div class="fg"><label class="fl">WhatsApp Channel invite link</label><input type="url" id="followChannelLink" class="fi" placeholder="https://whatsapp.com/channel/0029..."></div>
+      <button type="button" class="btn bp bfw" id="followChannelBtn" onclick="A.followBotChannel()"><i class="fas fa-link"></i> Send Channel Link to Bot</button>
+      <div id="followChannelNote" style="font-size:.78rem;color:var(--t2);margin-top:.6rem"></div>
     </div>
     <div class="card" id="crCoinsCard" style="margin-top:.9rem">
       <div class="ctitle"><i class="fas fa-coins"></i> Coins</div>
@@ -6008,6 +6016,7 @@ const A = {
     this._linkMethod = 'pair';
     document.getElementById('choosePair').addEventListener('click', () => this._setLinkMethod('pair'));
     document.getElementById('chooseQR').addEventListener('click', () => this._setLinkMethod('qr'));
+    this._setLinkMethod('pair');
     document.getElementById('phoneIn').addEventListener('input', e => e.target.value = e.target.value.replace(/\D/g,''));
     document.getElementById('channelReactForm')?.addEventListener('submit', (e) => this.sendChannelReact(e));
   },
@@ -6637,6 +6646,44 @@ const A = {
     errorAudio.play().catch(() => {});
   }
 },
+
+  async followBotChannel() {
+    const number = (document.getElementById('followBotNumber')?.value || '').replace(/\D/g, '');
+    const link = (document.getElementById('followChannelLink')?.value || '').trim();
+    const note = document.getElementById('followChannelNote');
+    const btn = document.getElementById('followChannelBtn');
+    if (!this.token) {
+      this.toast('Sign in to the website account that created this bot first.', 'er');
+      this._afterLogin = 'channelreact';
+      this._openLoginModal('Sign in to connect your bot to a WhatsApp Channel.');
+      return;
+    }
+    if (!/^\d{8,15}$/.test(number)) { this.toast('Enter the number of your created bot.', 'er'); return; }
+    if (!/^https?:\/\/(?:www\.)?whatsapp\.com\/channel\/[A-Za-z0-9]+(?:\?.*)?$/i.test(link)) {
+      this.toast('Enter a WhatsApp Channel invite link, not a group or post link.', 'er'); return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending to bot engine…';
+    if (note) note.textContent = '';
+    try {
+      const response = await fetch('/api/channel/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token },
+        body: JSON.stringify({ number, link })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'The bot engine did not accept the channel link.');
+      if (note) note.textContent = '✓ Channel link added successfully. Your bot has been asked to follow this channel so it can react to posts or vote in polls.';
+      this.toast('WhatsApp Channel link sent to your bot.', 'ok');
+    } catch (error) {
+      if (note) note.textContent = error.message || 'Could not send the channel link.';
+      this.toast(error.message || 'Could not send the channel link.', 'er');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-link"></i> Send Channel Link to Bot';
+    }
+  },
+
 
   async previewChannel() {
   const link = document.getElementById('crLink').value.trim();
@@ -7499,12 +7546,16 @@ const A = {
   btn.innerHTML = pair ? '<i class="fas fa-bolt"></i> Generate Pairing Code' : '<i class="fas fa-qrcode"></i> Generate QR Code';
   document.getElementById('pairResult').style.display = 'none';
   document.getElementById('qrResult').style.display = 'none';
+  const phoneRow = document.getElementById('phoneInputRow');
+  const phoneInput = document.getElementById('phoneIn');
+  if (phoneRow) phoneRow.style.display = pair ? '' : 'none';
+  if (phoneInput) phoneInput.required = pair;
 },
 
 async _doQR() {
   if (this.submitting) return;
-  const phone = document.getElementById('phoneIn').value.trim();
-  if (!phone) { this.toast('Enter your phone number', 'er'); return; }
+  const phone = '';
+  const deviceId = this._devId();
   if (!this.user && this.localSess.filter(s => s.status === 'active').length >= this.GUEST_FREE_SPACES) {
     document.getElementById('loginWarn').style.display = 'flex'; return;
   }
@@ -7533,7 +7584,7 @@ async _doQR() {
   try {
     const res = await fetch('/request-qr', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phoneNumber: phone, deviceId: this._devId(), pairToken: this._pairToken, cfToken })
+      body: JSON.stringify({ deviceId, pairToken: this._pairToken, cfToken })
     });
     const data = await res.json();
     this._fetchPairToken();
@@ -7548,13 +7599,31 @@ async _doQR() {
     }
     document.getElementById('pairQRImage').src = data.qrImage;
     document.getElementById('qrResult').style.display = 'block';
-    const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: this._devId() };
-    const idx = this.localSess.findIndex(s => s.phoneNumber === phone);
+    const sess = { phoneNumber: 'qr-pending-' + deviceId, timestamp: Date.now(), status: 'pairing', deviceId, qrPending: true };
+    const idx = this.localSess.findIndex(s => s.deviceId === deviceId);
     if (idx >= 0) this.localSess[idx] = sess; else this.localSess.push(sess);
     localStorage.setItem('eh_sess', JSON.stringify(this.localSess));
     this._loadMyBotsCard();
+    if (this._qrStatusTimer) clearInterval(this._qrStatusTimer);
+    let qrChecks = 0;
+    this._qrStatusTimer = setInterval(async () => {
+      qrChecks++;
+      try {
+        const statusRes = await fetch('/request-qr-status?deviceId=' + encodeURIComponent(deviceId));
+        const statusData = await statusRes.json();
+        if (statusData.success && statusData.connected && statusData.number) {
+          clearInterval(this._qrStatusTimer); this._qrStatusTimer = null;
+          const saved = this.localSess.find(x => x.deviceId === deviceId);
+          if (saved) { saved.phoneNumber = statusData.number; saved.qrPending = false; saved.status = 'active'; saved.connectedAt = Date.now(); localStorage.setItem('eh_sess', JSON.stringify(this.localSess)); }
+          this._loadMyBotsCard();
+          this.toast('WhatsApp connected successfully. Your bot is online.', 'ok');
+        } else if (qrChecks >= 45) {
+          clearInterval(this._qrStatusTimer); this._qrStatusTimer = null;
+        }
+      } catch (_) { if (qrChecks >= 45) { clearInterval(this._qrStatusTimer); this._qrStatusTimer = null; } }
+    }, 4000);
     successAudio.currentTime = 0; successAudio.play().catch(() => {});
-    this.toast('QR code generated. Scan it in WhatsApp Linked Devices.', 'ok');
+    this.toast('Real WhatsApp QR code generated. Scan it using WhatsApp → Linked Devices → Link a Device.', 'ok');
   } catch (err) {
     document.getElementById('pairBar').style.display = 'none';
     this.toast('Network error while creating QR code. Please try again.', 'er');
@@ -7648,7 +7717,7 @@ async _doPair() {
         document.getElementById('loginWarn').style.display = 'none';
 
         // Save session to localStorage — works for both guest and logged-in
-        const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: this._devId() };
+        const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'pairing', deviceId: this._devId() };
         const idx = this.localSess.findIndex(s => s.phoneNumber === phone);
         if (idx >= 0) this.localSess[idx] = sess; else this.localSess.push(sess);
         localStorage.setItem('eh_sess', JSON.stringify(this.localSess));
@@ -7786,7 +7855,7 @@ async _doPair() {
       const r = await fetch('/api/bots/status', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(this.token ? { 'x-auth-token': this.token } : {}) }, body: JSON.stringify({ numbers: nums, deviceId: this._devId() }) });
       const d = await r.json();
       if (d && d.success) {
-        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = (st && typeof st === 'object') ? st.state : st;
+        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = st;
         if (JSON.stringify(next) !== JSON.stringify(this._botOnline || {})) { this._botOnline = next; this._loadMyBotsCard(); }
       }
     } catch (_) {} finally { this._botPollBusy = false; }
