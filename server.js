@@ -328,6 +328,7 @@ const pending = new Map();
 const onboarding = new Map();
 const resetTokens = new Map();
 const pairTokens = new Map();
+const pendingQrLinks = new Map();
 
 // ===== SETTINGS + BOT PASSWORD =====
 // Server is the ONLY thing that can access bot password.
@@ -409,27 +410,20 @@ app.post('/request-qr', async (req, res) => {
     return res.status(403).json({ success: false, error: 'Pairing request expired. Refresh and try again.' });
   }
   pairTokens.delete(token);
-  const phoneNumber = normalizePhone(body.phoneNumber || '');
-  if (!/^\d{8,15}$/.test(phoneNumber)) {
-    return res.status(400).json({ success: false, error: 'Enter a valid phone number with country code.' });
-  }
+  const deviceId = String(body.deviceId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  if (deviceId.length < 8) return res.status(400).json({ success: false, error: 'Invalid device session. Refresh and try again.' });
   const account = currentUser(req);
   if (account) {
     const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
-    const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber);
     const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
-    if (!alreadyOwned && myUnique.length >= allowed) {
-      return res.status(403).json({ success: false, code: 'NO_BOT_SPACE', error: 'You have used all ' + allowed + ' bot spaces.' });
-    }
+    if (myUnique.length >= allowed) return res.status(403).json({ success: false, code: 'NO_BOT_SPACE', error: 'You have used all ' + allowed + ' bot spaces.' });
   }
-  if (botSettings && botSettings.botCommands === false) {
-    return res.status(403).json({ success: false, error: 'Bot commands are turned OFF by the owner.' });
-  }
+  if (botSettings && botSettings.botCommands === false) return res.status(403).json({ success: false, error: 'Bot commands are turned OFF by the owner.' });
   try {
     let lastError = 'QR engine is unavailable.';
     for (const base of ENGINE_URLS) {
       try {
-        const upstream = await fetch(base + '/api/qr?number=' + encodeURIComponent(phoneNumber), {
+        const upstream = await fetch(base + '/api/qr?deviceId=' + encodeURIComponent(deviceId), {
           method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY }, signal: AbortSignal.timeout(30000)
         });
         const data = await upstream.json().catch(() => ({}));
@@ -438,26 +432,35 @@ app.post('/request-qr', async (req, res) => {
           if (upstream.status === 400 || upstream.status === 409 || upstream.status === 429) return res.status(upstream.status).json(data);
           continue;
         }
-        if (req.user && req.user.id) {
-          const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
-          const record = {
-            ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: base,
-            deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing',
-            createdAt: existing ? existing.createdAt : new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          if (existing) Object.assign(existing, record);
-          else botRecords.push(record);
-          dedupeBotRecords();
-          saveJsonFile(BOTS_FILE, botRecords);
-        }
+        pendingQrLinks.set(deviceId, { ownerId: account?.id || '', username: account?.username || '', engine: base, createdAt: new Date().toISOString(), at: Date.now() });
         return res.json({ success: true, qrImage: data.qrImage, state: data.state || 'pairing', serverInfo: { serverUsed: 'KING MD V4' } });
       } catch (e) { lastError = e.message || lastError; }
     }
     return res.status(502).json({ success: false, error: lastError });
-  } catch (error) {
-    return res.status(502).json({ success: false, error: 'QR pairing engine is offline.' });
-  }
+  } catch (error) { return res.status(502).json({ success: false, error: 'QR pairing engine is offline.' }); }
+});
+
+app.get('/request-qr-status', async (req, res) => {
+  const deviceId = String(req.query.deviceId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  const pendingLink = pendingQrLinks.get(deviceId);
+  if (!deviceId || !pendingLink || Date.now() - pendingLink.at > 30 * 60 * 1000) return res.status(404).json({ success: false, error: 'QR session expired.' });
+  try {
+    const upstream = await fetch(pendingLink.engine + '/api/qr-status?deviceId=' + encodeURIComponent(deviceId), {
+      headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY }, signal: AbortSignal.timeout(10000)
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || !data.success) return res.status(502).json({ success: false, error: data.error || 'Could not check QR session.' });
+    if (data.connected && /^\d{8,15}$/.test(String(data.number || ''))) {
+      const number = normalizePhone(data.number);
+      const existing = botRecords.find(b => normalizePhone(b.number) === number);
+      const record = { ownerId: pendingLink.ownerId || existing?.ownerId || '', username: pendingLink.username || existing?.username || '', number, engine: pendingLink.engine, createdVia: 'king-md-app', deviceId, state: 'online', createdAt: existing?.createdAt || pendingLink.createdAt, updatedAt: new Date().toISOString() };
+      if (existing) Object.assign(existing, record); else botRecords.push(record);
+      dedupeBotRecords(); saveJsonFile(BOTS_FILE, botRecords);
+      pendingQrLinks.delete(deviceId);
+      return res.json({ success: true, connected: true, number });
+    }
+    return res.json({ success: true, connected: false, state: data.state || 'pairing' });
+  } catch (_) { return res.status(502).json({ success: false, error: 'QR status service is unavailable.' }); }
 });
 
 app.post('/request-pairing', async (req, res) => {
@@ -520,10 +523,11 @@ app.post('/request-pairing', async (req, res) => {
 
     if (upstream.status === 409 && data.code === 'ALREADY_CONNECTED') {
       const botPassword = getOrCreateBotPassword(phoneNumber, account);
-      if (req.user && req.user.id) {
-        const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
+      {
+        const existing = botRecords.find(b => normalizePhone(b.number) === phoneNumber);
         const record = {
-          ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: usedEngine,
+          ownerId: account?.id || existing?.ownerId || '', username: account?.username || existing?.username || '',
+          number: phoneNumber, engine: usedEngine, createdVia: 'king-md-app',
           deviceId: String(body.deviceId || '').slice(0, 100), state: 'online', botPassword,
           createdAt: existing ? existing.createdAt : new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -545,10 +549,11 @@ app.post('/request-pairing', async (req, res) => {
 
     const botPassword = getOrCreateBotPassword(phoneNumber, account);
 
-    if (req.user && req.user.id) {
-      const existing = botRecords.find(b => b.ownerId === req.user.id && normalizePhone(b.number) === phoneNumber);
+    {
+      const existing = botRecords.find(b => normalizePhone(b.number) === phoneNumber);
       const record = {
-        ownerId: req.user.id, username: req.user.username || '', number: phoneNumber, engine: usedEngine,
+        ownerId: account?.id || existing?.ownerId || '', username: account?.username || existing?.username || '',
+        number: phoneNumber, engine: usedEngine, createdVia: 'king-md-app',
         deviceId: String(body.deviceId || '').slice(0, 100), state: 'pairing', botPassword,
         createdAt: existing ? existing.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1714,6 +1719,26 @@ app.post('/api/channel-react/send', requireUser, async (req, res) => {
   }
 });
 
+app.post('/api/channel/follow', requireUser, async (req, res) => {
+  try {
+    const number = normalizePhone(req.body?.number || req.body?.botNumber || '');
+    let link = String(req.body?.link || req.body?.channelLink || '').trim();
+    if (!/^\d{8,15}$/.test(number)) return res.status(400).json({ success: false, error: 'Enter the WhatsApp number of a bot you created in this app.' });
+    if (!/^https?:\/\/(?:www\.)?whatsapp\.com\/channel\/[A-Za-z0-9]+(?:\?.*)?$/i.test(link)) {
+      return res.status(400).json({ success: false, error: 'Enter a valid WhatsApp Channel invite link (not a group link or post link).' });
+    }
+    const bot = botRecords.find(x => normalizePhone(x.number) === number && (x.createdVia === 'king-md-app' || !!x.ownerId) && x.ownerId === req.account.id);
+    if (!bot) return res.status(403).json({ success: false, error: 'This bot is not linked to your account. Create it from Deploy a Bot first.' });
+    const result = await engineFetch('/api/channel-follow', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumbers: [number], link })
+    });
+    return res.json({ success: true, message: 'Channel link added to your bot. Your bot has been asked to follow this WhatsApp Channel so it can react to posts or vote in polls.', result });
+  } catch (e) {
+    return res.status(e.status || 502).json({ success: false, error: e.message || 'Could not send the channel link to your bot engine.' });
+  }
+});
+
 app.get('/api/channel-react/history', requireUser, (req, res) => {
   res.json({ success: true, items: channelReacts.filter(x => x.userId === req.account.id).slice(-20) });
 });
@@ -1804,40 +1829,11 @@ async function kingBotLoginHandler(req, res) {
     if (!/^\d{8,15}$/.test(number)) return res.json({ success: false, error: 'Enter a valid bot number, e.g. 254726476468' });
     if (!password) return res.json({ success: false, error: 'Enter the password your BOT gave you when you deployed.' });
 
-    let anyBot = botRecords.find(x => normalizePhone(x.number) === number);
-    if (!anyBot) {
-      try {
-        const all = await engineFetchAll('/api/status?numbers=' + number);
-        let found = false;
-        for (const d of all) { if (d.bots && d.bots[number]) found = true; }
-        if (found) {
-          anyBot = {
-            number, state: 'online', ownerId: req.user ? req.user.id : '',
-            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-          };
-          botRecords.push(anyBot);
-          saveJsonFile(BOTS_FILE, botRecords);
-        }
-      } catch (_) {}
-    }
-    if (!anyBot) return res.json({ success: false, error: 'This bot is not deployed yet. Deploy it first.' });
+    const anyBot = botRecords.find(x => normalizePhone(x.number) === number && (x.createdVia === 'king-md-app' || !!x.ownerId));
+    if (!anyBot) return res.json({ success: false, error: 'This bot was not created through this app. Deploy it first from Deploy a Bot.' });
 
-    let correctPassword = (botPasswords[number] || anyBot.botPassword || '').toUpperCase();
-
-    // FIX FOR ALREADY-DEPLOYED BOTS
-    // If server has NO password saved, but bot IS live, TRUST the password user types and SAVE it.
-    // This makes ML7KTUPS work for you and for EVERY user.
-    if (!correctPassword) {
-      botPasswords[number] = password;
-      saveBotPass();
-      anyBot.botPassword = password;
-      saveJsonFile(BOTS_FILE, botRecords);
-      correctPassword = password;
-      if (anyBot.ownerId) {
-        const u = users.find(x => x.id === anyBot.ownerId);
-        if (u) addUserNotification(u, 'bot_password', 'Bot password linked', 'Your bot +' + number + ' password was linked: ' + password, { number, botPassword: password });
-      }
-    }
+    const correctPassword = String(botPasswords[number] || anyBot.botPassword || '').toUpperCase();
+    if (!correctPassword) return res.json({ success: false, error: 'Your bot is still finishing setup. Wait for its WhatsApp welcome message with the Manage Bot password, then try again.' });
 
     if (password !== correctPassword) {
       return res.json({ success: false, error: 'Wrong bot password. Use the password your BOT gave you when it said Successfully Deployed.' });
