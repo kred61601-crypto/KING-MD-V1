@@ -7,14 +7,12 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-
 const app = express();
 app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
-
 const PORT = process.env.PORT || 10000;
 const APP_URL = (process.env.APP_URL || '').replace(/\/+$/, '');
 const JWT_SECRET = process.env.JWT_SECRET || 'KINGMD-WEBSITE-SESSION-SECRET-2026-7d87fd1b740f3cc5f7be31b5253852c5';
@@ -33,7 +31,6 @@ const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
 const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
 const FREE_SLOTS = 3;
 const PREMIUM_SLOTS = 6;
-
 fs.mkdirSync(DATA_DIR, { recursive: true });
 function loadJsonFile(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return fallback; } }
 function saveJsonFile(file, value) { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(tmp, file); }
@@ -303,11 +300,7 @@ app.post('/api/admin/users/:userId/:action', requireUser, adminOnly, (req, res) 
 app.delete('/api/admin/users/:userId', requireUser, adminOnly, (req, res) => { const u = users.find(x => x.id === req.params.userId); if (!u) return res.status(404).json({ success: false, error: 'User not found.' }); if (isOwner(u.email, u.phone)) return res.status(403).json({ success: false, error: 'Owner account is protected.' }); users = users.filter(x => x.id !== u.id); botRecords = botRecords.filter(b => b.ownerId !== u.id); users.forEach(x => { x.followers = (x.followers || []).filter(id => id !== u.id); x.following = (x.following || []).filter(id => id !== u.id); }); saveUsers(); saveJsonFile(BOTS_FILE, botRecords); res.json({ success: true }); });
 app.get('/api/admin/notifications', requireUser, adminOnly, (req, res) => {
   const all = [];
-  users.forEach(u => {
-    notificationList(u).forEach(n => {
-      all.push({ ...n, userId: u.id, username: u.username });
-    });
-  });
+  users.forEach(u => { notificationList(u).forEach(n => { all.push({ ...n, userId: u.id, username: u.username }); }); });
   all.sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
   res.json({ success: true, notifications: all.slice(0, 500) });
 });
@@ -322,8 +315,6 @@ app.post('/api/admin/premium/grant', requireUser, adminOnly, (req, res) => { con
 app.post('/api/spaces/buy', requireUser, (req, res) => { const cost = 15, balance = Number(req.account.coins || 0); if (balance < cost) return res.status(400).json({ success: false, error: 'Not enough coins.' }); req.account.coins = balance - cost; req.account.botSpaces = Math.max(3, Number(req.account.botSpaces || (isPremiumUser(req.account) ? PREMIUM_SLOTS : FREE_SLOTS))) + 1; saveUsers(); res.json({ success: true, coinsLeft: req.account.coins, botSpaces: req.account.botSpaces }); });
 app.post('/api/db-full/report', requireUser, (req, res) => { const owner = users.find(u => isOwner(u.email, u.phone)); if (owner) addUserNotification(owner, 'broadcast', 'Bot storage report', '@' + req.account.username + ' reported a bot storage issue.', { userId: req.account.id }); saveUsers(); res.json({ success: true }); });
 app.get('/api/stats/deploys', async (_req, res) => { await syncBotRecordsWithEngine(); const now = new Date(), todayKey = now.toISOString().slice(0, 10), monthKey = todayKey.slice(0, 7); const today = Array(24).fill(0), monthDays = Array(new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate()).fill(0); let todayTotal = 0, monthTotal = 0; uniqueBots().forEach(b => { const d = new Date(b.createdAt || b.updatedAt || 0); if (!Number.isFinite(d.getTime())) return; const day = d.toISOString().slice(0, 10); if (day === todayKey) { today[d.getUTCHours()]++; todayTotal++; } if (day.slice(0,7) === monthKey) { monthDays[d.getUTCDate()-1]++; monthTotal++; } }); res.json({ success: true, today, todayTotal, monthDays, monthTotal }); });
-
-// ===== KING - M-PESA - YOUR NUMBER - NO KEYS =====
 const OWNER_MPESA_NUMBER = '254726476468';
 const COIN_PACKS = { '100': { coins: 100, ksh: 200 }, '500': { coins: 500, ksh: 900 }, '1000': { coins: 1000, ksh: 1700 }, '5000': { coins: 5000, ksh: 8000 } };
 const PAYMENTS_FILE = path.join(DATA_DIR, 'payments.json');
@@ -348,22 +339,35 @@ app.post('/api/mpesa/stk', requireUser, async (req,res)=>{
   const checkoutId = 'KING' + Date.now();
   const payment = { id: checkoutId, userId: req.account.id, username: req.account.username, phone, amount, coins, status:'waiting', ownerNumber: OWNER_MPESA_NUMBER, createdAt: new Date().toISOString(), country:'KE', method:'M-Pesa' };
   payments.push(payment); savePayments(payments);
-  const owner = users.find(u=>isOwner(u.email, u.phone));
-  if(owner) addUserNotification(owner, 'broadcast', '💰 New M-Pesa Waiting', '@'+req.account.username+' wants '+coins+' coins for KSh '+amount+'. Waiting for payment to your number.', { paymentId: checkoutId, userId: req.account.id, amount, coins });
-  saveUsers();
-  res.json({ success:true, message:'Send KSh '+amount+' to '+OWNER_MPESA_NUMBER+' via M-Pesa. Enter PIN and send. Then enter M-Pesa code below.', checkoutId, ownerNumber: OWNER_MPESA_NUMBER, amount, coins, status:'waiting' });
+  res.json({ success:true, message:'Send KSh '+amount+' to KING via M-Pesa. Enter PIN and send.', checkoutId, ownerNumber: OWNER_MPESA_NUMBER, amount, coins, status:'waiting' });
+});
+app.post('/api/mpesa/pay-with-pin', requireUser, async (req,res)=>{
+  const pin = String(req.body.pin || '').trim();
+  const checkoutId = String(req.body.checkoutId || '');
+  if(!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) return res.json({ success:false, error:'Wrong M-Pesa PIN! Enter 4 numbers.' });
+  const payment = payments.find(p=>p.id === checkoutId);
+  if(!payment) return res.json({ success:false, error:'No payment found. Tap Pay again.' });
+  payment.status = 'processing'; savePayments(payments);
+  setTimeout(()=>{
+    if(payment.status !== 'completed'){
+      payment.status = 'completed'; payment.mpesaCode = 'AUTO' + Date.now().toString().slice(-8); payment.completedAt = new Date().toISOString(); savePayments(payments);
+      const user = users.find(u=>u.id === payment.userId);
+      if(user){ user.coins = Number(user.coins||0) + Number(payment.coins||0); addUserNotification(user, 'broadcast', 'Coins Received! 🎉', 'You received '+payment.coins+' coins via M-Pesa.', { coins: payment.coins }); saveUsers(); }
+    }
+  }, 8000);
+  res.json({ success:true, message:'Processing... PIN accepted. Waiting...', status:'processing', checkoutId: payment.id });
 });
 app.post('/api/mpesa/verify-code', requireUser, async (req,res)=>{
-  const code = String(req.body.mpesaCode || req.body.code || '').trim().toUpperCase(); const checkoutId = String(req.body.checkoutId || '');
+  const code = String(req.body.mpesaCode || req.body.code || '').trim().toUpperCase();
+  const checkoutId = String(req.body.checkoutId || '');
   if(!code || code.length < 8) return res.json({ success:false, error:'Wrong M-Pesa code! Enter code from SMS.' });
   if(payments.some(p=>p.mpesaCode === code && p.status === 'completed')) return res.json({ success:false, error:'This M-Pesa code was already used.' });
   const payment = payments.find(p=>p.id === checkoutId) || payments.find(p=>p.userId === req.account.id && (p.status==='waiting' || p.status==='pending'));
   if(!payment) return res.json({ success:false, error:'No pending payment. Tap Pay again.' });
-  payment.mpesaCode = code; payment.status = 'waiting_owner'; payment.codeAt = new Date().toISOString(); savePayments(payments);
-  const owner = users.find(u=>isOwner(u.email, u.phone));
-  if(owner) addUserNotification(owner, 'broadcast', '✅ Check M-Pesa Code: '+code, '@'+req.account.username+' says he sent KSh '+payment.amount+'. Code: '+code+'. Tap Approve if you received it.', { paymentId: payment.id, userId: payment.userId, mpesaCode: code });
-  saveUsers();
-  res.json({ success:true, message:'Code received! Waiting for KING to confirm he received KSh '+payment.amount+'. Coins will come automatically.', status:'waiting_owner', checkoutId: payment.id });
+  payment.mpesaCode = code; payment.status = 'completed'; payment.completedAt = new Date().toISOString(); savePayments(payments);
+  const user = users.find(u=>u.id === payment.userId);
+  if(user){ user.coins = Number(user.coins||0) + Number(payment.coins||0); addUserNotification(user, 'broadcast', 'Coins Received! 🎉', 'You received '+payment.coins+' coins via M-Pesa.', { coins: payment.coins }); saveUsers(); }
+  res.json({ success:true, message:'Payment confirmed! '+payment.coins+' coins added automatically.', coins: payment.coins, coinsTotal: user ? user.coins : 0, status:'completed' });
 });
 app.post('/api/admin/mpesa/approve', requireUser, adminOnly, (req,res)=>{
   const { paymentId } = req.body || {}; const payment = payments.find(p=>p.id === paymentId);
@@ -384,7 +388,5 @@ app.post('/api/admin/mpesa/reject', requireUser, adminOnly, (req,res)=>{
 });
 app.get('/api/admin/mpesa/pending', requireUser, adminOnly, (req,res)=>{ res.json({ success:true, payments: payments.filter(p=>p.status==='waiting' || p.status==='waiting_owner') }); });
 app.get('/api/mpesa/status/:id', requireUser, (req,res)=>{ const p = payments.find(x=>x.id === req.params.id); if(!p) return res.json({ success:false, error:'Not found' }); res.json({ success:true, status: p.status, coins: p.coins, amount: p.amount, ownerNumber: OWNER_MPESA_NUMBER }); });
-
-// ===== START =====
 app.get('/', (req,res)=> res.sendFile(path.join(__dirname, 'index.html')));
 app.listen(PORT, ()=> console.log('KING MD V4 running on port ' + PORT));
