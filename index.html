@@ -2130,7 +2130,13 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 @media(max-width:360px){.dp-methods{gap:8px}.dp-methods .dp-method{font-size:.88rem;padding-inline:8px}}
 </style>
 
-</head>
+<style>
+.link-choice-title{font-size:.88rem;color:var(--t2);text-align:center;font-weight:700;margin:1rem 0 .65rem}
+.link-choice{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:1.15rem}
+.link-choice-btn{min-height:54px;border:1px solid var(--line);border-radius:13px;background:var(--card2, #151515);color:var(--tx);font:inherit;font-weight:800;box-shadow:0 3px 0 rgba(0,0,0,.18);cursor:pointer}
+.link-choice-btn.selected{background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;border-color:var(--p);box-shadow:0 3px 0 var(--pd)}
+#pairQRImage{object-fit:contain}
+</style></head>
 <body>
 <div class="bg-wrap" id="bgWrap"></div>
 
@@ -2227,6 +2233,11 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       </div>
       <div id="loginWarn" class="warn-box" style="display:none"><i class="fas fa-exclamation-triangle"></i><span>You've used your free slot. <a href="#" onclick="A.openM('login')" style="color:var(--p)">Sign in</a> for more space.</span></div>
       <form id="pairForm">
+        <div class="link-choice-title">Choose how to link your bot</div>
+        <div class="link-choice" role="group" aria-label="Choose linking method">
+          <button type="button" class="link-choice-btn selected" id="choosePair"><i class="fas fa-key"></i> Pair code</button>
+          <button type="button" class="link-choice-btn" id="chooseQR"><i class="fas fa-qrcode"></i> QR code</button>
+        </div>
         <div class="fg"><label class="fl">Phone Number (with country code)</label><input type="tel" id="phoneIn" class="fi run-fi" placeholder="e.g. 254726476468"></div>
         <div class="fg" id="pairVerifyRow" style="display:none"><label class="fl">Security Check</label><div class="cf-wrap" id="pairVerifyBox"></div></div>
         <div class="pbar" id="pairBar" style="display:none"><div class="pfill" id="pairFill"></div></div>
@@ -2241,6 +2252,12 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
           <button class="btn bs" style="flex:1" onclick="document.getElementById('pairResult').style.display='none'"><i class="fas fa-times"></i> Close</button>
         </div>
         <p style="font-size:.75rem;color:var(--t2);text-align:center;margin-top:.7rem"><i class="fas fa-info-circle"></i> WhatsApp → Settings → Linked Devices → Link a Device</p>
+      </div>
+      <div id="qrResult" style="display:none;margin-top:.9rem;text-align:center">
+        <div style="font-size:.78rem;color:var(--t2);margin-bottom:.65rem">SCAN THIS QR CODE WITH WHATSAPP</div>
+        <img id="pairQRImage" alt="WhatsApp linking QR code" style="display:block;width:min(100%,280px);height:auto;margin:0 auto;padding:10px;background:#fff;border-radius:14px">
+        <p style="font-size:.76rem;color:var(--t2);margin:.7rem 0">WhatsApp → Linked Devices → Link a Device</p>
+        <button type="button" class="btn bs bfw" onclick="document.getElementById('qrResult').style.display='none'"><i class="fas fa-times"></i> Close QR code</button>
       </div>
     </div>
     <div id="myBotsCard" style="display:none" class="card">
@@ -5987,7 +6004,10 @@ const A = {
   },
 
   _bindForms() {
-    document.getElementById('pairForm').addEventListener('submit', e => { e.preventDefault(); this._doPair(); });
+    document.getElementById('pairForm').addEventListener('submit', e => { e.preventDefault(); this._linkMethod === 'qr' ? this._doQR() : this._doPair(); });
+    this._linkMethod = 'pair';
+    document.getElementById('choosePair').addEventListener('click', () => this._setLinkMethod('pair'));
+    document.getElementById('chooseQR').addEventListener('click', () => this._setLinkMethod('qr'));
     document.getElementById('phoneIn').addEventListener('input', e => e.target.value = e.target.value.replace(/\D/g,''));
     document.getElementById('channelReactForm')?.addEventListener('submit', (e) => this.sendChannelReact(e));
   },
@@ -7470,7 +7490,84 @@ const A = {
   } finally { clearTimeout(timer); }
 },
 
-  async _doPair() {
+  _setLinkMethod(method) {
+  this._linkMethod = method === 'qr' ? 'qr' : 'pair';
+  const pair = this._linkMethod === 'pair';
+  document.getElementById('choosePair').classList.toggle('selected', pair);
+  document.getElementById('chooseQR').classList.toggle('selected', !pair);
+  const btn = document.getElementById('pairBtn');
+  btn.innerHTML = pair ? '<i class="fas fa-bolt"></i> Generate Pairing Code' : '<i class="fas fa-qrcode"></i> Generate QR Code';
+  document.getElementById('pairResult').style.display = 'none';
+  document.getElementById('qrResult').style.display = 'none';
+},
+
+async _doQR() {
+  if (this.submitting) return;
+  const phone = document.getElementById('phoneIn').value.trim();
+  if (!phone) { this.toast('Enter your phone number', 'er'); return; }
+  if (!this.user && this.localSess.filter(s => s.status === 'active').length >= this.GUEST_FREE_SPACES) {
+    document.getElementById('loginWarn').style.display = 'flex'; return;
+  }
+  if (this.user) {
+    const total = this.user.botSpaces || this.GUEST_FREE_SPACES;
+    const used = Math.max(this.user.usedSpaces || 0, this.localSess.filter(s => s.status === 'active').length);
+    if (used >= total) { this._showSpaceFull(); return; }
+  }
+  if (!this._pairToken) await this._fetchPairToken();
+  let cfToken = null;
+  if (this.turnstileSiteKey) {
+    const btn0 = document.getElementById('pairBtn');
+    if (!(this._cf.pairVerifyBox && this._cf.pairVerifyBox.token)) { btn0.innerHTML = '<div class="sp"></div> Verifying...'; btn0.disabled = true; }
+    this.submitting = true;
+    cfToken = await this._cfEnsure('pairVerifyBox');
+    this.submitting = false; btn0.disabled = false;
+    if (!cfToken) { this._setLinkMethod('qr'); return; }
+  }
+  this.submitting = true;
+  const btn = document.getElementById('pairBtn');
+  btn.innerHTML = '<div class="sp"></div> Creating QR code...'; btn.disabled = true;
+  document.getElementById('pairResult').style.display = 'none';
+  document.getElementById('qrResult').style.display = 'none';
+  document.getElementById('pairBar').style.display = 'block';
+  document.getElementById('pairFill').style.width = '25%';
+  try {
+    const res = await fetch('/request-qr', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber: phone, deviceId: this._devId(), pairToken: this._pairToken, cfToken })
+    });
+    const data = await res.json();
+    this._fetchPairToken();
+    this._cfReset('pairVerifyBox');
+    document.getElementById('pairBar').style.display = 'none';
+    document.getElementById('pairFill').style.width = '0';
+    if (!res.ok || !data.success || !data.qrImage) {
+      if (data.code === 'NO_BOT_SPACE') this._showSpaceFull();
+      else this.toast(data.error || 'QR code generation failed', 'er');
+      errorAudio.currentTime = 0; errorAudio.play().catch(() => {});
+      return;
+    }
+    document.getElementById('pairQRImage').src = data.qrImage;
+    document.getElementById('qrResult').style.display = 'block';
+    const sess = { phoneNumber: phone, timestamp: Date.now(), status: 'active', deviceId: this._devId() };
+    const idx = this.localSess.findIndex(s => s.phoneNumber === phone);
+    if (idx >= 0) this.localSess[idx] = sess; else this.localSess.push(sess);
+    localStorage.setItem('eh_sess', JSON.stringify(this.localSess));
+    this._loadMyBotsCard();
+    successAudio.currentTime = 0; successAudio.play().catch(() => {});
+    this.toast('QR code generated. Scan it in WhatsApp Linked Devices.', 'ok');
+  } catch (err) {
+    document.getElementById('pairBar').style.display = 'none';
+    this.toast('Network error while creating QR code. Please try again.', 'er');
+    this._fetchPairToken();
+    errorAudio.currentTime = 0; errorAudio.play().catch(() => {});
+  } finally {
+    this.submitting = false;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-qrcode"></i> Generate QR Code';
+  }
+},
+
+async _doPair() {
   if (this.submitting) return;
   const phone = document.getElementById('phoneIn').value.trim();
   if (!phone) { this.toast('Enter your phone number', 'er'); return; }
