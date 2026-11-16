@@ -3137,10 +3137,10 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <div style="font-size:.88rem;color:var(--t1);margin-bottom:1rem;line-height:1.55">
           Welcome back — open your bot's control panel.
         </div>
-        <div class="fg"><label class="fl">Bot Number</label><input type="tel" id="manageBotNumber" class="fi" placeholder="e.g. 254726476468" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Password</label><input type="text" id="manageBotPass" class="fi" placeholder="8 characters" maxlength="32" style="letter-spacing:2px"></div>
+        <div class="fg"><label class="fl">Bot Number</label><input type="tel" id="mbpPhone" class="fi" placeholder="e.g. 254726476468" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Password</label><input type="text" id="mbpPass" class="fi" placeholder="8 characters" maxlength="32" style="letter-spacing:2px"></div>
         <div id="mbpAttempts" style="display:none;margin:0 0 .8rem;padding:.7rem .8rem;border:1px solid var(--er,#ef4444);background:rgba(239,68,68,.08);font-size:.82rem;line-height:1.5;border-radius:6px"></div>
-        <button class="btn bp bfw" id="botSignInBtn" onclick="A.mbpLogin()"><i class="fas fa-unlock"></i> Sign In</button>
+        <button class="btn bp bfw" id="mbpLoginBtn" onclick="A.mbpLogin()"><i class="fas fa-unlock"></i> Sign In</button>
         <div style="text-align:center;margin-top:.9rem;font-size:.8rem"><a href="#" onclick="openPasswordHelpModal();return false" style="color:var(--p);font-weight:600"><i class="fas fa-key"></i> Forgot your bot password?</a></div>
       </div>
 
@@ -3299,7 +3299,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       <div style="font-size:.8rem;color:var(--t2);margin:-.4rem 0 .45rem">Send up to 1000+ reactions to any WhatsApp channel post.</div>
       <div style="margin-bottom:1rem"><button type="button" class="how-vid" onclick="A.openHowVideo('channel-react')"><i class="fas fa-circle-play"></i> See how it works</button></div>
       <form id="channelReactForm">
-        <div class="fg"><label class="fl">WhatsApp Channel Post Link</label><input type="url" id="channelLink" class="fi run-fi" placeholder="https://whatsapp.com/channel/.../123456" oninput="A.previewChannel()"><div id="channelPreview" style="display:none;margin-top:.5rem;padding:.7rem;background:var(--bgg);border-radius:10px;border:1px solid var(--bd);align-items:center;gap:.7rem"><div id="chAvatar" class="av" style="width:40px;height:40px;font-size:1rem;flex-shrink:0"><i class="fab fa-whatsapp"></i></div><div id="chName" style="font-weight:700">Channel Name</div></div></div>
+        <div class="fg"><label class="fl">WhatsApp Channel Post Link</label><input type="url" id="crLink" class="fi run-fi" placeholder="https://whatsapp.com/channel/.../123456" oninput="A.previewChannel()"><div id="channelPreview" style="display:none;margin-top:.5rem;padding:.7rem;background:var(--bgg);border-radius:10px;border:1px solid var(--bd);align-items:center;gap:.7rem"><div id="chAvatar" class="av" style="width:40px;height:40px;font-size:1rem;flex-shrink:0"><i class="fab fa-whatsapp"></i></div><div id="chName" style="font-weight:700">Channel Name</div></div></div>
         <div class="fg"><label class="fl">Reaction Emojis</label><div style="display:flex;gap:1.2rem;margin-bottom:.8rem;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.88rem"><input type="radio" name="reactMode" value="auto" checked onchange="A.toggleReactUI()"> Auto (❤️ 👍 😮 🙏 😂 distributed)</label><label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.88rem"><input type="radio" name="reactMode" value="custom" onchange="A.toggleReactUI()"> Custom (pick up to 5)</label></div><div id="autoEmojiWrap" style="padding:.7rem;background:rgba(var(--p-rgb),.06);border:1px solid rgba(var(--p-rgb),.2);border-radius:10px;font-size:.82rem;color:var(--t2)"><i class="fas fa-info-circle" style="color:var(--p)"></i> Send Upto <strong> 1000+</strong> Emojis.</div><div id="customEmojiWrap" style="display:none"><div style="font-size:.75rem;color:var(--t2);margin-bottom:.5rem">Tap to select up to 5 emojis. Each bot gets a different one assigned.</div><div id="customReactList" style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.6rem;background:var(--bgg);border:1px solid var(--bd);border-radius:10px;margin-bottom:.5rem;min-height:52px"></div><div style="display:flex;gap:.4rem;margin-bottom:.5rem"><input type="text" id="crCustomEmoji" class="fi" placeholder="Not there? Type your own emoji" style="flex:1;font-size:.8rem;padding:.5rem .7rem"><button type="button" class="btn bs" style="padding:.45rem .7rem;font-size:.76rem" onclick="A.addCustomEmoji()">Add</button></div><div style="font-size:.72rem;color:var(--t2);margin-bottom:.3rem">Selected (tap chip to remove):</div><div id="selectedEmojiChips" style="display:flex;flex-wrap:wrap;gap:.4rem;min-height:34px;padding:.4rem .6rem;background:var(--bgg);border:1px solid var(--bd);border-radius:9px"><span style="color:var(--t2);font-size:.78rem;align-self:center" id="noEmojiHint">None — will use auto if empty</span></div></div></div>
         <div class="fg" id="crAmountRow" style="display:none"><label class="fl">Select amount of reactions</label>
           <div style="display:flex;align-items:center;gap:.7rem"><input type="range" id="crAmount" min="1" max="1" value="1" step="1" oninput="A._amtInput('cr')" style="flex:1;accent-color:var(--p)"><div style="min-width:4.2rem;text-align:right;font-weight:800" id="crAmountVal">–</div></div>
@@ -4328,8 +4328,8 @@ const A = {
     if (!(await this._pageGateOk('manageBot', 'mbpMaintCard', 'mbpRealContent'))) return;
     document.getElementById('mbp-login').style.display = '';
     document.getElementById('mbp-toggles').style.display = 'none';
-    document.getElementById('manageBotNumber').value = '';
-    document.getElementById('manageBotPass').value = '';
+    document.getElementById('mbpPhone').value = '';
+    document.getElementById('mbpPass').value = '';
     this._mbp = null; this._mbpPrem = null;
     this._mbpSubExpiresAt = 0;
     this._mbpRenderSavedList();
@@ -4367,7 +4367,7 @@ const A = {
   _mbAtt() { try { return JSON.parse(localStorage.getItem('eh_mbatt') || 'null') || {}; } catch (_) { return {}; } },
   _mbSetAtt(v) { try { if (v) localStorage.setItem('eh_mbatt', JSON.stringify(v)); else localStorage.removeItem('eh_mbatt'); } catch (_) {} },
   _mbpAttemptsShow(wrongNow) {   // draws the message under the form from what is remembered
-    const box = document.getElementById('mbpAttempts'), btn = document.getElementById('botSignInBtn'); if (!box) return;
+    const box = document.getElementById('mbpAttempts'), btn = document.getElementById('mbpLoginBtn'); if (!box) return;
     clearInterval(this._mbpLockT);
     const a = this._mbAtt(), now = Date.now();
     if (a.until && a.until > now) {
@@ -4397,8 +4397,8 @@ const A = {
     this._mbpAttemptsShow();
   },
   async mbpLogin() {
-    const phoneNumber = document.getElementById('manageBotNumber').value.trim().replace(/\D/g, '');
-    const password    = document.getElementById('manageBotPass').value.trim();
+    const phoneNumber = document.getElementById('mbpPhone').value.trim().replace(/\D/g, '');
+    const password    = document.getElementById('mbpPass').value.trim();
     if ((this._mbAtt().until || 0) > Date.now()) { this._mbpAttemptsShow(); return; }
     if (!phoneNumber || !password) { this.toast('Enter both number and password', 'err'); return; }
 
@@ -4410,7 +4410,7 @@ const A = {
     const tl = document.getElementById('mbpToggleList'); if (tl) tl.innerHTML = '';
     const cc = document.getElementById('mbpCustomCards');  if (cc) cc.innerHTML = '';
 
-    const btn = document.getElementById('botSignInBtn');
+    const btn = document.getElementById('mbpLoginBtn');
     this._setBtnLoading(btn, true, 'Signing in...');
     try {
       const r = await fetch('/api/managebot/login', {
@@ -5333,8 +5333,8 @@ const A = {
     const list = this._mbpLoadSavedBots();
     const b = list.find(x => x.number === number);
     if (!b) return;
-    document.getElementById('manageBotNumber').value = b.number;
-    document.getElementById('manageBotPass').value = b.password;
+    document.getElementById('mbpPhone').value = b.number;
+    document.getElementById('mbpPass').value = b.password;
     this.mbpLogin();
   },
   mbpDeleteSaved(number, ev) {
@@ -5458,7 +5458,7 @@ const A = {
     try {
       // Prefer the cached password (set at login time) over the input field,
       // because the input might be stale if the user has been switching bots.
-      const pwd = this._mbp._password || document.getElementById('manageBotPass').value.trim();
+      const pwd = this._mbp._password || document.getElementById('mbpPass').value.trim();
       const lr = await fetch('/api/managebot/login', {
         method:  'POST',
         headers: this._mbHeaders({ 'Content-Type': 'application/json' }),
@@ -5938,81 +5938,7 @@ const A = {
       + '<scr' + `ipt>atOptions={'key':'${key}','format':'iframe','height':50,'width':320,'params':{}};</scr` + 'ipt>'
       + '<scr' + `ipt src="${this._AD_CODE.bannerSrc}${key}"></scr` + 'ipt>'
       + '<scr' + `ipt>(function(){var l=-1;function s(){var h=document.body.scrollHeight;if(h!==l){l=h;parent.postMessage({ehAd:${JSON.stringify(slotId)},h:h},'*');}}try{new ResizeObserver(s).observe(document.body)}catch(e){}setInterval(s,1500);s();})();</scr` + 'ipt>'
-      + '
-<script>
-(function(){
-  if (!window.A) return;
-  A.sendChannelReact = async function(e){
-    if(e && e.preventDefault)e.preventDefault();
-    const link=(document.getElementById('channelLink')?.value||'').trim();
-    const result=document.getElementById('crResult');
-    const btn=document.getElementById('crSubmitBtn');
-    if(!/^https:\/\/(?:whatsapp\.com\/channel\/0029[A-Za-z0-9]+|chat\.whatsapp\.com\/[A-Za-z0-9]+)(?:[/?#].*)?$/i.test(link)){
-      if(result){result.style.display='block';result.className='cr-result er';result.textContent='Enter a valid WhatsApp channel or invite link.';} return;
-    }
-    const mode=document.querySelector('input[name="reactMode"]:checked')?.value||'auto';
-    let emojis=mode==='auto'?['❤️','👍','😮','🙏','😂']:(this._selectedEmojis||[]);
-    emojis=[...new Set(emojis)].slice(0,5);
-    if(!emojis.length) emojis=['❤️','👍','😮','🙏','😂'];
-    if(btn){btn.disabled=true;btn.textContent='Sending…';}
-    if(result){result.style.display='block';result.className='cr-result';result.textContent='Sending reactions…';}
-    try{
-      const txt=await fetch('/api/channel-react/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({link,emojis,count:1000})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(data.success){
-        if(result){result.className='cr-result ok';result.innerHTML='🎉 Reactions Sent!<br><span style="font-size:.8rem">Coins left: '+String(data.coinsLeft??'—')+'</span>';}
-      }else if(result){result.className='cr-result er';result.textContent=data.error||'Request failed';}
-    }catch(err){if(result){result.className='cr-result er';result.textContent='Request failed. Please try again.';}}
-    finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Send Reactions';}}
-  };
-  A.cvVote = async function(){
-    const link=this._cvPoll?.link||(document.getElementById('cvLink')?.value||'').trim();
-    const pick=document.querySelector('input[name="cvOpt"]:checked');
-    const option=pick ? (this._cvPoll?.options?.[Number(pick.value)] ?? pick.value) : null;
-    const count=Number(document.getElementById('cvAmount')?.value||1000);
-    const out=document.getElementById('cvVoteResult')||document.getElementById('cvResult');
-    const btn=document.getElementById('cvVoteBtn');
-    if(!link||option===null){if(out){out.className='cr-result er';out.textContent='Choose a poll option first.';}return;}
-    if(btn){btn.disabled=true;btn.textContent='Sending…';}
-    try{
-      const txt=await fetch('/api/poll-vote/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({link,option,count})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(out){out.className='cr-result '+(data.success?'ok':'er');out.textContent=data.success?'🎉 Votes Sent! Coins left: '+String(data.coinsLeft??'—'):(data.error||'Request failed');}
-    }catch(err){if(out){out.className='cr-result er';out.textContent='Request failed. Please try again.';}}
-    finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Send Votes';}}
-  };
-  A.mbpLogin = async function(){
-    const number=(document.getElementById('manageBotNumber')?.value||'').trim().replace(/\D/g,'');
-    const password=(document.getElementById('manageBotPass')?.value||'').trim();
-    if(!number||!password){alert('Enter both number and password');return;}
-    try{
-      const txt=await fetch('/api/managebot/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number,password})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(!data.success){alert(data.error||'Sign in failed');return;}
-      localStorage.setItem('king_bot_token',data.token);
-      localStorage.setItem('king_bot_number',data.botNumber);
-      location.href='/bot-panel.html?number='+encodeURIComponent(data.botNumber);
-    }catch(e){alert('Unable to sign in. Please try again.');}
-  };
-  window.forgotBotPassword = async function(){
-    const number=(document.getElementById('manageBotNumber')?.value||'').trim().replace(/\D/g,'');
-    if(!number){alert('Enter your bot number first');return;}
-    try{
-      const txt=await fetch('/api/bot/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number})}).then(r=>r.text());
-      const data=JSON.parse(txt); alert(data.newPassword||data.error||'Unable to reset password');
-    }catch(e){alert('Unable to reset password');}
-  };
-  const forgot=document.querySelector('a[onclick*="openPasswordHelpModal"]');
-  if(forgot)forgot.setAttribute('onclick','forgotBotPassword();return false');
-  document.querySelectorAll('a,button').forEach(el=>{
-    const oc=el.getAttribute('onclick')||'';
-    if(oc.includes("location.href='/settings'"))el.setAttribute('onclick',oc.replace("location.href='/settings'","showPage('settings')"));
-    if(oc.includes("location.href='/sett'"))el.setAttribute('onclick',oc.replace("location.href='/sett'","showPage('settings')"));
-  });
-})();
-</script>
-
-</body></html>';
+      + '</body></html>';
     if (!this._adMsg) {
       this._adMsg = true;
       // the frame says when the banner is there; one that never filled stays hidden (no empty strip)
@@ -6441,7 +6367,7 @@ const A = {
   cvGoReact() {
     const link = (document.getElementById('cvLink').value || '').trim();
     this.go('channelreact'); this.initChannelReact();
-    setTimeout(() => { const el = document.getElementById('channelLink'); if (el && link) { el.value = link; el.dispatchEvent(new Event('input')); } }, 150);
+    setTimeout(() => { const el = document.getElementById('crLink'); if (el && link) { el.value = link; el.dispatchEvent(new Event('input')); } }, 150);
   },
   // "Select amount" slider for Channel React ('cr') and Poll Voting ('cv'): starts on the most, can be dragged down.
   // It costs the same one coin / one free use.
@@ -6505,7 +6431,7 @@ const A = {
     this._cfShowRows(); this._cfMount('crVerifyBox'); this._cfReset('crVerifyBox');
     const resDiv = document.getElementById('crResult');
     if (resDiv) { resDiv.style.display = 'none'; resDiv.className = ''; resDiv.innerHTML = ''; }
-    const link = document.getElementById('channelLink');
+    const link = document.getElementById('crLink');
     if (link) link.value = '';
     const preview = document.getElementById('channelPreview');
     if (preview) preview.style.display = 'none';
@@ -6713,7 +6639,7 @@ const A = {
 },
 
   async previewChannel() {
-  const link = document.getElementById('channelLink').value.trim();
+  const link = document.getElementById('crLink').value.trim();
   const previewDiv = document.getElementById('channelPreview');
   if (!link) {
     previewDiv.style.display = 'none';
@@ -6755,7 +6681,7 @@ const A = {
  async sendChannelReact(e) {
   e.preventDefault();
   if (!this.token) { this.openM('login'); return; }
-  const link = document.getElementById('channelLink').value.trim();
+  const link = document.getElementById('crLink').value.trim();
   if (!link) { this.toast('Enter a channel post link', 'er'); return; }
 
   const mode = document.querySelector('input[name="reactMode"]:checked')?.value;
@@ -6792,13 +6718,12 @@ const A = {
   try {
     const cfToken = await this._cfEnsure('crVerifyBox');
     if (this.turnstileSiteKey && !cfToken) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reactions'; resultDiv.style.display = 'none'; return; }
-    const res = await fetch('/api/channel-react/send', {
+    const res = await fetch('/api/channel-react', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token },
       body: JSON.stringify({ link, emoji, random, useMode, cfToken, amount: A._amtValue('cr') })
     });
-    const txt = await res.text();
-    const data = JSON.parse(txt);
+    const data = await res.json();
     if (data.success) {
       const usedStr = data.emojisUsed ? data.emojisUsed.join(' ') : (emoji || 'random');
       resultDiv.className = 'cr-result ok';
@@ -14009,79 +13934,5 @@ if(typeof A!=='undefined'){
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='ppCountry'&&window.A){const c=opts.find(x=>x.id===e.target.value);const b=el('ppBtn');if(b)b.disabled=!c||!c.live;if(!c?.live&&el('ppMethods'))el('ppMethods').textContent=`Coming Soon - ${c.country} is still waiting. Card payment coming soon.`}});
 })();
 </script>
-
-<script>
-(function(){
-  if (!window.A) return;
-  A.sendChannelReact = async function(e){
-    if(e && e.preventDefault)e.preventDefault();
-    const link=(document.getElementById('channelLink')?.value||'').trim();
-    const result=document.getElementById('crResult');
-    const btn=document.getElementById('crSubmitBtn');
-    if(!/^https:\/\/(?:whatsapp\.com\/channel\/0029[A-Za-z0-9]+|chat\.whatsapp\.com\/[A-Za-z0-9]+)(?:[/?#].*)?$/i.test(link)){
-      if(result){result.style.display='block';result.className='cr-result er';result.textContent='Enter a valid WhatsApp channel or invite link.';} return;
-    }
-    const mode=document.querySelector('input[name="reactMode"]:checked')?.value||'auto';
-    let emojis=mode==='auto'?['❤️','👍','😮','🙏','😂']:(this._selectedEmojis||[]);
-    emojis=[...new Set(emojis)].slice(0,5);
-    if(!emojis.length) emojis=['❤️','👍','😮','🙏','😂'];
-    if(btn){btn.disabled=true;btn.textContent='Sending…';}
-    if(result){result.style.display='block';result.className='cr-result';result.textContent='Sending reactions…';}
-    try{
-      const txt=await fetch('/api/channel-react/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({link,emojis,count:1000})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(data.success){
-        if(result){result.className='cr-result ok';result.innerHTML='🎉 Reactions Sent!<br><span style="font-size:.8rem">Coins left: '+String(data.coinsLeft??'—')+'</span>';}
-      }else if(result){result.className='cr-result er';result.textContent=data.error||'Request failed';}
-    }catch(err){if(result){result.className='cr-result er';result.textContent='Request failed. Please try again.';}}
-    finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Send Reactions';}}
-  };
-  A.cvVote = async function(){
-    const link=this._cvPoll?.link||(document.getElementById('cvLink')?.value||'').trim();
-    const pick=document.querySelector('input[name="cvOpt"]:checked');
-    const option=pick ? (this._cvPoll?.options?.[Number(pick.value)] ?? pick.value) : null;
-    const count=Number(document.getElementById('cvAmount')?.value||1000);
-    const out=document.getElementById('cvVoteResult')||document.getElementById('cvResult');
-    const btn=document.getElementById('cvVoteBtn');
-    if(!link||option===null){if(out){out.className='cr-result er';out.textContent='Choose a poll option first.';}return;}
-    if(btn){btn.disabled=true;btn.textContent='Sending…';}
-    try{
-      const txt=await fetch('/api/poll-vote/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({link,option,count})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(out){out.className='cr-result '+(data.success?'ok':'er');out.textContent=data.success?'🎉 Votes Sent! Coins left: '+String(data.coinsLeft??'—'):(data.error||'Request failed');}
-    }catch(err){if(out){out.className='cr-result er';out.textContent='Request failed. Please try again.';}}
-    finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-check"></i> Send Votes';}}
-  };
-  A.mbpLogin = async function(){
-    const number=(document.getElementById('manageBotNumber')?.value||'').trim().replace(/\D/g,'');
-    const password=(document.getElementById('manageBotPass')?.value||'').trim();
-    if(!number||!password){alert('Enter both number and password');return;}
-    try{
-      const txt=await fetch('/api/managebot/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number,password})}).then(r=>r.text());
-      const data=JSON.parse(txt);
-      if(!data.success){alert(data.error||'Sign in failed');return;}
-      localStorage.setItem('king_bot_token',data.token);
-      localStorage.setItem('king_bot_number',data.botNumber);
-      location.href='/bot-panel.html?number='+encodeURIComponent(data.botNumber);
-    }catch(e){alert('Unable to sign in. Please try again.');}
-  };
-  window.forgotBotPassword = async function(){
-    const number=(document.getElementById('manageBotNumber')?.value||'').trim().replace(/\D/g,'');
-    if(!number){alert('Enter your bot number first');return;}
-    try{
-      const txt=await fetch('/api/bot/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number})}).then(r=>r.text());
-      const data=JSON.parse(txt); alert(data.newPassword||data.error||'Unable to reset password');
-    }catch(e){alert('Unable to reset password');}
-  };
-  const forgot=document.querySelector('a[onclick*="openPasswordHelpModal"]');
-  if(forgot)forgot.setAttribute('onclick','forgotBotPassword();return false');
-  document.querySelectorAll('a,button').forEach(el=>{
-    const oc=el.getAttribute('onclick')||'';
-    if(oc.includes("location.href='/settings'"))el.setAttribute('onclick',oc.replace("location.href='/settings'","showPage('settings')"));
-    if(oc.includes("location.href='/sett'"))el.setAttribute('onclick',oc.replace("location.href='/sett'","showPage('settings')"));
-  });
-})();
-</script>
-
 </body>
 </html>
