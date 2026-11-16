@@ -2181,8 +2181,8 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 <div class="inst-card" id="installPrompt" role="dialog" aria-label="Install the app"><img src="/logo.png" alt=""><div class="ii"><b>Install KING MD V4</b><span id="instSub">Open it like an app, straight from your home screen.</span></div><button type="button" class="ig" onclick="A.installFromCard()">Install</button><button type="button" class="ix" onclick="A.dismissInstall(true)" aria-label="Close"><i class="fas fa-times"></i></button></div>
 <nav class="bnav" id="bnav" aria-label="Main">
   <a data-bn="home" onclick="if(window._ehApp){try{sessionStorage.removeItem('eh_site')}catch(e){}location.href='/app.html';return}A.bnMore(false);A.go('home')"><i class="fas fa-home"></i><span>Home</span></a>
-  <a data-bn="deploy" class="gold" onclick="A.bnMore(false);A.quickDeployBot()"><i class="fas fa-rocket"></i><span>Deploy Bots</span></a>
-  <a data-bn="managebot" onclick="A.bnMore(false);A.go('managebot');A.initManageBotPage()"><i class="fas fa-sliders-h"></i><span>Bot Settings</span></a>
+  <a data-bn="deploy" class="gold" onclick="A.bnMore(false);location.href='/app.html'"><i class="fas fa-rocket"></i><span>Deploy Bots</span></a>
+  <a data-bn="managebot" onclick="A.bnMore(false);location.href='/sett'"><i class="fas fa-sliders-h"></i><span>Bot Settings</span></a>
   <a data-bn="community" onclick="A.bnMore(false);A.go('community');A.loadChat()"><i class="fas fa-comments"></i><span>Community</span></a>
   <a data-bn="more" onclick="A.bnMore()"><i class="fas fa-ellipsis"></i><span>More</span></a>
 </nav>
@@ -2199,7 +2199,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 
 <div class="fab-tip" id="fabTip"><span>Deploy Bot</span><button class="fab-tip-x" onclick="A.dismissFabTip(event)" aria-label="Dismiss"><i class="fas fa-times"></i></button></div>
 
-<button class="pro-fab" id="proFab" onclick="A.quickDeployBot()" title="Deploy a Bot" aria-label="Deploy a Bot"><i class="fas fa-plus"></i></button>
+<button class="pro-fab" id="proFab" onclick="location.href='/app.html'" title="Deploy a Bot" aria-label="Deploy a Bot"><i class="fas fa-plus"></i></button>
 
 <main>
 <div class="eh-ad" id="adTop" hidden></div>
@@ -2272,7 +2272,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       <div style="font-size:.85rem;color:var(--t2);margin-bottom:.7rem;line-height:1.5">
         Sign in with your bot number + the 8-character password your bot sent you when it first connected. Customize your bot, toggle features, manage channel react.
       </div>
-      <button class="btn bp bfw" onclick="A.go('managebot');A.initManageBotPage()"><i class="fas fa-cog"></i> Open Manage Bot</button>
+      <button class="btn bp bfw" onclick="location.href='/sett'"><i class="fas fa-cog"></i> Open Manage Bot</button>
     </div>
 
     <div class="promo-pro" id="homeProPromo" style="display:none" onclick="A.openUpgradeModal()">
@@ -2319,7 +2319,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <a class="fx-card" onclick="A.go('channelreact')"><img src="/features/chreact.svg" alt="" loading="lazy"><h3>Channel Reacts</h3><p>Send up to 1000+ reactions to any channel post, with the emojis you pick.</p></a>
         <a class="fx-card" onclick="A.go('channelvote')"><img src="/features/chvote.svg" alt="" loading="lazy"><h3>Poll Voting</h3><p>Send votes to any channel poll and push the option you want to the top.</p></a>
         <a class="fx-card" onclick="A.go('refer');A.initReferPage()"><img src="/features/spin.svg" alt="" loading="lazy"><h3>Daily Spin &amp; Tasks</h3><p>Spin the wheel every day and finish easy tasks to win EH coins.</p></a>
-        <a class="fx-card" onclick="A.go('managebot');A.initManageBotPage()"><img src="/features/managebot.svg" alt="" loading="lazy"><h3>Manage Bot</h3><p>Switch features on and off, protect your groups and set your bot up — all from the site.</p></a>
+        <a class="fx-card" onclick="location.href='/sett'"><img src="/features/managebot.svg" alt="" loading="lazy"><h3>Manage Bot</h3><p>Switch features on and off, protect your groups and set your bot up — all from the site.</p></a>
         <a class="fx-card" onclick="A.go('premium')"><img src="/features/premium.svg" alt="" loading="lazy"><h3>Premium</h3><p>Your own bot name and picture, no watermarks, and free reacts and votes every day.</p></a>
         <a class="fx-card" onclick="A.go('community');A.loadChat()"><img src="/features/community.svg" alt="" loading="lazy"><h3>Community</h3><p>Ask questions, get help and share tips with other bot owners.</p></a>
       </div>
@@ -3380,7 +3380,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       <div class="sf-col">
         <h4>Product</h4>
         <a onclick="A.go('home')">Deploy a Bot</a>
-        <a onclick="A.go('managebot');A.initManageBotPage()">Manage Bot</a>
+        <a onclick="location.href='/sett'">Manage Bot</a>
         <a onclick="A.go('services')">Channel Growth</a>
         <a href="/api-docs" target="_blank" rel="noopener">API Documentation</a>
         <a onclick="A.go('channelreact')">Channel Reacts</a>
