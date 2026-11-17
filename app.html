@@ -7610,6 +7610,7 @@ async _doQR() {
           clearInterval(this._qrStatusTimer); this._qrStatusTimer = null;
           const saved = this.localSess.find(x => x.deviceId === deviceId);
           if (saved) { saved.phoneNumber = statusData.number; saved.qrPending = false; saved.status = 'active'; saved.connectedAt = Date.now(); localStorage.setItem('eh_sess', JSON.stringify(this.localSess)); }
+          this._botOnline = { ...(this._botOnline || {}), [String(statusData.number).replace(/\D/g, '')]: 'online' };
           this._loadMyBotsCard();
           this.toast('WhatsApp connected successfully. Your bot is online.', 'ok');
         } else if (qrChecks >= 45) {
@@ -7825,7 +7826,7 @@ async _doPair() {
   slots += `<div style="font-size:.78rem;color:var(--t2);align-self:center;margin-left:.4rem">${used}/${total} used</div>`;
   document.getElementById('spacesWrap').innerHTML = slots;
 
-  const stOf = (n) => { const m = this._botOnline || {}; const k = String(n).replace(/\D/g, ''); return k in m ? m[k] : undefined; };
+  const stOf = (n) => { const m = this._botOnline || {}; const k = String(n).replace(/\D/g, ''); const v = k in m ? m[k] : undefined; return v && typeof v === 'object' ? (v.connected === true ? 'online' : (v.state || 'offline')) : v; };
   const chip = (st) => st === 'online' ? '<span class="bot-st on">Online</span>' : st === 'offline' ? '<span class="bot-st off">Offline</span>'
     : st === 'pairing' ? '<span class="bot-st wait">Waiting for link</span>' : '<span class="bot-st wait">Checking</span>';
   document.getElementById('myBotsList').innerHTML = this.localSess.length
@@ -7843,14 +7844,14 @@ async _doPair() {
   // Online / Offline of the bots listed on this device. Works signed in or out; one small request, answered from memory.
   async _pollBotStates() {
     if (this._botPollBusy) return;
-    const nums = (this.localSess || []).map(s => String(s.phoneNumber).replace(/\D/g, '')).filter(Boolean).slice(0, 12);
+    const nums = (this.localSess || []).filter(s => !s.qrPending && !String(s.phoneNumber || '').startsWith('qr-pending-')).map(s => String(s.phoneNumber).replace(/\D/g, '')).filter(n => /^\d{8,15}$/.test(n)).slice(0, 12);
     if (!nums.length) return;
     this._botPollBusy = true;
     try {
       const r = await fetch('/api/bots/status', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(this.token ? { 'x-auth-token': this.token } : {}) }, body: JSON.stringify({ numbers: nums, deviceId: this._devId() }) });
       const d = await r.json();
       if (d && d.success) {
-        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = st;
+        const next = { ...(this._botOnline || {}) }; for (const [n, st] of Object.entries(d.bots || {})) next[n] = st && typeof st === 'object' ? (st.connected === true ? 'online' : (st.state || 'offline')) : st;
         if (JSON.stringify(next) !== JSON.stringify(this._botOnline || {})) { this._botOnline = next; this._loadMyBotsCard(); }
       }
     } catch (_) {} finally { this._botPollBusy = false; }

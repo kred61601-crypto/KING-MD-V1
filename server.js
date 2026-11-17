@@ -1685,6 +1685,65 @@ function parseChannelLink(link) {
   return null;
 }
 
+
+async function handleChannelReact(req, res) {
+  try {
+    const b = req.body || {};
+    const link = parseChannelLink(b.link || b.channelLink || b.postLink || b.url || '');
+    const post = link && link.match(/^https?:\/\/(?:www\.)?whatsapp\.com\/channel\/([A-Za-z0-9]+)\/([A-Za-z0-9_-]+)/i);
+    if (!post) return res.json({ success: false, error: 'Paste a WhatsApp Channel post link, not just the channel invite link.' });
+
+    const ownedBots = uniqueBots(botRecords.filter(x => x.ownerId === req.account.id && (x.createdVia === 'king-md-app' || !!x.ownerId)));
+    if (!ownedBots.length) return res.json({ success: false, error: 'Deploy a bot from this app and connect it to WhatsApp first.' });
+    const phoneNumbers = ownedBots.map(x => normalizePhone(x.number)).filter(n => /^\d{8,15}$/.test(n));
+    if (!phoneNumbers.length) return res.json({ success: false, error: 'No deployed bot number is linked to this account.' });
+
+    let emojis = [];
+    if (Array.isArray(b.emojis)) emojis = b.emojis;
+    else if (typeof b.emoji === 'string') emojis = b.emoji.split(',');
+    if (b.random || !emojis.length) emojis = ['❤️', '👍', '😮', '🙏', '😂'];
+    emojis = emojis.map(x => String(x).trim()).filter(Boolean).slice(0, 5);
+    if (!emojis.length) emojis = ['❤️'];
+    const count = Math.min(1000, Math.max(1, Number(b.amount || b.count || 1000)));
+    const isPremium = isPremiumUser(req.account);
+    const coinCost = isPremium ? 0 : 1;
+    if (coinCost && Number(req.account.coins || 0) < coinCost) {
+      return res.json({ success: false, error: 'Not enough EH coins. You need 1 EH coin.' });
+    }
+
+    const engineResult = await engineFetch('/api/channel-react', {
+      method: 'POST',
+      body: JSON.stringify({ link, phoneNumbers, emojis, count, userId: req.account.id })
+    });
+    const reactionsSent = Number(engineResult.reactionsSent || engineResult.sent || 0);
+    if (!engineResult.success || reactionsSent < 1) {
+      return res.json({ success: false, error: engineResult.message || engineResult.error || 'No connected bot could send a channel reaction.' });
+    }
+
+    if (coinCost) {
+      req.account.coins = Number(req.account.coins || 0) - coinCost;
+      saveUsers();
+    }
+    const job = {
+      id: 'REACT' + Date.now(), userId: req.account.id, username: req.account.username,
+      link, emojis, count, reactionsSent, status: 'sent', createdAt: new Date().toISOString()
+    };
+    channelReacts.push(job);
+    saveReactsList();
+    return res.json({
+      success: true, id: job.id, status: 'sent', reactionsSent,
+      emojisUsed: engineResult.emojisUsed || emojis,
+      coinsLeft: Number(req.account.coins || 0), premium: isPremium,
+      message: 'Channel reactions sent.'
+    });
+  } catch (e) {
+    return res.json({ success: false, error: e.message || 'The bot engine could not send channel reactions.' });
+  }
+}
+
+app.post('/api/channel-react', requireUser, handleChannelReact);
+app.post('/api/channel-react/send', requireUser, handleChannelReact);
+
 app.post('/api/channel-react/send', requireUser, async (req, res) => {
   try {
     const b = req.body || {};
@@ -1806,9 +1865,12 @@ app.post('/api/v1/react', async (req, res) => {
   const link = parseChannelLink(req.body.link || '');
   if (!link) return res.json({ success: false, error: 'Invalid link' });
   try {
-    await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, emojis: req.body.emojis || ['❤️'], count: req.body.count || 100 }) });
-  } catch (_) {}
-  res.json({ success: true, message: 'Queued' });
+    const phoneNumbers = uniqueBots(botRecords.filter(b => b.ownerId === u.id)).map(b => normalizePhone(b.number)).filter(n => /^\d{8,15}$/.test(n));
+    const result = await engineFetch('/api/channel-react', { method: 'POST', body: JSON.stringify({ link, phoneNumbers, emojis: req.body.emojis || ['❤️'], count: req.body.count || 100 }) });
+    return res.json({ success: true, message: 'Sent', reactionsSent: Number(result.reactionsSent || 0), emojisUsed: result.emojisUsed || [] });
+  } catch (e) {
+    return res.status(e.status || 502).json({ success: false, error: e.message || 'Channel reaction failed.' });
+  }
 });
 
 app.post('/api/v1/poll', async (req, res) => {
