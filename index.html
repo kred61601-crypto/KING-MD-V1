@@ -2946,30 +2946,27 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       </div>
       <div id="adm-sec-fleet" style="display:none">
         <div id="fleetNoKeyWarn" class="card" style="display:none;border:1px solid var(--er)">
-          <div class="ctitle" style="color:var(--er)"><i class="fas fa-triangle-exclamation"></i> Heroku API key not set</div>
-          <div style="font-size:.82rem;color:var(--t2);line-height:1.5">Add <code>HEROKU_API_KEY</code> to <code>.env</code> (Account Settings → API Key on heroku.com) and restart the site to use this feature.</div>
+          <div class="ctitle" style="color:var(--er)"><i class="fas fa-triangle-exclamation"></i> Server setup</div>
+          <div style="font-size:.82rem;color:var(--t2);line-height:1.5">Add a deployed HTTPS engine URL using the Add Servers button below.</div>
         </div>
-        <div class="card" data-mc="Add Servers|fa-plus|Create new Heroku servers automatically">
-          <div class="ctitle"><i class="fas fa-server"></i> Add Servers</div>
-          <div style="font-size:.82rem;color:var(--t2);margin-bottom:1rem;line-height:1.5">Creates real Heroku apps automatically — each one runs its own copy of the bot with a session cap you set, and gets wired into pairing routing the moment it's live. Takes a minute or two per server (real Heroku builds). Nothing to configure on Heroku's side first — same as your original app.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
+        <div class="card" data-mc="Add Server|fa-plus|Register an existing independent bot engine">
+          <div class="ctitle"><i class="fas fa-server"></i> Add Server</div>
+          <div style="font-size:.82rem;color:var(--t2);margin-bottom:1rem;line-height:1.5">Register an already-deployed KING MD bot engine. Each engine must have its own session storage and the same private PAIR_BRIDGE_KEY as this panel.</div>
+          <div style="display:grid;grid-template-columns:1fr;gap:.6rem;margin-bottom:.6rem">
             <div>
-              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">How many servers</label>
-              <input type="number" id="fleetAddCount" class="fi" value="5" min="1" max="50" oninput="A.adminFleetEstimate()">
+              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Engine URL</label>
+              <input type="url" id="fleetAddUrl" class="fi" placeholder="https://your-engine.onrender.com" autocomplete="url">
             </div>
             <div>
-              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Sessions per server</label>
-              <input type="number" id="fleetAddCapacity" class="fi" value="10" min="5" max="500">
+              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Server name</label>
+              <input type="text" id="fleetAddName" class="fi" maxlength="60" placeholder="KING MD Server 2">
+            </div>
+            <div>
+              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Maximum bot slots</label>
+              <input type="number" id="fleetAddCapacity" class="fi" value="15" min="1" max="10000">
             </div>
           </div>
-          <div id="fleetAcctRow" style="display:none;margin-bottom:.6rem">
-            <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Heroku account</label>
-            <select id="fleetAddAcct" class="fi"></select>
-            <div style="font-size:.7rem;color:var(--t2);margin-top:.25rem;line-height:1.4">The new servers are created in this account. Add more accounts by putting <code>HEROKU_API_KEY_2</code>, <code>HEROKU_API_KEY_3</code>… in <code>.env</code> and redeploying the site.</div>
-          </div>
-          <label style="display:flex;align-items:center;gap:.5rem;font-size:.82rem;color:var(--t2);margin-bottom:.7rem;cursor:pointer"><input type="checkbox" id="fleetAddAdminOnly" style="width:auto"> Admin-only — never used for public pairing, safe to test/redeploy freely</label>
-          <div id="fleetCostEstimate" style="font-size:.8rem;color:var(--wa);font-weight:700;margin-bottom:.7rem"></div>
-          <button class="btn bp bfw" onclick="A.adminFleetAdd()" id="fleetAddBtn"><i class="fas fa-plus"></i> Add Servers</button>
+          <button class="btn bp bfw" onclick="A.adminFleetAdd()" id="fleetAddBtn"><i class="fas fa-plus"></i> Add Server</button>
         </div>
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem;flex-wrap:wrap;gap:.5rem">
@@ -10401,9 +10398,7 @@ async _doPair() {
   },
 
   // ── SERVER FLEET (admin) ──
-  // Self-service Heroku bot-server creation/deletion. See site/server.js's
-  // /api/admin/servers/* routes and lib/herokuApi.js for the actual work —
-  // this is just the polling table + add-form UI.
+  // Register and monitor independently deployed KING MD bot engines.
   // Server lists: "new" = highest server number first, "old" = lowest first. The choice is
   // remembered per page (Server Fleet defaults to newest first, Logs to oldest first).
   // fetch → JSON that never throws "Unexpected token '<'": if the answer is not JSON (Heroku's error
@@ -10439,11 +10434,7 @@ async _doPair() {
   _fleetDynoUsd: { eco: 5, basic: 7, 'standard-1x': 25, 'standard-2x': 50 },
   _fleetPollTimer: null,
 
-  adminFleetEstimate() {
-    const count = Math.max(1, parseInt(document.getElementById('fleetAddCount')?.value) || 1);
-    const el = document.getElementById('fleetCostEstimate');
-    if (el) el.textContent = `≈ $${(count * this._fleetDynoUsd.basic).toFixed(0)}/month for ${count} server${count === 1 ? '' : 's'} (Heroku's own pricing — not billed by this site).`;
-  },
+  adminFleetEstimate() { return; },
 
   async adminLoadFleet(manual = false) {
     const box = document.getElementById('fleetTable');
@@ -10466,6 +10457,7 @@ async _doPair() {
       if (!d.success) throw new Error(d.error || 'Failed');
 
       this._fleetServers = d.servers; // looked up by openFleetDetail() below
+      ['fleetBulkRedeployBtn','fleetBulkEditBtn','fleetBulkDeleteBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
       try { this._rlFill(manual); } catch (_) {}
       this._herokuAccts = d.herokuAccounts || [];
       const acctRow = document.getElementById('fleetAcctRow'), acctSel = document.getElementById('fleetAddAcct');
@@ -10489,9 +10481,9 @@ async _doPair() {
             (this._herokuAccts.some(a => a.locked) ? `<div style="flex-basis:100%;font-size:.72rem;color:var(--t2)"><i class="fas fa-lock"></i> Locked: ${this._herokuAccts.filter(a => a.locked).map(a => 'account ' + a.n).join(', ')} — no new bots go there and its free room is not counted. Its bots keep running and still count. Tap its button above to open it again.</div>` : '');
         } else { accFilter.style.display = 'none'; accFilter.innerHTML = ''; this._fleetAcct = null; }
       }
-      if (warn) warn.style.display = d.herokuConfigured ? 'none' : '';
+      if (warn) warn.style.display = 'none';
       const addBtn = document.getElementById('fleetAddBtn');
-      if (addBtn) addBtn.disabled = !d.herokuConfigured;
+      if (addBtn) addBtn.disabled = false;
 
       this._fleetDelStatus(d.servers.some(s => s.status === 'deleting'));
       const summary = document.getElementById('fleetLiveSummary');
@@ -10517,21 +10509,21 @@ async _doPair() {
             : s.status === 'failed' ? `Failed${s.error ? ': ' + this._esc(s.error) : ''}`
             : (STAGE_LABEL[s.status] || s.status);
           const sessions = s.status === 'active' && s.liveSessions != null ? (s.liveSessions > s.capacity ? `<b style="color:var(--er)">${s.liveSessions} / ${s.capacity} · over its limit</b>` : `${s.liveSessions} / ${s.capacity}`) : (s.capacity ? `— / ${s.capacity}` : '—');
-          const serverLbl = s.serverNumber ? `Server ${s.serverNumber}` : 'New server';
+          const serverLbl = s.name || (s.serverNumber ? `Server ${s.serverNumber}` : 'New server');
           // A server that failed before Heroku ever handed back a real app
           // (e.g. the configured API key was wrong/expired) has no appName —
           // selection and delete fall back to its Mongo _id so it's never a
           // dead, unremovable row stuck in this table.
           const selVal = s.appName || `id:${s._id}`;
           const cb = `<input type="checkbox" class="fleet-cb" value="${this._esc(selVal)}" onchange="A._updateFleetSelection()">`;
-          const isActive = s.appName && s.status === 'active';
+          const isActive = s.appName && s.status === 'active' && !s.managedExternally;
           const adminBadge = (s.adminOnly ? ' <span class="badge b-y" style="font-size:.6rem" title="Excluded from public pairing">Admin-only</span>' : '')
             + (s.premiumOnly ? ' <span class="badge" style="font-size:.6rem;background:rgba(245,180,23,.18);color:#f5b417" title="Only premium numbers are paired here">👑 Premium</span>' : '')
             + ((this._herokuAccts || []).length > 1 ? ` <span class="badge" style="font-size:.6rem" title="Which Heroku account this server lives in">Heroku ${s.herokuAcct || 1}</span>` : '')
             + (((this._herokuAccts || []).find(a => a.n === (s.herokuAcct || 1)) || {}).locked ? ` <span class="badge" style="font-size:.6rem" title="This Heroku account is locked: no new bots go to this server"><i class="fas fa-lock"></i> locked</span>` : '')
             + (s.flaps >= 2 ? ` <span class="badge" style="font-size:.6rem;background:rgba(239,68,68,.16);color:#ef4444" title="Stopped / started answering ${s.flaps} times in the last 2 hours">⚠ unstable ×${s.flaps}</span>` : '');
           const deleteBtn = `<button class="btn bdr" style="padding:.25rem .55rem;font-size:.72rem" onclick="A.adminDeleteFleetRow('${this._esc(selVal)}')"><i class="fas fa-trash"></i></button>`;
-          const shortLbl = s.serverNumber ? `Ser ${s.serverNumber}` : 'New';
+          const shortLbl = s.serverNumber ? `Ser ${s.serverNumber}` : (s.name || 'New');
           return `<div class="fl-row" onclick="A.openFleetDetail(event,'${this._esc(s.appName||'')}')" style="cursor:${s.appName ? 'pointer' : 'default'}">
             <div class="fl-top">${cb}<span class="hl-dot ${s.live === false ? 'bad' : s.live === true ? '' : 'na'}" title="${s.live === false ? 'Not responding' : s.live === true ? 'Live' : 'No reading yet'}"></span><span class="fl-name" title="${this._esc(serverLbl)}">${this._esc(shortLbl)}</span><span class="fl-tags">${adminBadge}</span><span class="fl-st" style="color:${statusColor}">${statusText}</span></div>
             <div class="fl-bot"><span class="fl-meta"><i class="fas fa-users"></i> ${sessions}</span><span class="fl-meta" style="text-transform:capitalize"><i class="fas fa-microchip"></i> ${this._esc(s.dynoSize || '')}</span>${s.redeployError ? `<span class="fl-meta" style="color:var(--er)" title="${this._esc(s.redeployError)}">redeploy failed</span>` : ''}<span class="fl-acts">${isActive ? `<button class="btn ${s.premiumOnly ? 'bwa' : 'bs'}"  title="${s.premiumOnly ? 'Premium server — tap to make it a normal server' : 'Make this a premium server (only premium numbers pair here)'}" onclick="event.stopPropagation();A.adminToggleFleetPremium('${this._esc(s.appName)}',${!s.premiumOnly})"><i class="fas fa-crown"></i></button>` : ''}${isActive ? `<button class="btn ${s.adminOnly ? 'bwa' : 'bs'}"  title="${s.adminOnly ? 'Admin-only — tap to allow public pairing again' : 'Mark admin-only — excludes it from public pairing'}" onclick="A.adminToggleFleetAdminOnly('${this._esc(s.appName)}',${!s.adminOnly})"><i class="fas fa-user-shield"></i></button>` : ''}${isActive ? `<button class="btn bpu"  title="Push latest bot code to this app — bots stay connected" onclick="A.adminRedeployFleetServer('${this._esc(s.appName)}')"><i class="fas fa-cloud-upload-alt"></i></button>` : ''}${isActive ? `<button class="btn bs"  onclick="A.adminEditFleetCapacity('${this._esc(s.appName)}',${s.capacity||0})"><i class="fas fa-edit"></i></button>` : ''}${deleteBtn}</span></div>
@@ -10563,47 +10555,54 @@ async _doPair() {
 
     const statusColor = s.status === 'active' ? 'var(--in)' : s.status === 'failed' ? 'var(--er)' : 'var(--wa)';
     const statusText = s.status === 'active' ? (s.healthy === false ? 'Built, not reachable yet' : 'Live') : (s.status === 'failed' ? `Failed${s.error ? ': ' + s.error : ''}` : s.status);
-    const serverLbl = s.serverNumber ? `Server ${s.serverNumber}` : '—';
+    const serverLbl = s.name || (s.serverNumber ? `Server ${s.serverNumber}` : '—');
     const sessions = s.status === 'active' && s.liveSessions != null ? (s.liveSessions > s.capacity ? `<b style="color:var(--er)" title="Over its limit: the bots already here keep running, no new bot can join until it is below ${s.capacity}">${s.liveSessions} / ${s.capacity}</b>` : `${s.liveSessions} / ${s.capacity}`) : (s.capacity ? `— / ${s.capacity}` : '—');
     const row = (label, value) => `<div style="display:flex;justify-content:space-between;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--bd)"><span style="color:var(--t2);font-size:.82rem">${label}</span><span style="font-weight:600;font-size:.85rem;text-align:right">${value}</span></div>`;
 
     document.getElementById('fleetDetailBody').innerHTML = `
       ${row('Server', this._esc(serverLbl))}
-      ${row('App name', this._esc(s.appName))}
+      ${row('Server name', this._esc(s.name || s.appName))}
+      ${s.url ? row('Engine URL', `<a href="${this._esc(s.url)}" target="_blank" rel="noopener">${this._esc(s.url)}</a>`) : ''}
       ${row('Status', `<span style="color:${statusColor}">${this._esc(statusText)}</span>`)}
       ${row('Sessions', this._esc(sessions))}
-      ${row('Dyno size', this._esc(s.dynoSize || '—'))}
+      ${s.managedExternally ? row('Hosting', 'External engine') : row('Dyno size', this._esc(s.dynoSize || '—'))}
       ${row('Admin-only', s.adminOnly ? '✅ Yes — excluded from public pairing' : 'No — in public rotation')}
       ${row('Premium server', s.premiumOnly ? '👑 Yes — only premium numbers pair here' : 'No')}
       ${(this._herokuAccts || []).length > 1 ? row('Heroku account', this._esc('Account ' + (s.herokuAcct || 1) + (((this._herokuAccts || []).find(a => a.n === (s.herokuAcct || 1)) || {}).email ? ' — ' + (this._herokuAccts.find(a => a.n === (s.herokuAcct || 1))).email : ''))) : ''}
       ${s.redeployError ? row('Last redeploy', `<span style="color:var(--er)">${this._esc(s.redeployError)}</span>`) : ''}
       <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
         ${s.url ? `<a class="btn bp" style="flex:1" href="${this._esc(s.url)}" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i> View Server</a>` : ''}
-        ${s.status === 'active' ? `<button class="btn ${s.adminOnly ? 'bwa' : 'bs'}" onclick="A.closeM('fleetDetail');A.adminToggleFleetAdminOnly('${this._esc(s.appName)}',${!s.adminOnly})"><i class="fas fa-user-shield"></i> ${s.adminOnly ? 'Allow Public' : 'Make Admin-only'}</button>` : ''}
+        ${s.status === 'active' && !s.managedExternally ? `<button class="btn ${s.adminOnly ? 'bwa' : 'bs'}" onclick="A.closeM('fleetDetail');A.adminToggleFleetAdminOnly('${this._esc(s.appName)}',${!s.adminOnly})"><i class="fas fa-user-shield"></i> ${s.adminOnly ? 'Allow Public' : 'Make Admin-only'}</button>` : ''}
       </div>`;
     this.openM('fleetDetail');
   },
 
   async adminFleetAdd() {
-    const count = parseInt(document.getElementById('fleetAddCount')?.value) || 0;
-    const capacity = parseInt(document.getElementById('fleetAddCapacity')?.value) || 10;
-    const adminOnly = !!document.getElementById('fleetAddAdminOnly')?.checked;
-    const acct = parseInt(document.getElementById('fleetAddAcct')?.value) || 1;
-    const dynoSize = 'basic';
-    if (count < 1 || count > 50) { this.toast('Enter 1-50 servers', 'er'); return; }
-    const estUsd = (count * this._fleetDynoUsd[dynoSize]).toFixed(0);
-    if (!confirm(`Create ${count} new fleet server${count === 1 ? '' : 's'}, ${capacity} session${capacity === 1 ? '' : 's'} capacity each${adminOnly ? ' (admin-only)' : ''}${(this._herokuAccts || []).length > 1 ? ' in Heroku account ' + acct : ''}?\n\nEstimated cost: ≈$${estUsd}/month on Heroku's own billing (not charged by this site).\n\nThis starts real Heroku app creation immediately.`)) return;
+    const urlInput = document.getElementById('fleetAddUrl');
+    const nameInput = document.getElementById('fleetAddName');
+    const url = (urlInput?.value || '').trim().replace(/\/+$/, '');
+    const name = (nameInput?.value || '').trim();
+    const capacity = Math.max(1, parseInt(document.getElementById('fleetAddCapacity')?.value) || 15);
+    if (!url) { this.toast('Enter the engine URL first', 'er'); urlInput?.focus(); return; }
+    try {
+      new URL(url);
+    } catch (_) { this.toast('Enter a valid engine URL', 'er'); urlInput?.focus(); return; }
+    const btn = document.getElementById('fleetAddBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding…'; }
     try {
       const res = await fetch('/api/admin/servers/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token },
-        body: JSON.stringify({ count, capacity, dynoSize, adminOnly, acct })
+        body: JSON.stringify({ url, name, capacity })
       });
-      const d = await res.json();
-      if (!d.success) { this.toast(d.error || 'Failed', 'er'); return; }
-      this.toast(`Creating ${d.queued} server${d.queued === 1 ? '' : 's'} — est. $${d.estimatedMonthlyUsd}/mo`, 'ok');
-      this.adminLoadFleet();
-    } catch { this.toast('Network error', 'er'); }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.success) throw new Error(d.error || `Could not add server (HTTP ${res.status})`);
+      if (urlInput) urlInput.value = '';
+      if (nameInput) nameInput.value = '';
+      this.toast(`Server added. Fleet now has ${d.totalServers} server(s).`, 'ok');
+      await this.adminLoadFleet(true);
+    } catch (e) { this.toast(e.message || 'Could not add server', 'er'); }
+    finally { if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> Add Server'; } }
   },
 
   // ── ACCOUNT MIGRATION (move fleet apps to a new Heroku account) ──
@@ -11063,9 +11062,7 @@ async _doPair() {
 
   async adminDeleteFleetRow(val) {
     const isPlaceholder = val.startsWith('id:');
-    const msg = isPlaceholder
-      ? `Remove this failed/stuck server entry? It never finished creating on Heroku, so this just clears the record.`
-      : `Permanently delete "${val}"? It is removed from Heroku and everything saved about it is deleted from every database (its bots' backups, saved files, the site's records of those bots). This disconnects its bots and cannot be undone.`;
+    const msg = `Remove this server from the KING MD panel? This does not delete the external engine or its WhatsApp sessions.`;
     if (!confirm(msg)) return;
     try {
       const res = await fetch(this._fleetDeleteUrl(val), { method: 'DELETE', headers: { 'x-auth-token': this.token } });

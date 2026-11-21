@@ -2946,19 +2946,19 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
       </div>
       <div id="adm-sec-fleet" style="display:none">
         <div id="fleetNoKeyWarn" class="card" style="display:none;border:1px solid var(--er)">
-          <div class="ctitle" style="color:var(--er)"><i class="fas fa-triangle-exclamation"></i> Heroku API key not set</div>
-          <div style="font-size:.82rem;color:var(--t2);line-height:1.5">Add <code>HEROKU_API_KEY</code> to <code>.env</code> (Account Settings → API Key on heroku.com) and restart the site to use this feature.</div>
+          <div class="ctitle" style="color:var(--er)"><i class="fas fa-triangle-exclamation"></i> Server setup</div>
+          <div style="font-size:.82rem;color:var(--t2);line-height:1.5">Add a deployed HTTPS engine URL using the Add Servers button below.</div>
         </div>
         <div class="card" data-mc="Add Servers|fa-plus|Create new Heroku servers automatically">
           <div class="ctitle"><i class="fas fa-server"></i> Add Servers</div>
-          <div style="font-size:.82rem;color:var(--t2);margin-bottom:1rem;line-height:1.5">Creates real Heroku apps automatically — each one runs its own copy of the bot with a session cap you set, and gets wired into pairing routing the moment it's live. Takes a minute or two per server (real Heroku builds). Nothing to configure on Heroku's side first — same as your original app.</div>
+          <div style="font-size:.82rem;color:var(--t2);margin-bottom:1rem;line-height:1.5">Register an already-deployed independent KING MD bot engine. Deploy the engine separately, then paste its public HTTPS URL here. Each server keeps its own WhatsApp sessions.</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem">
             <div>
-              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">How many servers</label>
+              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Server capacity</label>
               <input type="number" id="fleetAddCount" class="fi" value="5" min="1" max="50" oninput="A.adminFleetEstimate()">
             </div>
             <div>
-              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Sessions per server</label>
+              <label style="font-size:.74rem;color:var(--t2);display:block;margin-bottom:.25rem">Maximum bot slots</label>
               <input type="number" id="fleetAddCapacity" class="fi" value="10" min="5" max="500">
             </div>
           </div>
@@ -10484,9 +10484,9 @@ async _doPair() {
             (this._herokuAccts.some(a => a.locked) ? `<div style="flex-basis:100%;font-size:.72rem;color:var(--t2)"><i class="fas fa-lock"></i> Locked: ${this._herokuAccts.filter(a => a.locked).map(a => 'account ' + a.n).join(', ')} — no new bots go there and its free room is not counted. Its bots keep running and still count. Tap its button above to open it again.</div>` : '');
         } else { accFilter.style.display = 'none'; accFilter.innerHTML = ''; this._fleetAcct = null; }
       }
-      if (warn) warn.style.display = d.herokuConfigured ? 'none' : '';
+      if (warn) warn.style.display = 'none';
       const addBtn = document.getElementById('fleetAddBtn');
-      if (addBtn) addBtn.disabled = !d.herokuConfigured;
+      if (addBtn) addBtn.disabled = false;
 
       this._fleetDelStatus(d.servers.some(s => s.status === 'deleting'));
       const summary = document.getElementById('fleetLiveSummary');
@@ -10580,23 +10580,19 @@ async _doPair() {
   },
 
   async adminFleetAdd() {
-    const count = parseInt(document.getElementById('fleetAddCount')?.value) || 0;
-    const capacity = parseInt(document.getElementById('fleetAddCapacity')?.value) || 10;
-    const adminOnly = !!document.getElementById('fleetAddAdminOnly')?.checked;
-    const acct = parseInt(document.getElementById('fleetAddAcct')?.value) || 1;
-    const dynoSize = 'basic';
-    if (count < 1 || count > 50) { this.toast('Enter 1-50 servers', 'er'); return; }
-    const estUsd = (count * this._fleetDynoUsd[dynoSize]).toFixed(0);
-    if (!confirm(`Create ${count} new fleet server${count === 1 ? '' : 's'}, ${capacity} session${capacity === 1 ? '' : 's'} capacity each${adminOnly ? ' (admin-only)' : ''}${(this._herokuAccts || []).length > 1 ? ' in Heroku account ' + acct : ''}?\n\nEstimated cost: ≈$${estUsd}/month on Heroku's own billing (not charged by this site).\n\nThis starts real Heroku app creation immediately.`)) return;
+    const url = prompt('Enter the HTTPS URL of the new independent KING MD bot engine:');
+    if (!url) return;
+    const name = prompt('Give this server a name:', 'KING MD Server') || 'KING MD Server';
+    const capacity = Math.max(1, parseInt(document.getElementById('fleetAddCapacity')?.value) || 15);
     try {
       const res = await fetch('/api/admin/servers/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token },
-        body: JSON.stringify({ count, capacity, dynoSize, adminOnly, acct })
+        body: JSON.stringify({ url, name, capacity })
       });
       const d = await res.json();
-      if (!d.success) { this.toast(d.error || 'Failed', 'er'); return; }
-      this.toast(`Creating ${d.queued} server${d.queued === 1 ? '' : 's'} — est. $${d.estimatedMonthlyUsd}/mo`, 'ok');
+      if (!d.success) { this.toast(d.error || 'Could not add server', 'er'); return; }
+      this.toast('Server added to your KING MD fleet', 'ok');
       this.adminLoadFleet();
     } catch { this.toast('Network error', 'er'); }
   },

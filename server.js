@@ -439,7 +439,15 @@ app.post('/request-qr', async (req, res) => {
   if (botSettings && botSettings.botCommands === false) return res.status(403).json({ success: false, error: 'Bot commands are turned OFF by the owner.' });
   try {
     let lastError = 'QR engine is unavailable.';
-    for (const base of ENGINE_URLS) {
+    let qrEngines = [...ENGINE_URLS];
+    try {
+      const counts = await Promise.all(ENGINE_URLS.map(async base => {
+        try { const d = await fetchFromEngine(base, '/api/count'); return { base, total: serverBotCount(d) }; }
+        catch (_) { return { base, total: Number.MAX_SAFE_INTEGER }; }
+      }));
+      qrEngines = counts.sort((a, b) => a.total - b.total).map(x => x.base);
+    } catch (_) {}
+    for (const base of qrEngines) {
       try {
         const upstream = await fetch(base + '/api/qr?deviceId=' + encodeURIComponent(deviceId), {
           method: 'GET', headers: { 'x-pair-bridge-key': PAIR_BRIDGE_KEY }, signal: AbortSignal.timeout(30000)
@@ -1218,62 +1226,107 @@ function adminOnly(req, res, next) {
 }
 
 // ===== MULTI-SERVER REGISTRY =====
-app.get('/api/admin/servers/list', requireUser, adminOnly, async (req, res) => {
-  const servers = await Promise.all(SERVER_LIST.map(async (server, i) => {
-    let healthy = false, liveSessions = 0;
-    try { const d = await fetchFromEngine(server.url, '/api/count'); healthy = true; liveSessions = Number(d.total || d.count || 0); } catch (_) {}
-    return { ...server, appName: server.name, serverNumber: i + 1, status: 'active', healthy,
-      liveSessions, bots: liveSessions, capacity: Number(server.capacity || 15), loading: false };
+function serverBotCount(data) {
+  if (Array.isArray(data.numbers)) return new Set(data.numbers.map(normalizePhone).filter(Boolean)).size;
+  if (data.bots && typeof data.bots === 'object') return Object.keys(data.bots).map(normalizePhone).filter(Boolean).length;
+  return Number(data.total ?? data.count ?? data.botsCount ?? 0) || 0;
+}
+
+async function listRegisteredServers() {
+  return Promise.all(SERVER_LIST.map(async (server, i) => {
+    let healthy = false, liveSessions = 0, error = '';
+    try {
+      let data;
+      try { data = await fetchFromEngine(server.url, '/api/count'); }
+      catch (_) { data = await fetchFromEngine(server.url, '/api/status'); }
+      healthy = true;
+      liveSessions = serverBotCount(data);
+    } catch (e) { error = e.message || 'Engine is not reachable'; }
+    return {
+      ...server,
+      _id: server.id,
+      // Existing Fleet UI uses appName as its row key. For externally hosted
+      // engines this is the registry ID, never a Heroku app name.
+      appName: server.id,
+      serverNumber: i + 1,
+      status: 'active', healthy, live: healthy,
+      liveSessions, bots: liveSessions,
+      capacity: Number(server.capacity || SLOTS_PER_SERVER),
+      loading: false, managedExternally: true, error
+    };
   }));
+}
+
+async function handleServerList(req, res) {
+  const servers = await listRegisteredServers();
+  const totalBots = servers.reduce((n, x) => n + x.liveSessions, 0);
+  const availableSlots = servers.reduce((n, x) => n + Math.max(0, x.capacity - x.liveSessions), 0);
   res.json({ success: true, servers, herokuConfigured: true, herokuAccounts: [],
-    totalServers: servers.length, totalBots: servers.reduce((n, x) => n + x.liveSessions, 0),
-    availableSlots: servers.reduce((n, x) => n + Math.max(0, x.capacity - x.liveSessions), 0) });
-});
-app.get('/admin/servers/list', requireUser, adminOnly, (req, res) => res.redirect(307, '/api/admin/servers/list'));
-app.post('/admin/servers/add', requireUser, adminOnly, (req, res) => res.redirect(307, '/api/admin/servers/add'));
+    totalServers: servers.length, totalBots, availableSlots });
+}
+app.get('/api/admin/servers/list', requireUser, adminOnly, handleServerList);
+app.get('/admin/servers/list', requireUser, adminOnly, handleServerList);
+app.get('/api/admin/servers', requireUser, adminOnly, handleServerList);
 app.get('/api/admin/servers/alerts', requireUser, adminOnly, (req, res) => res.json({ success: true, problems: [], overLimit: [] }));
 
-app.get('/api/admin/servers', requireUser, adminOnly, async (req, res) => {
-  const rows = await Promise.all(SERVER_LIST.map(async (server) => {
-    let healthy = false, bots = 0;
-    try { const d = await fetchFromEngine(server.url, '/api/count'); healthy = true; bots = Number(d.total || d.count || 0); } catch (_) {}
-    return { id: server.id, name: server.name, url: server.url, capacity: Number(server.capacity || 15),
-      enabled: server.enabled !== false, healthy, bots, availableSlots: Math.max(0, Number(server.capacity || 15) - bots) };
-  }));
-  res.json({ success: true, servers: rows, totalServers: rows.length,
-    totalBots: rows.reduce((n, x) => n + x.bots, 0),
-    availableSlots: rows.reduce((n, x) => n + x.availableSlots, 0) });
-});
-app.post('/api/admin/servers/add', requireUser, adminOnly, (req, res) => {
+function handleAddServer(req, res) {
   const body = req.body || {};
-  const url = String(body.url || body.serverUrl || '').trim().replace(/\/+$/, '');
+  const url = String(body.url || body.serverUrl || body.engineUrl || '').trim().replace(/\/+$/, '');
   const name = String(body.name || ('KING MD Server ' + (SERVER_LIST.length + 1))).trim().slice(0, 60);
-  const capacity = Math.max(1, Math.min(10000, Number(body.capacity) || SLOTS_PER_SERVER));
-  if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[^\s]*)?$/i.test(url)) {
-    return res.status(400).json({ success: false, error: 'Enter a valid HTTPS bot engine URL, for example https://your-engine.onrender.com' });
+  const capacity = Math.max(1, Math.min(10000, Number(body.capacity || body.slots || SLOTS_PER_SERVER) || SLOTS_PER_SERVER));
+  let parsed;
+  try { parsed = new URL(url); } catch (_) {}
+  if (!parsed || parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
+    return res.status(400).json({ success: false, error: 'Enter a valid engine URL, e.g. https://your-engine.onrender.com' });
   }
   if (SERVER_LIST.some(x => String(x.url).replace(/\/+$/, '').toLowerCase() === url.toLowerCase())) {
     return res.status(409).json({ success: false, error: 'This server URL is already registered.' });
   }
-  const server = { id: 'srv_' + crypto.randomBytes(6).toString('hex'), name: name || 'KING MD Server',
+  const server = { id: 'srv_' + crypto.randomBytes(8).toString('hex'), name: name || 'KING MD Server',
     url, capacity, enabled: true, createdAt: new Date().toISOString() };
-  SERVER_LIST.push(server); saveServers();
-  res.status(201).json({ success: true, server, queued: 1, totalServers: SERVER_LIST.length });
-});
-app.delete('/api/admin/servers/:id', requireUser, adminOnly, (req, res) => {
+  SERVER_LIST.push(server);
+  try { saveServers(); }
+  catch (e) { SERVER_LIST = SERVER_LIST.filter(x => x.id !== server.id); return res.status(500).json({ success: false, error: 'Could not save server: ' + e.message }); }
+  return res.status(201).json({ success: true, server, queued: 1, totalServers: SERVER_LIST.length });
+}
+app.post('/api/admin/servers/add', requireUser, adminOnly, handleAddServer);
+app.post('/admin/servers/add', requireUser, adminOnly, handleAddServer);
+
+function handleDeleteServer(req, res) {
   const before = SERVER_LIST.length;
   SERVER_LIST = SERVER_LIST.filter(x => x.id !== req.params.id);
   if (before === SERVER_LIST.length) return res.status(404).json({ success: false, error: 'Server not found.' });
-  saveServers(); res.json({ success: true, totalServers: SERVER_LIST.length });
-});
+  saveServers();
+  return res.json({ success: true, totalServers: SERVER_LIST.length });
+}
+app.delete('/api/admin/servers/:id', requireUser, adminOnly, handleDeleteServer);
+app.delete('/admin/servers/:id', requireUser, adminOnly, handleDeleteServer);
+
 app.patch('/api/admin/servers/:id', requireUser, adminOnly, (req, res) => {
   const server = SERVER_LIST.find(x => x.id === req.params.id);
   if (!server) return res.status(404).json({ success: false, error: 'Server not found.' });
   if (typeof req.body.enabled === 'boolean') server.enabled = req.body.enabled;
   if (req.body.name) server.name = String(req.body.name).trim().slice(0, 60);
-  if (req.body.capacity != null) server.capacity = Math.max(1, Math.min(10000, Number(req.body.capacity) || 15));
-  saveServers(); res.json({ success: true, server });
+  if (req.body.capacity != null) server.capacity = Math.max(1, Math.min(10000, Number(req.body.capacity) || SLOTS_PER_SERVER));
+  saveServers();
+  res.json({ success: true, server });
 });
+
+async function getFleetCapacityStats() {
+  const rows = await Promise.all(SERVER_LIST.filter(x => x && x.enabled !== false).map(async server => {
+    try {
+      let data;
+      try { data = await fetchFromEngine(server.url, '/api/count'); }
+      catch (_) { data = await fetchFromEngine(server.url, '/api/status'); }
+      const capacity = Math.max(0, Number(server.capacity) || SLOTS_PER_SERVER);
+      return { capacity, bots: serverBotCount(data), healthy: true };
+    } catch (_) { return { capacity: Math.max(0, Number(server.capacity) || SLOTS_PER_SERVER), bots: 0, healthy: false }; }
+  }));
+  return {
+    totalSlots: rows.reduce((n, x) => n + x.capacity, 0),
+    availableSlots: rows.reduce((n, x) => n + (x.healthy ? Math.max(0, x.capacity - x.bots) : 0), 0)
+  };
+}
 
 function calcStats() {
   dedupeBotRecords();
@@ -1293,10 +1346,11 @@ async function calcStatsLive() {
     let total = fleet.numbers.length;
     if (real !== null) total = real.length;
     const online = Object.values(fleet.bots).filter(b => b.connected).length;
-    const availableSlots = Math.max(0, serverStatsConfig().totalSlots - total);
+    const capacity = await getFleetCapacityStats();
+    const availableSlots = capacity.availableSlots;
     return {
       botsPaired: total, total, count: total, bots: total, online, offline: Math.max(0, total - online),
-      servers: serverStatsConfig().activeServers, totalServers: serverStatsConfig().totalServers, totalSlots: serverStatsConfig().totalSlots,
+      servers: serverStatsConfig().activeServers, totalServers: serverStatsConfig().totalServers, totalSlots: capacity.totalSlots,
       availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true
     };
   } catch (e) {
