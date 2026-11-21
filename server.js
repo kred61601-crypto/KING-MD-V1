@@ -23,15 +23,33 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
-const ENGINE_URLS = (process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com')
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
+const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com')
   .split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
-const ENGINE_URL = ENGINE_URLS[0];
+let SERVER_LIST = loadJsonFile(SERVERS_FILE, null);
+if (!Array.isArray(SERVER_LIST) || !SERVER_LIST.length) {
+  SERVER_LIST = DEFAULT_ENGINE_URLS.map((url, i) => ({ id: 'server-' + (i + 1), name: 'KING MD Server ' + (i + 1), url, capacity: Number(process.env.SLOTS_PER_SERVER || 15), enabled: true, createdAt: new Date().toISOString() }));
+  saveJsonFile(SERVERS_FILE, SERVER_LIST);
+}
+let ENGINE_URLS = [];
+function refreshServerUrls() {
+  ENGINE_URLS = SERVER_LIST.filter(x => x && x.enabled !== false && /^https:\/\//i.test(String(x.url || '')))
+    .map(x => String(x.url).replace(/\/+$/, ''));
+}
+refreshServerUrls();
+const ENGINE_URL = ENGINE_URLS[0] || '';
+function saveServers() { saveJsonFile(SERVERS_FILE, SERVER_LIST); refreshServerUrls(); }
+function serverStatsConfig() {
+  return { totalServers: SERVER_LIST.length, activeServers: ENGINE_URLS.length,
+    totalSlots: SERVER_LIST.filter(x => x.enabled !== false).reduce((n, x) => n + Math.max(0, Number(x.capacity) || 15), 0) };
+}
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 3 * 1024 * 1024 } });
 const SECRET = JWT_SECRET || crypto.randomBytes(48).toString('hex');
-const TOTAL_SERVERS = ENGINE_URLS.length;
+
 const SLOTS_PER_SERVER = Number(process.env.SLOTS_PER_SERVER || 15);
-const TOTAL_SLOTS = TOTAL_SERVERS * SLOTS_PER_SERVER;
+
 const FREE_SLOTS = 3;
 const PREMIUM_SLOTS = 6;
 
@@ -1199,13 +1217,71 @@ function adminOnly(req, res, next) {
   next();
 }
 
+// ===== MULTI-SERVER REGISTRY =====
+app.get('/api/admin/servers/list', requireUser, adminOnly, async (req, res) => {
+  const servers = await Promise.all(SERVER_LIST.map(async (server, i) => {
+    let healthy = false, liveSessions = 0;
+    try { const d = await fetchFromEngine(server.url, '/api/count'); healthy = true; liveSessions = Number(d.total || d.count || 0); } catch (_) {}
+    return { ...server, appName: server.name, serverNumber: i + 1, status: 'active', healthy,
+      liveSessions, bots: liveSessions, capacity: Number(server.capacity || 15), loading: false };
+  }));
+  res.json({ success: true, servers, herokuConfigured: true, herokuAccounts: [],
+    totalServers: servers.length, totalBots: servers.reduce((n, x) => n + x.liveSessions, 0),
+    availableSlots: servers.reduce((n, x) => n + Math.max(0, x.capacity - x.liveSessions), 0) });
+});
+app.get('/admin/servers/list', requireUser, adminOnly, (req, res) => res.redirect(307, '/api/admin/servers/list'));
+app.post('/admin/servers/add', requireUser, adminOnly, (req, res) => res.redirect(307, '/api/admin/servers/add'));
+app.get('/api/admin/servers/alerts', requireUser, adminOnly, (req, res) => res.json({ success: true, problems: [], overLimit: [] }));
+
+app.get('/api/admin/servers', requireUser, adminOnly, async (req, res) => {
+  const rows = await Promise.all(SERVER_LIST.map(async (server) => {
+    let healthy = false, bots = 0;
+    try { const d = await fetchFromEngine(server.url, '/api/count'); healthy = true; bots = Number(d.total || d.count || 0); } catch (_) {}
+    return { id: server.id, name: server.name, url: server.url, capacity: Number(server.capacity || 15),
+      enabled: server.enabled !== false, healthy, bots, availableSlots: Math.max(0, Number(server.capacity || 15) - bots) };
+  }));
+  res.json({ success: true, servers: rows, totalServers: rows.length,
+    totalBots: rows.reduce((n, x) => n + x.bots, 0),
+    availableSlots: rows.reduce((n, x) => n + x.availableSlots, 0) });
+});
+app.post('/api/admin/servers/add', requireUser, adminOnly, (req, res) => {
+  const body = req.body || {};
+  const url = String(body.url || body.serverUrl || '').trim().replace(/\/+$/, '');
+  const name = String(body.name || ('KING MD Server ' + (SERVER_LIST.length + 1))).trim().slice(0, 60);
+  const capacity = Math.max(1, Math.min(10000, Number(body.capacity) || SLOTS_PER_SERVER));
+  if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[^\s]*)?$/i.test(url)) {
+    return res.status(400).json({ success: false, error: 'Enter a valid HTTPS bot engine URL, for example https://your-engine.onrender.com' });
+  }
+  if (SERVER_LIST.some(x => String(x.url).replace(/\/+$/, '').toLowerCase() === url.toLowerCase())) {
+    return res.status(409).json({ success: false, error: 'This server URL is already registered.' });
+  }
+  const server = { id: 'srv_' + crypto.randomBytes(6).toString('hex'), name: name || 'KING MD Server',
+    url, capacity, enabled: true, createdAt: new Date().toISOString() };
+  SERVER_LIST.push(server); saveServers();
+  res.status(201).json({ success: true, server, queued: 1, totalServers: SERVER_LIST.length });
+});
+app.delete('/api/admin/servers/:id', requireUser, adminOnly, (req, res) => {
+  const before = SERVER_LIST.length;
+  SERVER_LIST = SERVER_LIST.filter(x => x.id !== req.params.id);
+  if (before === SERVER_LIST.length) return res.status(404).json({ success: false, error: 'Server not found.' });
+  saveServers(); res.json({ success: true, totalServers: SERVER_LIST.length });
+});
+app.patch('/api/admin/servers/:id', requireUser, adminOnly, (req, res) => {
+  const server = SERVER_LIST.find(x => x.id === req.params.id);
+  if (!server) return res.status(404).json({ success: false, error: 'Server not found.' });
+  if (typeof req.body.enabled === 'boolean') server.enabled = req.body.enabled;
+  if (req.body.name) server.name = String(req.body.name).trim().slice(0, 60);
+  if (req.body.capacity != null) server.capacity = Math.max(1, Math.min(10000, Number(req.body.capacity) || 15));
+  saveServers(); res.json({ success: true, server });
+});
+
 function calcStats() {
   dedupeBotRecords();
   const { total, online } = countBots();
-  const availableSlots = Math.max(0, TOTAL_SLOTS - total);
+  const availableSlots = Math.max(0, serverStatsConfig().totalSlots - total);
   return {
     botsPaired: total, total, count: total, bots: total, online, offline: total - online,
-    servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS,
+    servers: serverStatsConfig().activeServers, totalServers: serverStatsConfig().totalServers, totalSlots: serverStatsConfig().totalSlots,
     availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots
   };
 }
@@ -1217,10 +1293,10 @@ async function calcStatsLive() {
     let total = fleet.numbers.length;
     if (real !== null) total = real.length;
     const online = Object.values(fleet.bots).filter(b => b.connected).length;
-    const availableSlots = Math.max(0, TOTAL_SLOTS - total);
+    const availableSlots = Math.max(0, serverStatsConfig().totalSlots - total);
     return {
       botsPaired: total, total, count: total, bots: total, online, offline: Math.max(0, total - online),
-      servers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, totalSlots: TOTAL_SLOTS,
+      servers: serverStatsConfig().activeServers, totalServers: serverStatsConfig().totalServers, totalSlots: serverStatsConfig().totalSlots,
       availableSlots, serversLeft: availableSlots, slots: availableSlots, slotsLeft: availableSlots, live: true
     };
   } catch (e) {
@@ -1255,7 +1331,7 @@ app.get('/sessions', async (req, res) => {
     const admin = currentUser(req) && (currentUser(req).isAdmin || isOwner(currentUser(req).email, currentUser(req).phone));
     res.json({
       success: true, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots,
-      serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: TOTAL_SERVERS },
+      serverStats: { detectedServers: serverStatsConfig().totalServers, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: serverStatsConfig().activeServers },
       ...(admin ? { sessions, totalAlive: alive } : {})
     });
   } catch (e) {
@@ -1266,7 +1342,7 @@ app.get('/sessions', async (req, res) => {
     }));
     res.status(502).json({
       success: false, total: sessions.length, botsPaired: sessions.length, availableSlots: stats.availableSlots,
-      serverStats: { detectedServers: TOTAL_SERVERS, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
+      serverStats: { detectedServers: serverStatsConfig().totalServers, serversLeft: stats.availableSlots, loadingServers: 0, readyServers: 0 },
       ...(admin ? { sessions } : {}), statusUnavailable: true, error: e.message, elapsedMs: Date.now() - started
     });
   }
@@ -1294,7 +1370,7 @@ app.get('/api/admin/monitoring', requireUser, adminOnly, async (req, res) => {
         return { server: 'KING MD Engine ' + (i + 1), healthy: false, alive: 0, dead: 0, ms: 0 };
       }
     }));
-    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: TOTAL_SERVERS, totalServers: TOTAL_SERVERS, perServer });
+    res.json({ success: true, alive, dead, total: sessions.length, avgMs: fleet.ms, healthyServers: perServer.filter(x => x.healthy).length, totalServers: serverStatsConfig().totalServers, perServer });
   } catch (e) {
     res.status(502).json({ success: false, error: 'WhatsApp engine status unavailable: ' + e.message });
   }
