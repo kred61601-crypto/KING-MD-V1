@@ -56,7 +56,7 @@
       '<div class="sec rise" style="--i:4"><h3>What you can do on KING MD V4</h3></div>' +
       '<div class="rail rise" style="--i:5">' +
         '<a class="rc tap" data-tab="deploy"><img src="/features/deploy.svg" alt="" loading="lazy"><div><b>Your own bot, free</b><p>Pair your number with a code and your bot is live in a minute.</p><em>Deploy ' + ic('arrow') + '</em></div></a>' +
-        '<a class="rc tap" data-go="spin"><img src="/features/spin.svg" alt="" loading="lazy"><div><b>Daily Spin &amp; Tasks</b><p>Spin the wheel every day and win EH coins.</p><em>Spin now ' + ic('arrow') + '</em></div></a>' +
+        '<a class="rc tap" data-go="spin"><img src="/features/spin.svg" alt="" loading="lazy"><div><b>Daily Spin &amp; Tasks</b><p>Spin the wheel every day and win KM coins.</p><em>Spin now ' + ic('arrow') + '</em></div></a>' +
         '<a class="rc tap" data-go="react"><img src="/features/chreact.svg" alt="" loading="lazy"><div><b>Channel Reacts</b><p>Send reactions to any WhatsApp channel post.</p><em>Open ' + ic('arrow') + '</em></div></a>' +
         '<a class="rc tap" data-go="vote"><img src="/features/chvote.svg" alt="" loading="lazy"><div><b>Poll Voting</b><p>Push the poll option you want to the top.</p><em>Open ' + ic('arrow') + '</em></div></a>' +
         '<a class="rc tap" data-go="settings"><img src="/features/managebot.svg" alt="" loading="lazy"><div><b>Manage Bot</b><p>Switch features on and off, protect your groups and set your bot up.</p><em>Open ' + ic('arrow') + '</em></div></a>' +

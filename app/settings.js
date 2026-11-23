@@ -211,7 +211,7 @@
       if (!d.premium) { el.checked = !on; return EH.upgradeBot(); }
       if (!EH.token) { el.checked = !on; EH.toast('Sign in to your account first — your bot uses that account'); return EH.login('Your bot uses your KING MD account for ' + name + '.'); }
       var go = function () { el.disabled = true; EH.api('/api/managebot/bot-service', { method: 'POST', body: { server: mb.server, token: mb.token, number: mb.number, kind: kind, on: on } }).then(function (r) { el.disabled = false; var x = r.d; if (!x.success) { el.checked = !on; return EH.toast(x.error || 'Failed', 'er'); } d.channelReact = !!x.react; d.pollVote = !!x.vote; EH.toast(on ? name + ' is on — use ' + cmd + ' in your bot' : name + ' is off', 'ok'); }); };
-      if (on) EH.confirm({ title: 'Turn on ' + name + '?', text: 'You can then use ' + cmd + ' in your bot (only you, the owner). Each use counts like in the app: your Premium free ' + (kind === 'react' ? 'reacts' : 'votes') + ' first, then 1 EH coin.', ok: 'Turn on' }).then(function (y) { if (y) go(); else el.checked = false; }); else go();
+      if (on) EH.confirm({ title: 'Turn on ' + name + '?', text: 'You can then use ' + cmd + ' in your bot (only you, the owner). Each use counts like in the app: your Premium free ' + (kind === 'react' ? 'reacts' : 'votes') + ' first, then 1 KM coin.', ok: 'Turn on' }).then(function (y) { if (y) go(); else el.checked = false; }); else go();
     }
     function save(reset) {
       var btn = $('[data-save]', b), v = function (id) { var e = $('#' + id, b); return e ? e.value.trim() : ''; }, body = { server: mb.server, token: mb.token };

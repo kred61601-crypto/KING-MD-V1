@@ -13,7 +13,7 @@
   var guess = function () { var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {} return { 'Africa/Lagos': 'NG', 'Africa/Accra': 'GH', 'Africa/Nairobi': 'KE', 'Africa/Dar_es_Salaam': 'TZ', 'Africa/Abidjan': 'CI', 'Africa/Dakar': 'CI', 'Africa/Douala': 'CM', 'Africa/Cairo': 'EG' }[tz] || 'XX'; };
   EH.openBuyCoins = function () {
     if (EH.needLogin('Sign in to buy coins.')) return;
-    var s = EH.sheet({ title: 'Buy EH coins', html: '<div class="spinner"></div>' }), box = s.el;
+    var s = EH.sheet({ title: 'Buy KM coins', html: '<div class="spinner"></div>' }), box = s.el;
     (pkgData ? Promise.resolve(pkgData) : EH.api('/api/coins/packages').then(function (r) { return r.d; })).then(function (d) {
       if (!d || !d.success) { box.innerHTML = '<div class="empty"><b>Could not load packages</b><p>Check your connection.</p></div>'; return; } pkgData = d;
       var sel = null, live = !!d.paymentLive, off = !!d.paymentsOff, opts = d.options || [], g = guess();
@@ -27,7 +27,7 @@
       var opt = function () { return opts.filter(function (o) { return o.id === cty.value; })[0] || { symbol: '₦', currency: 'NGN', month: 1, base: 1 }; };
       var price = function (naira, o) { return o.currency === 'NGN' ? naira : Math.ceil(naira * o.month / o.base); };
       function paint() {
-        var o = opt(); $('[data-pk]', box).innerHTML = d.packages.map(function (p, i) { return '<button type="button" class="pkg tap' + (sel && sel.type === 'package' && sel.index === i ? ' on' : '') + '" data-i="' + i + '">' + (p.bonus ? '<em>+' + p.bonus + '</em>' : '') + '<b><span class="coin">EH</span>' + p.coins.toLocaleString() + '</b><small>' + o.symbol + price(p.nairaPrice, o).toLocaleString() + '</small></button>'; }).join('');
+        var o = opt(); $('[data-pk]', box).innerHTML = d.packages.map(function (p, i) { return '<button type="button" class="pkg tap' + (sel && sel.type === 'package' && sel.index === i ? ' on' : '') + '" data-i="' + i + '">' + (p.bonus ? '<em>+' + p.bonus + '</em>' : '') + '<b><span class="coin">KM</span>' + p.coins.toLocaleString() + '</b><small>' + o.symbol + price(p.nairaPrice, o).toLocaleString() + '</small></button>'; }).join('');
         $$('[data-i]', box).forEach(function (b) { b.onclick = function () { var i = Number(b.dataset.i), p = d.packages[i]; cust.value = ''; $('[data-cprice]', box).textContent = ''; sel = { type: 'package', index: i, coins: p.coins + (p.bonus || 0), nairaPrice: p.nairaPrice }; pay.disabled = !live; paint(); }; });
       }
       cty.onchange = function () { paint(); custom(); };
@@ -76,7 +76,7 @@
   EH.openGift = function (to) {
     if (EH.needLogin('Sign in to send a gift.')) return;
     var sel = null, s = EH.sheet({ title: 'Send a gift', html: '<label class="fld"><span>Recipient username</span><input class="inp" data-to placeholder="username" autocapitalize="none" autocomplete="off"></label>' +
-      '<div class="fld"><span>Amount</span><div class="chips" data-amts>' + [5, 10, 20, 50, 100].map(function (n) { return '<button type="button" class="chip tap" data-a="' + n + '"><span class="coin" style="width:18px;height:18px;font-size:7px">EH</span>' + n + '</button>'; }).join('') + '</div><input class="inp" data-amt type="number" inputmode="numeric" placeholder="Or type an amount" style="margin-top:10px"></div>' +
+      '<div class="fld"><span>Amount</span><div class="chips" data-amts>' + [5, 10, 20, 50, 100].map(function (n) { return '<button type="button" class="chip tap" data-a="' + n + '"><span class="coin" style="width:18px;height:18px;font-size:7px">KM</span>' + n + '</button>'; }).join('') + '</div><input class="inp" data-amt type="number" inputmode="numeric" placeholder="Or type an amount" style="margin-top:10px"></div>' +
       '<label class="fld"><span>Message (optional)</span><input class="inp" data-msg maxlength="120" placeholder="Say something nice"></label><button class="btn block tap" data-send>' + ic('gift') + ' Send gift</button><div class="note" style="text-align:center">They have to accept it. Your balance: ' + EH.bal((EH.user && EH.user.coins) || 0) + ' coins.</div>' });
     var b = s.el; if (to) $('[data-to]', b).value = to;
     $$('[data-a]', b).forEach(function (c) { c.onclick = function () { sel = Number(c.dataset.a); $('[data-amt]', b).value = ''; $$('[data-a]', b).forEach(function (x) { x.classList.toggle('on', x === c); }); }; });
@@ -210,7 +210,7 @@
   EH.screen('profile', { tab: true, mount: function (scr) {
     scr.innerHTML = '<div class="body pfb tabpad"></div>'; var body = $('.body', scr), first = true, last = '';
     function guest() {
-      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join KING MD V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, EH coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
+      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join KING MD V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, KM coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
         '<div class="sec"><h3>Appearance</h3></div>' + appearance(null) + '<div class="sec"><h3>More</h3></div><div class="grp">' + links() + '</div></div>';
       wireTheme();
     }
@@ -234,7 +234,7 @@
           side: '<button class="btn alt sm tap" data-edit>' + ic('edit') + ' Edit profile</button>' }) +
         '<div class="pf-stats"><div class="tap" data-fl="followers"><b data-fo>–</b><span>Followers</span></div><div class="tap" data-fl="following"><b data-fg>–</b><span>Following</span></div><div><b data-lk>–</b><span>Likes</span></div></div>' +
         '<div class="pf-pad">' +
-        '<div class="card pf-coins' + an + '" style="--i:1"><div class="pc-top"><span class="coin lg">EH</span><div><small>EH COINS</small><b data-bal>' + EH.bal(u.coins) + '</b></div><button class="ibtn tap" data-eye aria-label="Hide balance">' + ic(u.hideBalance ? 'eyeoff' : 'eye') + '</button></div>' +
+        '<div class="card pf-coins' + an + '" style="--i:1"><div class="pc-top"><span class="coin lg">KM</span><div><small>KM COINS</small><b data-bal>' + EH.bal(u.coins) + '</b></div><button class="ibtn tap" data-eye aria-label="Hide balance">' + ic(u.hideBalance ? 'eyeoff' : 'eye') + '</button></div>' +
           '<div class="btns" style="margin-top:14px"><button class="btn sm tap" data-buy>' + ic('plus') + ' Buy</button><button class="btn sm alt tap" data-gift>' + ic('gift') + ' Gift</button><button class="btn sm alt tap" data-redeem>' + ic('hash') + ' Redeem</button></div></div>' +
         '<div class="grp' + an + '" style="--i:2;margin-top:14px">' +
           '<div class="row tap" data-go="deploy"><div class="ri" style="--a:#34d399;--b:#059669">' + ic('robot') + '</div><div class="rt"><b>My bots</b><small>' + b.used + ' of ' + b.total + ' bot spaces used · ' + (u.referralCount || 0) + ' referrals</small></div>' + ic('chevR', 'chev') + '</div>' +

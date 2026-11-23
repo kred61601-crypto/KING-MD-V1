@@ -180,8 +180,8 @@
       if (hasFree && mode === 'free' && !premFree) h.innerHTML = '<span class="okc">' + ic('star') + '</span> This submission uses a <b class="okc">free use</b> (' + remaining + '/' + total + ' left)' + botMsg;
       else if (premFree && mode !== 'coin') h.innerHTML = '<span style="color:#f5b417">' + ic('crown') + '</span> Premium: this react is <b>free</b> · ' + (dd.limit - dd.used) + ' of ' + dd.limit + ' free reacts left today' + botMsg;
       else if (u.isPremium && dd && mode !== 'coin') h.innerHTML = '<span class="warn">' + ic('warn') + '</span> You used your ' + dd.limit + ' free reacts today. This react costs <b>1 coin</b> — or <a data-refill style="color:var(--p);font-weight:800">refill your free uses</a>.' + botMsg;
-      else if (!u.isPremium && st.dailyLimit != null && st.dailyUsed >= st.dailyLimit) h.innerHTML = '<span class="coin" style="width:20px;height:20px;font-size:8px;vertical-align:middle">EH</span> You used your free react today. This one costs <b style="color:var(--wa)">1 EH coin</b>.' + botMsg;
-      else h.innerHTML = '<span class="coin" style="width:20px;height:20px;font-size:8px;vertical-align:middle">EH</span> You will be debited <b style="color:var(--wa)">1 EH coin</b> for this submission after free uses.' + botMsg;
+      else if (!u.isPremium && st.dailyLimit != null && st.dailyUsed >= st.dailyLimit) h.innerHTML = '<span class="coin" style="width:20px;height:20px;font-size:8px;vertical-align:middle">EH</span> You used your free react today. This one costs <b style="color:var(--wa)">1 KM coin</b>.' + botMsg;
+      else h.innerHTML = '<span class="coin" style="width:20px;height:20px;font-size:8px;vertical-align:middle">EH</span> You will be debited <b style="color:var(--wa)">1 KM coin</b> for this submission after free uses.' + botMsg;
       var rf = $('[data-refill]', h); if (rf) rf.onclick = function () { EH.openRefill('cr'); };
     }
     function reactPane(keep) {

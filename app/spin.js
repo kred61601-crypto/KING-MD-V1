@@ -6,10 +6,10 @@
   var pad = function (n) { return ('0' + n).slice(-2); };
 
   EH.screen('spin', { mount: function (scr) {
-    var f = EH.frame(scr, { bar: 'push', title: 'Daily Spin & Tasks', sub: 'Earn free EH coins', acts: '<div class="pill tap" data-buycoins><span class="coin">EH</span><span data-cb>' + EH.bal(EH.user ? EH.user.coins : 0) + '</span></div>' }), body = f.body, alive = true, data = null, rot = 0, spinning = false, cd = null, adT = null, adOpen = null;
+    var f = EH.frame(scr, { bar: 'push', title: 'Daily Spin & Tasks', sub: 'Earn free KM coins', acts: '<div class="pill tap" data-buycoins><span class="coin">EH</span><span data-cb>' + EH.bal(EH.user ? EH.user.coins : 0) + '</span></div>' }), body = f.body, alive = true, data = null, rot = 0, spinning = false, cd = null, adT = null, adOpen = null;
     $('[data-buycoins]', scr).onclick = EH.openBuyCoins;
     var off = EH.on('user', function () { var c = $('[data-cb]', scr); if (c) c.textContent = EH.bal(EH.user ? EH.user.coins : 0); });
-    if (!EH.token) { body.innerHTML = '<div class="card rise" style="text-align:center;padding:26px 18px"><div class="dp-ic" style="margin:0 auto 14px;width:64px;height:64px;font-size:30px;background:linear-gradient(135deg,#fbbf24,#d97706)">' + ic('gift') + '</div><div class="h1" style="font-size:23px">Daily Spin &amp; Tasks</div><div class="sub" style="margin:8px 0 18px">Sign in to spin the wheel every day and finish easy tasks to win EH coins.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in</button></div>'; return { destroy: function () { off(); } }; }
+    if (!EH.token) { body.innerHTML = '<div class="card rise" style="text-align:center;padding:26px 18px"><div class="dp-ic" style="margin:0 auto 14px;width:64px;height:64px;font-size:30px;background:linear-gradient(135deg,#fbbf24,#d97706)">' + ic('gift') + '</div><div class="h1" style="font-size:23px">Daily Spin &amp; Tasks</div><div class="sub" style="margin:8px 0 18px">Sign in to spin the wheel every day and finish easy tasks to win KM coins.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in</button></div>'; return { destroy: function () { off(); } }; }
     body.innerHTML = '<div class="spinner"></div>';
     var key = 'eh_tasks_' + ((EH.user && EH.user.username) || '');
     EH.pageOn('referEarn').then(function (ok) {
@@ -80,7 +80,7 @@
     function paintAdcoin() {
       var box = $('[data-adcoin]', body), a = data.adcoin; if (!box) return; if (!a || !a.on) { box.innerHTML = ''; return; }
       var dots = Array.from({ length: a.perCoin }, function (_, i) { return '<i class="' + (i < (a.done ? a.perCoin : a.progress) ? 'on' : '') + '"></i>'; }).join('');
-      var head = '<div class="sec"><h3>Watch ads for coins</h3></div><div class="card"><div class="sub" style="margin-bottom:12px">Watch <b style="color:var(--tx)">' + a.perCoin + ' ads</b> = <b style="color:var(--tx)">1 EH coin</b> · ' + (a.maxCoins === 1 ? 'only 1 coin a day' : 'up to ' + a.maxCoins + ' coins a day') + '. Each ad must stay open a few seconds.</div>' +
+      var head = '<div class="sec"><h3>Watch ads for coins</h3></div><div class="card"><div class="sub" style="margin-bottom:12px">Watch <b style="color:var(--tx)">' + a.perCoin + ' ads</b> = <b style="color:var(--tx)">1 KM coin</b> · ' + (a.maxCoins === 1 ? 'only 1 coin a day' : 'up to ' + a.maxCoins + ' coins a day') + '. Each ad must stay open a few seconds.</div>' +
         '<div class="card" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.3);font-size:12.5px;line-height:1.5;margin-bottom:14px">' + ic('ext') + ' The ad opens an <b>outside website</b>. We don\'t control that page, so please <b>don\'t enter any personal information</b> on it and don\'t download anything. If anything looks suspicious, just close it.</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="adots">' + dots + '</div><div class="sub" style="font-size:12.5px;white-space:nowrap">Today: <b style="color:var(--tx)">' + a.coinsToday + '/' + a.maxCoins + '</b> ' + (a.maxCoins === 1 ? 'coin' : 'coins') + '</div></div>';
       if (a.done) { box.innerHTML = head + '<div class="sub">✅ Done for today — come back after midnight (UTC).</div></div>'; return; }
@@ -99,7 +99,7 @@
     function claim() {
       var open = adOpen || (data.adcoin && data.adcoin.open ? { token: data.adcoin.open.token } : null); if (!open) return; var b = $('[data-claim]', body); if (b) b.classList.add('busy');
       EH.api('/api/adcoin/finish', { method: 'POST', body: { token: open.token } }).then(function (r) { var d = r.d;
-        if (d.success) { adOpen = null; data.adcoin = d.adcoin; if (EH.user) { EH.user.coins = d.coins; EH.setUser(EH.user); } EH.toast(d.earned ? '🎉 +1 EH coin!' : 'Ad counted — ' + d.adcoin.progress + '/' + d.adcoin.perCoin + ' for your next coin', 'ok'); paintAdcoin(); }
+        if (d.success) { adOpen = null; data.adcoin = d.adcoin; if (EH.user) { EH.user.coins = d.coins; EH.setUser(EH.user); } EH.toast(d.earned ? '🎉 +1 KM coin!' : 'Ad counted — ' + d.adcoin.progress + '/' + d.adcoin.perCoin + ' for your next coin', 'ok'); paintAdcoin(); }
         else { EH.toast(d.error || 'Failed', 'er'); if (!d.wait) { adOpen = null; load(); } else paintAdcoin(); } });
     }
 
