@@ -25,7 +25,7 @@ const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
-const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com')
+const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4-a6ls.onrender.com')
   .split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
 let SERVER_LIST = loadJsonFile(SERVERS_FILE, null);
 if (!Array.isArray(SERVER_LIST) || !SERVER_LIST.length) {
