@@ -956,7 +956,26 @@ app.post('/api/users/:username/like', requireUser, (req, res) => {
 });
 
 // ===== COMMUNITY =====
-app.get('/api/community/status', (req, res) => res.json({ success: true, enabled: true, locked: false, lockedAdminOnly: false }));
+const COMMUNITY_SETTINGS_FILE = path.join(DATA_DIR, 'community-settings.json');
+const DEFAULT_COMMUNITY_SETTINGS = { enabled: true, locked: false, lockedAdminOnly: false, giftEnabled: true, lockWithGift: false };
+let communitySettings = { ...DEFAULT_COMMUNITY_SETTINGS, ...(loadJsonFile(COMMUNITY_SETTINGS_FILE, {}) || {}) };
+function saveCommunitySettings() { saveJsonFile(COMMUNITY_SETTINGS_FILE, communitySettings); }
+function isCommunityAdmin(account) { return !!(account && (account.isAdmin || isOwner(account.email, account.phone))); }
+app.get('/api/community/status', (req, res) => res.json({ success: true, ...communitySettings }));
+app.post('/api/admin/community/settings', requireUser, (req, res) => {
+  if (!isCommunityAdmin(req.account)) return res.status(403).json({ success: false, error: 'Admin only' });
+  const map = { communityEnabled: 'enabled', communityLocked: 'locked', lockedAdminOnly: 'lockedAdminOnly', giftEnabled: 'giftEnabled', lockWithGift: 'lockWithGift' };
+  const body = req.body || {};
+  const key = Object.keys(map).find(k => Object.prototype.hasOwnProperty.call(body, k));
+  if (!key || typeof body[key] !== 'boolean') return res.status(400).json({ success: false, error: 'Invalid community setting' });
+  communitySettings[map[key]] = body[key];
+  saveCommunitySettings();
+  res.json({ success: true, settings: {
+    communityEnabled: communitySettings.enabled, communityLocked: communitySettings.locked,
+    lockedAdminOnly: communitySettings.lockedAdminOnly, giftEnabled: communitySettings.giftEnabled,
+    lockWithGift: communitySettings.lockWithGift
+  }});
+});
 
 app.get('/api/community/messages', (req, res) => {
   const before = Number(req.query.before) || Date.now();
@@ -991,6 +1010,10 @@ app.post('/api/community/typing', (req, res) => {
 });
 
 app.post('/api/community/message', requireUser, (req, res) => {
+  const isAdmin = isCommunityAdmin(req.account);
+  if (!communitySettings.enabled) return res.status(403).json({ success: false, error: 'Community chat is disabled' });
+  if (communitySettings.locked && !isAdmin) return res.status(403).json({ success: false, error: 'Community chat is locked' });
+  if (communitySettings.lockedAdminOnly && !isAdmin) return res.status(403).json({ success: false, error: 'Only admins can chat right now' });
   const b = req.body || {};
   if (!b.text && !b.image && !b.sticker) return res.json({ success: false, error: 'Empty message' });
   if (b.text && b.text.length > 1000) return res.json({ success: false, error: 'Too long' });
@@ -1004,7 +1027,7 @@ app.post('/api/community/message', requireUser, (req, res) => {
     const orig = communityMessages.find(m => m._id === b.replyTo);
     if (orig) replyObj = { username: orig.username, text: orig.text || '[media]' };
   }
-  const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
+
   const isPremium = isPremiumUser(req.account);
   const isVerified = isAdmin || isPremium;
   const m = {
