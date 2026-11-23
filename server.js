@@ -25,7 +25,7 @@ const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
-const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4-a6ls.onrender.com')
+const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4.onrender.com')
   .split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
 let SERVER_LIST = loadJsonFile(SERVERS_FILE, null);
 if (!Array.isArray(SERVER_LIST) || !SERVER_LIST.length) {
@@ -2039,15 +2039,16 @@ app.post('/api/v1/poll', async (req, res) => {
 async function kingBotLoginHandler(req, res) {
   try {
     const b = req.body || {};
-    let number = normalizePhone(b.number || b.botNumber || b.phone || '');
+    let number = normalizePhone(b.number || b.botNumber || b.phoneNumber || b.phone || '');
     const password = String(b.password || b.pass || '').trim().toUpperCase();
     if (!/^\d{8,15}$/.test(number)) return res.json({ success: false, error: 'Enter a valid bot number, e.g. 254726476468' });
     if (!password) return res.json({ success: false, error: 'Enter the password your BOT gave you when you deployed.' });
 
-    const anyBot = botRecords.find(x => normalizePhone(x.number) === number && (x.createdVia === 'king-md-app' || !!x.ownerId));
+    const anyBot = botRecords.find(x => normalizePhone(x.number || x.phoneNumber || x.phone) === number);
     if (!anyBot) return res.json({ success: false, error: 'This bot was not created through this app. Deploy it first from Deploy a Bot.' });
 
-    const correctPassword = String(botPasswords[number] || anyBot.botPassword || '').toUpperCase();
+    const passwordEntry = Object.keys(botPasswords || {}).find(k => normalizePhone(k) === number);
+    const correctPassword = String((passwordEntry ? botPasswords[passwordEntry] : '') || anyBot.botPassword || '').trim().toUpperCase();
     if (!correctPassword) return res.json({ success: false, error: 'Your bot is still finishing setup. Wait for its WhatsApp welcome message with the Manage Bot password, then try again.' });
 
     if (password !== correctPassword) {
