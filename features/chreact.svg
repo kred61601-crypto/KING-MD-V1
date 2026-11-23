@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 190" role="img" aria-label="CHANNEL REACTS">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff4ca3"/><stop offset="1" stop-color="#9b1b67"/></linearGradient><radialGradient id="b"><stop stop-color="#ff4ca3" stop-opacity=".28"/><stop offset="1" stop-color="#09070b" stop-opacity="0"/></radialGradient></defs>
+<rect width="240" height="190" rx="18" fill="#100b10"/><circle cx="120" cy="85" r="95" fill="url(#b)"/>
+<rect x="28" y="18" width="184" height="154" rx="20" fill="#171018" stroke="#57203f"/>
+<g fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M120 137S55 96 55 63c0-30 39-42 65-10 26-32 65-20 65 10 0 33-65 74-65 74z"/><path d="M48 150h144"/></g>
+<text x="120" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#f7a4d0" letter-spacing="1.4">CHANNEL REACTS</text></svg>
