@@ -38,7 +38,7 @@ function refreshServerUrls() {
     .map(x => String(x.url).replace(/\/+$/, ''));
 }
 refreshServerUrls();
-const ENGINE_URL = ENGINE_URLS[0] || '';
+const ENGINE_URL = ENGINE_URLS[0] || 'https://king-md-v4-a6ls.onrender.com';
 function saveServers() { saveJsonFile(SERVERS_FILE, SERVER_LIST); refreshServerUrls(); }
 function serverStatsConfig() {
   return { totalServers: SERVER_LIST.length, activeServers: ENGINE_URLS.length,
@@ -1300,7 +1300,7 @@ function handleAddServer(req, res) {
   let parsed;
   try { parsed = new URL(url); } catch (_) {}
   if (!parsed || parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
-    return res.status(400).json({ success: false, error: 'Enter a valid engine URL, e.g. https://your-engine.onrender.com' });
+    return res.status(400).json({ success: false, error: 'Enter a valid engine URL, e.g. https://your-engine.example.com' });
   }
   if (SERVER_LIST.some(x => String(x.url).replace(/\/+$/, '').toLowerCase() === url.toLowerCase())) {
     return res.status(409).json({ success: false, error: 'This server URL is already registered.' });
@@ -2049,11 +2049,20 @@ async function kingBotLoginHandler(req, res) {
 
     const passwordEntry = Object.keys(botPasswords || {}).find(k => normalizePhone(k) === number);
     const correctPassword = String((passwordEntry ? botPasswords[passwordEntry] : '') || anyBot.botPassword || '').trim().toUpperCase();
-    if (!correctPassword) return res.json({ success: false, error: 'Your bot is still finishing setup. Wait for its WhatsApp welcome message with the Manage Bot password, then try again.' });
+    if (!correctPassword) return res.json({ success: false, error: 'Your bot password is not ready yet. Wait for its first WhatsApp welcome message, then try again.' });
 
     if (password !== correctPassword) {
       return res.json({ success: false, error: 'Wrong bot password. Use the password your BOT gave you when it said Successfully Deployed.' });
     }
+
+    // A correct password is not enough: verify this exact number is currently online on an engine.
+    let liveConnected = false;
+    try {
+      const liveResults = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(number));
+      liveConnected = liveResults.some(d => d && d.bots && d.bots[number] &&
+        (d.bots[number].connected === true || normalizeBotState(d.bots[number].state, d.bots[number]) === 'online'));
+    } catch (_) { liveConnected = false; }
+    if (!liveConnected) return res.json({ success: false, error: 'This bot is not currently connected to WhatsApp. Reconnect it, then try signing in again.' });
 
     if (req.user && req.user.id && !anyBot.ownerId) {
       anyBot.ownerId = req.user.id;
@@ -2085,47 +2094,33 @@ app.post('/bot/login', kingBotLoginHandler);
 app.post('/api/bot/set-password-from-bot', async (req, res) => {
   const b = req.body || {};
   if (b.key !== PAIR_BRIDGE_KEY && b.bridgeKey !== PAIR_BRIDGE_KEY) return res.json({ success: false, error: 'Wrong key' });
-  let number = normalizePhone(b.number || b.botNumber || '');
-  const password = String(b.password || b.botPassword || '').trim().toUpperCase();
-  if (!/^\d{8,15}$/.test(number) || !password) return res.json({ success: false, error: 'Need number + password' });
-  botPasswords[number] = password;
-  saveBotPass();
+  const number = normalizePhone(b.number || b.botNumber || '');
+  const candidate = String(b.password || b.botPassword || '').trim().toUpperCase();
+  if (!/^\d{8,15}$/.test(number) || !candidate) return res.json({ success: false, error: 'Need number + password' });
+  // First write wins. Reconnects and retries can never rotate a bot's password.
+  let saved = botPasswords[number] || '';
   const rec = botRecords.find(x => normalizePhone(x.number) === number);
-  if (rec) {
-    rec.botPassword = password;
-    rec.updatedAt = new Date().toISOString();
-    saveJsonFile(BOTS_FILE, botRecords);
+  if (!saved && rec && rec.botPassword) saved = String(rec.botPassword).trim().toUpperCase();
+  if (!saved) {
+    saved = candidate;
+    botPasswords[number] = saved;
+    saveBotPass();
   }
-  res.json({ success: true });
+  if (rec && !rec.botPassword) { rec.botPassword = saved; rec.updatedAt = new Date().toISOString(); saveJsonFile(BOTS_FILE, botRecords); }
+  return res.json({ success: true, password: saved, created: saved === candidate });
 });
 
-app.post('/api/bot/forgot-password', async (req, res) => {
+async function returnSavedBotPassword(req, res) {
   const b = req.body || {};
-  let number = normalizePhone(b.number || b.botNumber || '');
+  const number = normalizePhone(b.number || b.botNumber || b.phoneNumber || '');
   if (!/^\d{8,15}$/.test(number)) return res.json({ success: false, error: 'Enter your bot number first' });
-  const newPass = makeBotPassword();
-  botPasswords[number] = newPass;
-  saveBotPass();
   const rec = botRecords.find(x => normalizePhone(x.number) === number);
-  if (rec) { rec.botPassword = newPass; saveJsonFile(BOTS_FILE, botRecords); }
-  if (req.account) {
-    addUserNotification(req.account, 'bot_password', 'Bot password reset', 'New bot password for +' + number + ' is: ' + newPass, { number });
-    saveUsers();
-  }
-  return res.json({ success: true, newPassword: newPass, message: 'New password created.' });
-});
-
-app.post('/api/bot/forgot', async (req, res) => {
-  const b = req.body || {};
-  let number = normalizePhone(b.number || b.botNumber || '');
-  if (!/^\d{8,15}$/.test(number)) return res.json({ success: false, error: 'Enter bot number' });
-  const newPass = makeBotPassword();
-  botPasswords[number] = newPass;
-  saveBotPass();
-  const rec = botRecords.find(x => normalizePhone(x.number) === number);
-  if (rec) { rec.botPassword = newPass; saveJsonFile(BOTS_FILE, botRecords); }
-  return res.json({ success: true, newPassword: newPass });
-});
+  const saved = String(botPasswords[number] || rec?.botPassword || '').trim().toUpperCase();
+  if (!saved) return res.json({ success: false, error: 'No saved password exists for this bot yet.' });
+  return res.json({ success: true, password: saved, newPassword: saved, message: 'Your original saved password.' });
+}
+app.post('/api/bot/forgot-password', returnSavedBotPassword);
+app.post('/api/bot/forgot', returnSavedBotPassword);
 
 app.get('/api/bot/panel', async (req, res) => {
   const number = normalizePhone(req.query.number || req.headers['x-bot-number'] || '');
