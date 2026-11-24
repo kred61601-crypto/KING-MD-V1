@@ -3138,7 +3138,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
           Welcome back — open your bot's control panel.
         </div>
         <div class="fg"><label class="fl">Bot Number</label><input type="tel" id="mbpPhone" class="fi" placeholder="e.g. 254726476468" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Password</label><input type="text" id="mbpPass" class="fi" placeholder="8 characters" maxlength="32" style="letter-spacing:2px"></div>
+        <div class="fg"><label class="fl">Password</label><input type="text" id="mbpPass" class="fi" placeholder="8 characters" maxlength="8" autocomplete="off" autocapitalize="characters" style="letter-spacing:2px" oninput="this.value=this.value.replace(/\s/g, '').toUpperCase()" onpaste="event.preventDefault();this.value=(event.clipboardData||window.clipboardData).getData('text').replace(/\s/g, '').toUpperCase().slice(0,8)"></div>
         <div id="mbpAttempts" style="display:none;margin:0 0 .8rem;padding:.7rem .8rem;border:1px solid var(--er,#ef4444);background:rgba(239,68,68,.08);font-size:.82rem;line-height:1.5;border-radius:6px"></div>
         <button class="btn bp bfw" id="mbpLoginBtn" onclick="A.mbpLogin()"><i class="fas fa-unlock"></i> Sign In</button>
         <div style="text-align:center;margin-top:.9rem;font-size:.8rem"><a href="#" onclick="openPasswordHelpModal();return false" style="color:var(--p);font-weight:600"><i class="fas fa-key"></i> Forgot your bot password?</a></div>
@@ -4402,7 +4402,7 @@ const A = {
   },
   async mbpLogin() {
     const phoneNumber = document.getElementById('mbpPhone').value.trim().replace(/\D/g, '');
-    const password    = document.getElementById('mbpPass').value.trim();
+    const password    = document.getElementById('mbpPass').value.replace(/\s/g, '').trim().toUpperCase();
     if ((this._mbAtt().until || 0) > Date.now()) { this._mbpAttemptsShow(); return; }
     if (!phoneNumber || !password) { this.toast('Enter both number and password', 'err'); return; }
 
@@ -7593,6 +7593,7 @@ async _doQR() {
       return;
     }
     document.getElementById('pairQRImage').src = data.qrImage;
+    this.toast((data.serverInfo && data.serverInfo.message) || 'QR code generated', 'ok');
     document.getElementById('qrResult').style.display = 'block';
     const sess = { phoneNumber: 'qr-pending-' + deviceId, timestamp: Date.now(), status: 'pairing', deviceId, qrPending: true };
     const idx = this.localSess.findIndex(s => s.deviceId === deviceId);
@@ -7728,7 +7729,7 @@ async _doPair() {
         document.getElementById('pairForm').reset();
 
         successAudio.currentTime = 0; successAudio.play().catch(() => {});
-        let msg = `Pairing code generated! Server: ${data.serverInfo?.serverUsed || '?'}`;
+        let msg = data.serverInfo?.message || 'Pairing code generated';
         if (data.duplicatesRemoved > 0) msg += ` (${data.duplicatesRemoved} duplicate(s) removed)`;
         this.toast(msg, 'ok');
       } else {
@@ -13345,38 +13346,6 @@ function _startAudio() {
 ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(ev =>
   window.addEventListener(ev, _startAudio, { once: true, passive: true }));
 
-// Tap sound (a short synthesized click, no sound file): any button, link-button or bottom-nav item.
-(function () {
-  var SELECTOR = 'button,[role="button"],.btn,a.btn,.bnav-item,.es-bottom-nav a,.hamburger,.icon-btn,.tab,.chat-toggle';
-  var audioCtx = null;
-  function playTapSound() {
-    try {
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!audioCtx) audioCtx = new Ctx();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      var t = audioCtx.currentTime;
-      var osc = audioCtx.createOscillator();
-      var gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(520, t);
-      osc.frequency.linearRampToValueAtTime(680, t + 0.045);
-      osc.frequency.linearRampToValueAtTime(340, t + 0.12);
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.16, t + 0.008);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(t);
-      osc.stop(t + 0.15);
-    } catch (e) {}
-  }
-  document.addEventListener('click', function (e) {
-    var el = e.target && e.target.closest ? e.target.closest(SELECTOR) : null;
-    if (!el || el.disabled) return;
-    playTapSound();
-  }, { capture: true, passive: true });
-})();
-
 document.addEventListener('DOMContentLoaded', _applyAudioMuted);
 window.addEventListener('resize', () => { try { A._placeAdminDrawer(); } catch (_) {} });
 if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { try { A._placeAdminDrawer(); } catch (_) {} });
@@ -13871,75 +13840,7 @@ async function submitReportToTelegram(e) {
 </div>
 </div>
 
-<!-- KING SOUNDS - V3 - FOR EVERYTHING + CODE + MPESA + PASSWORD -->
-<script>
-  function playError(){
-    try{ new Audio('sounds/error.mp3').play().catch(()=>{}); }catch(e){}
-    if(navigator.vibrate) navigator.vibrate(200);
-  }
-  function playSuccess(){
-    try{ new Audio('sounds/success.mp3').play().catch(()=>{}); }catch(e){}
-    if(navigator.vibrate) navigator.vibrate(100);
-  }
-  function playWait(){
-    try{ new Audio('sounds/wait.mp3').play().catch(()=>{}); }catch(e){}
-  }
-
-  function kingCheckSound(data, method, url){
-    if(!data || typeof data !== 'object') return;
-    const txt = JSON.stringify(data).toLowerCase();
-    const isGet = method === 'GET';
-
-    // ERROR - any of these words
-    if(data.success === false || data.ok === false || data.verified === false ||
-       data.status === 'failed' || data.status === 'error' ||
-       txt.includes('"error"') || txt.includes('wrong code') || txt.includes('invalid code') ||
-       txt.includes('incorrect') || txt.includes('failed to') || txt.includes('wrong password') ||
-       txt.includes('not correct') || txt.includes('expired')){
-      playError();
-      return;
-    }
-    // SUCCESS - only when you DO something, not loading
-    if(!isGet && (data.success === true || data.ok === true || data.verified === true ||
-       data.status === 'success' || data.status === 'sent' || data.status === 'ok' ||
-       txt.includes('code sent') || txt.includes('verified') || txt.includes('password updated') ||
-       txt.includes('password changed') || txt.includes('payment sent') || txt.includes('request sent'))){
-      playSuccess();
-    }
-  }
-
-  const _oldFetch = window.fetch;
-  window.fetch = async function(...args){
-    const url = String(args[0] || '');
-    const method = String((args[1] && args[1].method) || 'GET').toUpperCase();
-    const isApi = url.includes('/api/');
-    if(isApi && method !== 'GET') playWait();
-    try{
-      const res = await _oldFetch(...args);
-      // If server returns NO json (M-Pesa sometimes), don't break it
-      try{
-        const clone = res.clone();
-        const text = await clone.text();
-        if(text){
-          try{ kingCheckSound(JSON.parse(text), method, url); }
-          catch(e){
-            const low = text.toLowerCase();
-            if(low.includes('error') || low.includes('wrong') || low.includes('invalid') || low.includes('failed')) playError();
-            else if(!isGet && (low.includes('success') || low.includes('sent') || low.includes('verified'))) playSuccess();
-          }
-        }
-      }catch(e){}
-      return res;
-    }catch(e){ playError(); throw e; }
-  };
-
-  // ALSO: Watch screen text - if app shows "Wrong code" or "Password updated" as popup, play sound
-  const _obs = new MutationObserver(()=>{
-    const bodyTxt = document.body.innerText.slice(-500).toLowerCase();
-    if(bodyTxt.includes('wrong code') || bodyTxt.includes('invalid code') || bodyTxt.includes('wrong password') || bodyTxt.includes('failed')) playError();
-  });
-  _obs.observe(document.body, {childList:true, subtree:true});
-</script>
+<!-- Global sound interception removed: sounds are played only by the specific success/error handlers. -->
 
 <style>
 #kingCheckout,#kingConfirmPop,#kingPinPop{display:none;position:fixed;inset:0;z-index:100000;background:#000b;align-items:center;justify-content:center;padding:16px}
