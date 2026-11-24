@@ -2062,28 +2062,26 @@ async function kingBotLoginHandler(req, res) {
     const anyBot = botRecords.find(x => normalizePhone(x.number || x.phoneNumber || x.phone) === number);
     if (!anyBot) return res.json({ success: false, error: 'This bot was not created through this app. Deploy it first from Deploy a Bot.' });
 
+    // Older deployments can have two saved copies (the password file and the
+    // bot record). Check both: preferring only one stale copy caused valid
+    // deployment passwords to be rejected after an update/reconnect.
     const passwordEntry = Object.keys(botPasswords || {}).find(k => normalizePhone(k) === number);
-    const correctPassword = cleanBotPassword((passwordEntry ? botPasswords[passwordEntry] : '') || anyBot.botPassword || '');
-    if (!/^[A-HJKMNP-Z2-9]{8}$/.test(correctPassword)) return res.json({ success: false, error: 'Your bot password is not ready yet. Wait for its first WhatsApp welcome message, then try again.' });
-    if ((passwordEntry ? botPasswords[passwordEntry] : '') !== correctPassword) {
-      botPasswords[number] = correctPassword;
-      anyBot.botPassword = correctPassword;
-      saveBotPass();
-      saveJsonFile(BOTS_FILE, botRecords);
+    const savedMapPassword = cleanBotPassword(passwordEntry ? botPasswords[passwordEntry] : '');
+    const savedRecordPassword = cleanBotPassword(anyBot.botPassword || '');
+    const candidates = [...new Set([savedMapPassword, savedRecordPassword].filter(p => /^[A-HJKMNP-Z2-9]{8}$/.test(p)))];
+    if (!candidates.length) return res.json({ success: false, error: 'Your bot password is not ready yet. Wait for its deployment password, then try again.' });
+    if (!candidates.includes(password)) {
+      return res.json({ success: false, error: 'Wrong bot password. Enter the exact 8-character password shown when your bot was successfully deployed.' });
     }
 
-    if (password !== correctPassword) {
-      return res.json({ success: false, error: 'Wrong bot password. Use the password your BOT gave you when it said Successfully Deployed.' });
-    }
+    // Keep both persisted copies aligned with the password that actually matched.
+    botPasswords[number] = password;
+    anyBot.botPassword = password;
+    saveBotPass();
+    saveJsonFile(BOTS_FILE, botRecords);
 
-    // A correct password is not enough: verify this exact number is currently online on an engine.
-    let liveConnected = false;
-    try {
-      const liveResults = await engineFetchAll('/api/status?numbers=' + encodeURIComponent(number));
-      liveConnected = liveResults.some(d => d && d.bots && d.bots[number] &&
-        (d.bots[number].connected === true || normalizeBotState(d.bots[number].state, d.bots[number]) === 'online'));
-    } catch (_) { liveConnected = false; }
-    if (!liveConnected) return res.json({ success: false, error: 'This bot is not currently connected to WhatsApp. Reconnect it, then try signing in again.' });
+    // A correct password can open the panel even while WhatsApp is offline;
+    // connection state is displayed inside the panel and is not authentication.
 
     if (req.user && req.user.id && !anyBot.ownerId) {
       anyBot.ownerId = req.user.id;

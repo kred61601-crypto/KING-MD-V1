@@ -7477,7 +7477,9 @@ const A = {
   },
 
   toast(msg, type = 'in') {
-    // Every success / error message plays its sound, so features that never played one do now (skipped when that sound is already playing)
+    // Treat both error spellings as errors. Manage Bot uses 'err', while the
+    // rest of the site uses 'er'; previously 'err' silently skipped the sound.
+    if (type === 'err') type = 'er';
     try { const a = type === 'ok' ? successAudio : type === 'er' ? errorAudio : null; if (a && (a.paused || a.ended)) { a.currentTime = 0; a.play().catch(() => {}); } } catch (_) {}
     const c = document.getElementById('toasts');
     const t = document.createElement('div');
@@ -13280,8 +13282,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // so there we additionally route through a Web Audio gain node, which iOS DOES
 // honour. Crucially, the Web Audio path runs ONLY on iOS — Android never
 // touches it, so it can't be silenced by it (that was the earlier bug).
-const successAudio = new Audio('/success.wav');
-const errorAudio = new Audio('/error.wav');
+const successAudio = new Audio('/sounds/success.mp3');
+const errorAudio = new Audio('/sounds/error.mp3');
 const _ALL_AUDIO = [successAudio, errorAudio];
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent || '') ||
                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
