@@ -252,9 +252,9 @@
     clearTimeout(navSplashTimer); clearTimeout(navSplashWatchdog);
     navSplashStarted = Date.now();
     el.classList.remove('out'); el.setAttribute('aria-hidden', 'false');
-    /* Keep the branded transition visible for at least 7 seconds, but never
-       leave it covering the destination for more than 10 seconds. */
-    navSplashWatchdog = setTimeout(hideNavSplash, 10000);
+    /* Keep the original branded transition visible for about 5 seconds, but never
+       leave it covering the destination for more than 7 seconds. */
+    navSplashWatchdog = setTimeout(hideNavSplash, 7000);
   }
   function hideNavSplash() {
     var el = document.getElementById('splash'); if (!el) return;
@@ -262,8 +262,8 @@
   }
   function finishNavSplashSoon() {
     clearTimeout(navSplashTimer);
-    /* Let the destination mount, then hold the original splash for ~7 seconds. */
-    var remaining = Math.max(0, 7000 - (Date.now() - navSplashStarted));
+    /* Let the destination mount, then hold the original splash for ~5 seconds. */
+    var remaining = Math.max(0, 5000 - (Date.now() - navSplashStarted));
     navSplashTimer = setTimeout(hideNavSplash, remaining);
   }
   EH.go = function (path, replace) {
@@ -585,7 +585,7 @@
 
     var splash = $('#splash'), show = !EH.ss.get('eh_splash') || /[?&]splash=1/.test(location.search), t0 = Date.now(), done = false, ready = false;
     function enter() { if (done) return; done = true; if (splash) { splash.classList.add('out'); splash.setAttribute('aria-hidden', 'true'); } document.body.classList.add('ready'); EH.ss.set('eh_splash', '1'); EH.emit('ready'); }
-    if (show) { var tick = function () { if (ready && Date.now() - t0 >= 7000) enter(); else if (!done) setTimeout(tick, 80); }; setTimeout(enter, 10000); tick(); userDone.then(function () { ready = true; }); }
+    if (show) { var tick = function () { if (ready && Date.now() - t0 >= 5000) enter(); else if (!done) setTimeout(tick, 80); }; setTimeout(enter, 7000); tick(); userDone.then(function () { ready = true; }); }
     else { if (splash) { splash.classList.add('out'); splash.setAttribute('aria-hidden', 'true'); } done = true; document.body.classList.add('ready'); EH.emit('ready'); }
   };
 })();

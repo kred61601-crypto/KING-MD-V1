@@ -170,10 +170,10 @@ select.inp{background-image:linear-gradient(45deg,transparent 50%,var(--t2) 50%)
 /* splash */
 #splash{position:fixed;inset:0;z-index:200;background:#030303;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
 #splash.out{opacity:0;visibility:hidden;transition:opacity .5s ease .08s,visibility 0s linear .6s}
-.sp-glow{position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;background:radial-gradient(circle,rgba(40,110,255,.34),rgba(120,60,255,.14) 45%,transparent 70%);animation:breathe 2.6s ease-in-out infinite}
-.sp-logo{position:relative;width:112px;height:112px;display:flex;align-items:center;justify-content:center;animation:pop .9s var(--spring) both}
+.sp-glow{position:absolute;left:50%;top:50%;width:230px;height:230px;margin:-115px 0 0 -115px;border-radius:50%;background:radial-gradient(circle,rgba(40,110,255,.34),rgba(120,60,255,.14) 45%,transparent 70%);animation:breathe 2.6s ease-in-out infinite}
+.sp-logo{position:relative;width:82px;height:82px;display:flex;align-items:center;justify-content:center;animation:pop .9s var(--spring) both}
 #splash.out .sp-logo{transform:scale(1.2);opacity:0;transition:transform .55s var(--ease),opacity .4s ease}
-.sp-logo img{width:82px;height:82px;border-radius:50%;box-shadow:0 0 34px rgba(40,110,255,.45)}
+.sp-logo img{width:60px;height:60px;border-radius:50%;box-shadow:0 0 34px rgba(40,110,255,.45)}
 .sp-ring{position:absolute;inset:0;width:100%;height:100%;animation:spin 1.25s linear infinite}
 .sp-ring.b{inset:9px;width:calc(100% - 18px);height:calc(100% - 18px);animation-duration:2.1s;animation-direction:reverse;opacity:.55}
 .sp-name{position:relative;margin-top:20px;font-size:17px;font-weight:800;letter-spacing:.36em;text-indent:.36em;animation:fadeUp .7s var(--ease) .35s both}

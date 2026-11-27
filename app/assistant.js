@@ -37,7 +37,7 @@
     var f = EH.frame(scr, { bar: 'push', title: 'KING MD AI', sub: 'Ask anything about the site or your bot', logo: true, verified: true }), body = f.body, alive = true, busy = false;
     body.classList.remove('body'); body.className = 'chat-body';
     body.innerHTML = '<div class="chat-list ai-list" data-list></div>' +
-      '<div class="chat-foot"><div class="ai-chips" data-chips></div><div class="ai-rep">Not satisfied? <a data-report>Report to Denzel</a></div><div class="chat-in"><textarea class="chat-ta" data-ta rows="1" maxlength="600" placeholder="Ask the AI…"></textarea><button class="chat-send tap" data-send aria-label="Send">' + ic('send') + '</button></div></div>';
+      '<div class="chat-foot"><div class="ai-chips" data-chips></div><div class="ai-rep">Need a person? <a data-adminchat>Chat privately with admin</a> · <a data-report>Report to Denzel</a></div><div class="chat-in"><textarea class="chat-ta" data-ta rows="1" maxlength="600" placeholder="Ask the AI…"></textarea><button class="chat-send tap" data-send aria-label="Send">' + ic('send') + '</button></div></div>';
     var list = $('[data-list]', body), ta = $('[data-ta]', body), chips = $('[data-chips]', body), st = { sid: null, msgs: [], t: 0 };
     var saved = EH.ls.json(KEY, null); if (saved && saved.sid && Date.now() - saved.t < HOUR) st = saved;
     function save() { st.t = Date.now(); EH.ls.set(KEY, JSON.stringify({ sid: st.sid, msgs: st.msgs.slice(-40), t: st.t })); }
@@ -95,6 +95,31 @@
     $('[data-send]', body).onclick = function () { send(); };
     ta.oninput = function () { ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; };
     ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(hover:hover)').matches) { e.preventDefault(); send(); } };
+    $('[data-adminchat]', body).onclick = function () {
+      if (!EH.token) { EH.login('Sign in to send a private message to the KING MD administrator.'); return; }
+      var sheet = EH.sheet({ title: 'Private Admin Chat', full: true, html: '<div class="sub">Only you and authorized KING MD administrators can see this conversation. You can attach a screenshot.</div><button class="btn alt block tap" data-private-refresh style="margin:8px 0">' + ic('refresh-cw') + ' Refresh replies</button><div data-private-list style="max-height:48vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px;margin:10px 0"><div class="sub">Loading messages…</div></div><textarea class="inp" data-private-text rows="3" maxlength="2000" placeholder="Describe the problem…" style="height:auto;padding:12px 14px"></textarea><label class="btn alt block tap" style="margin:8px 0">' + ic('image') + ' Attach photo <input data-private-file type="file" accept="image/*" style="display:none"></label><div data-private-name class="note"></div><button class="btn block tap" data-private-send>' + ic('send') + ' Send to admin</button>' });
+      var listBox = $('[data-private-list]', sheet.el), refreshBtn = $('[data-private-refresh]', sheet.el), textBox = $('[data-private-text]', sheet.el), fileBox = $('[data-private-file]', sheet.el), nameBox = $('[data-private-name]', sheet.el), sendBtn = $('[data-private-send]', sheet.el), photo = '';
+      function renderMessages(rows) {
+        listBox.innerHTML = (rows || []).length ? rows.map(function (m) { return '<div style="padding:9px;margin:6px 0;border:1px solid var(--line);border-radius:10px;background:' + (m.from === 'admin' ? 'rgba(34,197,94,.09)' : 'var(--s2)') + '"><b style="font-size:12px">' + (m.from === 'admin' ? 'KING MD Admin' : 'You') + '</b><div style="margin-top:4px;overflow-wrap:anywhere">' + fmt(m.message || '') + '</div>' + (m.photo ? '<img src="' + m.photo + '" alt="Attached screenshot" style="display:block;max-width:100%;max-height:230px;border-radius:8px;margin-top:7px">' : '') + '<div class="note">' + esc(new Date(m.createdAt).toLocaleString()) + '</div></div>'; }).join('') : '<div class="sub">No messages yet. Send your problem and a screenshot if needed.</div>';
+        listBox.scrollTop = listBox.scrollHeight;
+      }
+      function refreshMessages() { return EH.api('/api/admin-chat/messages').then(function (r) { if (!r.ok || !r.d.success) throw new Error((r.d && r.d.error) || 'Could not load messages'); renderMessages(r.d.messages); }); }
+      refreshBtn.onclick = function () { refreshMessages().catch(function(e){ EH.toast(e.message || 'Could not refresh', 'er'); }); };
+      fileBox.onchange = function () {
+        var f = fileBox.files && fileBox.files[0]; photo = ''; nameBox.textContent = '';
+        if (!f) return; if (!f.type || f.type.indexOf('image/') !== 0 || f.size > 2 * 1024 * 1024) { EH.toast('Choose an image smaller than 2 MB.', 'er'); fileBox.value = ''; return; }
+        var rd = new FileReader(); rd.onload = function () { photo = String(rd.result || ''); nameBox.textContent = 'Photo attached: ' + f.name; }; rd.onerror = function () { EH.toast('Could not read that photo.', 'er'); }; rd.readAsDataURL(f);
+      };
+      sendBtn.onclick = function () {
+        var message = textBox.value.trim(); if (!message && !photo) { EH.toast('Write a message or attach a photo.', 'er'); return; }
+        sendBtn.disabled = true;
+        EH.api('/api/admin-chat/messages', { method: 'POST', body: { message: message, photo: photo } }).then(function (r) {
+          if (!r.ok || !r.d.success) throw new Error((r.d && r.d.error) || 'Could not send message');
+          textBox.value = ''; fileBox.value = ''; photo = ''; nameBox.textContent = ''; EH.toast('Message sent privately to admin.', 'ok'); return refreshMessages();
+        }).catch(function (e) { EH.toast(e.message || 'Could not send message', 'er'); }).finally(function () { sendBtn.disabled = false; });
+      };
+      refreshMessages().catch(function (e) { listBox.textContent = e.message || 'Could not load messages'; });
+    };
     $('[data-report]', body).onclick = function () {
       var s = EH.sheet({ title: 'Report to Denzel', html: '<div class="sub" style="margin:0 2px 12px">Tell Denzel what went wrong. The more detail, the faster it gets fixed.</div><label class="fld"><span>Your name</span><input class="inp" data-rn maxlength="100" placeholder="Your name" value="' + esc((EH.user && EH.user.username) || '') + '"></label><label class="fld"><span>What happened?</span><textarea class="inp" data-ri rows="5" maxlength="1800" placeholder="Describe the problem…" style="height:auto;padding:12px 14px"></textarea></label><button class="btn block tap" data-rs>' + ic('send') + ' Send report</button>' });
       var b = s.el; $('[data-rs]', b).onclick = function () {
