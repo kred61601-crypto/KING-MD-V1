@@ -384,6 +384,10 @@ body[data-theme=light] .lg-google{border-color:#d0d5dd}
 .lg-perks li{display:flex;align-items:center;gap:.7rem;font-size:.8rem;color:var(--t1)}
 .lg-perks i{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;background:rgba(var(--p-rgb),.12);color:var(--p);flex:none}
 .lg-legal{text-align:center;font-size:.72rem;color:var(--t2);line-height:1.6;margin:0}
+.lg-email-fallback{margin-top:.65rem;border-top:1px solid var(--bd);padding-top:.65rem}
+.lg-email-fallback summary{cursor:pointer;text-align:center;color:var(--t2);font-size:.76rem;padding:.45rem;list-style:none}
+.lg-email-fallback summary::-webkit-details-marker{display:none}
+.lg-email-fallback[open] summary{color:var(--p);font-weight:700}
 .brand-logo{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--p),var(--s));display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;box-shadow:0 8px 24px -6px rgba(var(--p-rgb),.5);overflow:hidden}
 .brand-logo i{font-size:1.6rem;color:#fff}
 .brand-logo img{width:100%;height:100%;object-fit:cover}
@@ -2619,6 +2623,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <button id="adm-nav-notifs" onclick="A.adminTab('notifs')"><i class="fas fa-bell"></i> Notifications</button>
         <button id="adm-nav-adminchat" onclick="A.adminTab('adminchat');A.adminLoadPrivateSupport()"><i class="fas fa-user-shield"></i> Private User Chats</button>
         <button id="adm-nav-reports" onclick="A.adminTab('reports');A.adminLoadReports()"><i class="fas fa-flag"></i> Issue Reports <span id="adminReportBadge" style="margin-left:auto;font-size:.7rem;color:#f472b6"></span></button>
+        <button id="adm-nav-authsetup" onclick="A.adminTab('authsetup')"><i class="fas fa-shield-alt"></i> Login &amp; AI Setup</button>
         <button id="adm-nav-pages" onclick="A.adminTab('pages');A.adminLoadPageStatus();A.adminLoadBotSpaces();A.adminLoadFreeLimits();A.adminStickersLoad();A.adminFollowLoad();A.adminLoadMaintenanceStatus();A.adminLoadPaymentsStatus();A.adminLoadAds();A.adminLoadAppCfg();A.adminLoadSeasons()"><i class="fas fa-toggle-on"></i> Page Management</button>
         <button id="adm-nav-sessions" onclick="A.adminTab('sessions')"><i class="fas fa-robot"></i> Sessions</button>
         <button id="adm-nav-ratings" onclick="A.adminTab('ratings');A.adminLoadRatings()"><i class="fas fa-star"></i> Ratings</button>
@@ -2819,6 +2824,14 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
             <button class="btn bp" onclick="A.adminLoadReports()"><i class="fas fa-sync"></i> Refresh reports</button>
           </div>
           <div id="adminReportsList"><div class="empty"><i class="fas fa-flag"></i><p>Press Refresh reports to load submissions.</p></div></div>
+        </div>
+      </div>
+
+      <div id="adm-sec-authsetup" style="display:none">
+        <div class="card">
+          <div class="ctitle"><i class="fas fa-shield-alt"></i> Login &amp; AI Provider Setup</div>
+          <p style="font-size:.84rem;color:var(--t2);line-height:1.6">Configure Google sign-in, GitHub sign-in and the KING MD AI assistant from inside this app. Provider secrets are stored on the server and are not shown back after saving.</p>
+          <a class="btn bp" href="/admin-oauth-settings.html" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;margin-top:.5rem"><i class="fas fa-sliders-h"></i> Open Login &amp; AI Setup</a>
         </div>
       </div>
 
@@ -3659,21 +3672,28 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   <div class="mt" style="text-align:center">Welcome to KING MD V4</div>
   <div class="ms" style="text-align:center;margin-bottom:.9rem" id="loginModalMsg">Sign in, or create your account in one tap.</div>
   <div id="rememberedLogin" style="display:none;margin-top:.4rem"></div>
-  <form id="emailAccountForm" onsubmit="A.emailAuth(event)" style="display:grid;gap:.65rem;margin:.7rem 0">
-    <div class="fg" id="emailNameWrap"><label class="fl">Full name</label><input id="emailAccountName" class="fi" autocomplete="name" placeholder="Your full name"></div>
-    <div class="fg"><label class="fl">Email address</label><input id="emailAccountEmail" class="fi" type="email" autocomplete="email" required placeholder="name@example.com"></div>
-    <div class="fg"><label class="fl">Password</label><input id="emailAccountPassword" class="fi" type="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters"></div>
-    <div id="emailAccountError" style="font-size:.8rem;color:var(--er);min-height:1rem"></div>
-    <button class="btn bp bfw" id="emailAccountSubmit" type="submit"><i class="fas fa-sign-in-alt"></i> Sign In</button>
-  </form>
-  <button type="button" class="btn bs bfw" id="emailAccountSwitch" onclick="A.toggleEmailMode()">Create a new account</button>
-  <div class="lg-or"><span>Email and password — no OAuth setup</span></div>
+  <div class="lg-btns" style="margin:.7rem 0">
+    <button type="button" class="lg-btn lg-google" onclick="A.openOAuth('google')"><span class="lg-ic"><i class="fab fa-google" style="color:#4285f4"></i></span>Continue with Google</button>
+    <button type="button" class="lg-btn lg-github" onclick="A.openOAuth('github')"><span class="lg-ic"><i class="fab fa-github"></i></span>Continue with GitHub</button>
+  </div>
+  <div class="lg-or"><span>No password needed</span></div>
   <ul class="lg-perks">
     <li><i class="fas fa-robot"></i> Deploy your own WhatsApp bot, free</li>
     <li><i class="fas fa-bolt"></i> Channel reacts, poll votes and daily rewards</li>
     <li><i class="fas fa-crown"></i> Go Premium any time for more</li>
   </ul>
-  <p class="lg-legal">Create an account with your name, email and password.<br>By continuing you agree to our <a href="#" onclick="A.closeM('login');A.go('privacy');return false" style="color:var(--p);font-weight:600">Privacy Policy</a> and <a href="#" onclick="A.closeM('login');A.go('terms');return false" style="color:var(--p);font-weight:600">Terms &amp; Conditions</a>.</p>
+  <p class="lg-legal" style="margin-bottom:.75rem">New here? Your account is created automatically.<br>By continuing you agree to our <a href="#" onclick="A.closeM('login');A.go('privacy');return false" style="color:var(--p);font-weight:600">Privacy Policy</a> and <a href="#" onclick="A.closeM('login');A.go('terms');return false" style="color:var(--p);font-weight:600">Terms &amp; Conditions</a>.</p>
+  <details class="lg-email-fallback">
+    <summary>Use email and password instead</summary>
+    <form id="emailAccountForm" onsubmit="A.emailAuth(event)" style="display:grid;gap:.65rem;margin:.7rem 0">
+      <div class="fg" id="emailNameWrap"><label class="fl">Full name</label><input id="emailAccountName" class="fi" autocomplete="name" placeholder="Your full name"></div>
+      <div class="fg"><label class="fl">Email address</label><input id="emailAccountEmail" class="fi" type="email" autocomplete="email" required placeholder="name@example.com"></div>
+      <div class="fg"><label class="fl">Password</label><input id="emailAccountPassword" class="fi" type="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters"></div>
+      <div id="emailAccountError" style="font-size:.8rem;color:var(--er);min-height:1rem"></div>
+      <button class="btn bp bfw" id="emailAccountSubmit" type="submit"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+    </form>
+    <button type="button" class="btn bs bfw" id="emailAccountSwitch" onclick="A.toggleEmailMode()">Create a new account</button>
+  </details>
 </div></div>
 
 <!-- V6: ONBOARDING — first/last name, username, avatar choice -->
@@ -10375,6 +10395,7 @@ async _doPair() {
     codes:      ['fa-ticket-alt', 'Redeem Codes'],
     notifs:     ['fa-bell', 'Notifications'],
     reports:    ['fa-flag', 'Issue Reports'],
+    authsetup:  ['fa-shield-alt', 'Login & AI Setup'],
     adminchat:  ['fa-user-shield', 'Private User Chats'],
     pages:      ['fa-toggle-on', 'Page Management'],
     sessions:   ['fa-robot', 'Sessions'],

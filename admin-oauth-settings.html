@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KING MD V4 · Login & AI Setup</title>
+<style>
+:root{color-scheme:dark;--bg:#070707;--panel:#111;--line:#29202b;--pink:#f02c9b;--gold:#ffb52c;--muted:#a5a1ae}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0,#25102a 0,transparent 45%),var(--bg);color:#f8f7fb;font:15px system-ui,-apple-system,Segoe UI,sans-serif;padding:22px 14px 50px}
+main{max-width:680px;margin:auto}.top{display:flex;align-items:center;gap:12px;margin:10px 0 22px}.logo{width:48px;height:48px;border-radius:50%;background:#15121c;border:1px solid #343044;display:grid;place-items:center;font-weight:900;color:#9fc7ff}.top h1{font-size:21px;margin:0}.top p{margin:3px 0;color:var(--muted);font-size:13px}
+.card{background:#0d0d0f;border:1px solid var(--line);border-radius:16px;padding:19px;margin:14px 0;box-shadow:0 14px 40px #0005}.card h2{font-size:17px;margin:0 0 8px}.hint{color:var(--muted);font-size:13px;line-height:1.55;margin:0 0 14px}
+label{display:block;font-size:13px;color:#d4d0dc;font-weight:700;margin:13px 0 6px}input{width:100%;background:#17171a;color:#fff;border:1px solid #39323d;border-radius:10px;padding:13px;font:inherit;outline:none}input:focus{border-color:var(--pink);box-shadow:0 0 0 2px #f02c9b22}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.status{font-size:12px;border:1px solid #48404b;border-radius:30px;padding:5px 10px;color:#c6c1cd}.status.ok{color:#65e6a2;border-color:#236344}.status.no{color:#ffbd62;border-color:#704a22}
+button{border:0;border-radius:11px;padding:13px 18px;font:700 15px system-ui;color:#160d14;background:linear-gradient(100deg,#e934a5,#ffb52c);cursor:pointer;width:100%;margin-top:16px}button:disabled{opacity:.55;cursor:wait}.callback{display:block;background:#19171b;border:1px solid #37303b;border-radius:8px;padding:10px;overflow-wrap:anywhere;color:#f3b4d8;font:12px ui-monospace,monospace;margin-top:6px}.msg{display:none;padding:12px;border-radius:10px;margin:12px 0;font-size:13px}.msg.show{display:block}.msg.ok{background:#10271b;color:#a6f2c1}.msg.err{background:#32151b;color:#ffc0cb}.foot{color:#85808d;font-size:12px;line-height:1.6;margin:16px 2px}.back{display:inline-block;color:#f4a8d4;text-decoration:none;margin:5px 0 15px}
+</style>
+</head>
+<body><main>
+<a class="back" href="/">← Back to KING MD V4</a>
+<div class="top"><div class="logo">KM</div><div><h1>KING MD V4</h1><p>Private login and AI provider configuration</p></div></div>
+<div id="message" class="msg"></div>
+<section class="card">
+ <div class="row"><h2>Google sign-in</h2><span id="googleStatus" class="status">Checking…</span></div>
+ <p class="hint">Paste the OAuth Client ID and Client Secret from your Google Cloud OAuth client. These values are saved on the server and are never sent back to this page.</p>
+ <label for="googleClientId">Google Client ID</label><input id="googleClientId" autocomplete="off" placeholder="xxxx.apps.googleusercontent.com">
+ <label for="googleClientSecret">Google Client Secret</label><input id="googleClientSecret" type="password" autocomplete="new-password" placeholder="Paste Google client secret">
+ <label>Authorized redirect URI to add in Google Cloud</label><code id="googleCallback" class="callback">Loading…</code>
+</section>
+<section class="card">
+ <div class="row"><h2>GitHub sign-in</h2><span id="githubStatus" class="status">Checking…</span></div>
+ <p class="hint">Create a GitHub OAuth App and paste its Client ID and Client Secret. Set the Authorization callback URL to the address shown below.</p>
+ <label for="githubClientId">GitHub Client ID</label><input id="githubClientId" autocomplete="off" placeholder="GitHub OAuth client ID">
+ <label for="githubClientSecret">GitHub Client Secret</label><input id="githubClientSecret" type="password" autocomplete="new-password" placeholder="Paste GitHub client secret">
+ <label>GitHub callback URL</label><code id="githubCallback" class="callback">Loading…</code>
+</section>
+<section class="card">
+ <div class="row"><h2>KING MD AI assistant</h2><span id="aiStatus" class="status">Checking…</span></div>
+ <p class="hint">Optional: add a Groq API key to enable natural AI conversations. Without it, the built-in KING MD support assistant still responds using its support knowledge, but it is not a full generative AI model.</p>
+ <label for="groqApiKey">Groq API key</label><input id="groqApiKey" type="password" autocomplete="new-password" placeholder="Paste Groq API key">
+</section>
+<button id="save">Save private settings</button>
+<p class="foot">Security: only a signed-in KING MD administrator can save these values. Secrets are stored in the server's private data directory and are not exposed through public static files or status APIs. Keep your OAuth secrets and AI key private. This storage survives ordinary process restarts when the host preserves its data directory; redeploys on ephemeral storage can erase it. The login buttons remain visible, but provider sign-in will only work after valid provider credentials are saved and the callback URLs are registered with each provider.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function token(){return localStorage.getItem('king_token')||localStorage.getItem('token')||''}
+function show(text,kind){const el=$('message');el.textContent=text;el.className='msg show '+(kind||'')}
+function status(id,on){const el=$(id);el.textContent=on?'Configured':'Not configured';el.className='status '+(on?'ok':'no')}
+async function api(path,opts={}){const headers=Object.assign({'x-auth-token':token()},opts.headers||{});if(opts.body)headers['Content-Type']='application/json';const r=await fetch(path,Object.assign({},opts,{headers}));const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw new Error(d.error||('Request failed ('+r.status+')'));return d}
+async function load(){try{if(!token())throw new Error('Please sign in to KING MD V4 first, then open this admin page again.');const d=await api('/api/admin/provider-config');$('googleCallback').textContent=d.callbacks.google;$('githubCallback').textContent=d.callbacks.github;status('googleStatus',d.googleConfigured);status('githubStatus',d.githubConfigured);status('aiStatus',d.aiConfigured)}catch(e){show(e.message,'err')}}
+$('save').addEventListener('click',async()=>{const b=$('save');b.disabled=true;b.textContent='Saving…';try{const payload={};['googleClientId','googleClientSecret','githubClientId','githubClientSecret','groqApiKey'].forEach(k=>{if($(k).value.trim())payload[k]=$(k).value.trim()});const d=await api('/api/admin/provider-config',{method:'POST',body:JSON.stringify(payload)});['googleClientSecret','githubClientSecret','groqApiKey'].forEach(k=>$(k).value='');status('googleStatus',d.googleConfigured);status('githubStatus',d.githubConfigured);status('aiStatus',d.aiConfigured);show('Settings saved securely on the server. Test each sign-in button and the AI assistant.','ok')}catch(e){show(e.message,'err')}finally{b.disabled=false;b.textContent='Save private settings'}});
+load();
+</script>
+</body></html>

@@ -1,0 +1,4 @@
+# Never commit live OAuth / AI credentials or user data
+data/private-provider-config.json
+data/private-provider-config.json.tmp
+/var-data/

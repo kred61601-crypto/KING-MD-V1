@@ -14,6 +14,13 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
+// Never expose persistent data/config files through the public static-file server.
+app.use((req, res, next) => {
+  const pathname = String(req.path || '').replace(/\\/g, '/');
+  if (/^\/data(?:\/|$)/i.test(pathname) || /^\/private(?:\/|$)/i.test(pathname))
+    return res.status(404).type('text').send('Not found');
+  next();
+});
 app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 10000;
@@ -24,6 +31,28 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BOTS_FILE = path.join(DATA_DIR, 'bots.json');
 const PAIR_BRIDGE_KEY = process.env.PAIR_BRIDGE_KEY || 'KINGMD-PAIR-BRIDGE-2026-25d149ee52d161be9b76029bda1267b7';
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// OAuth and AI secrets are stored server-side in a private JSON file, not in
+// browser code and not in Render environment variables. The /data URL is blocked above.
+const PRIVATE_PROVIDER_CONFIG_FILE = path.join(DATA_DIR, 'private-provider-config.json');
+function readPrivateProviderConfig() {
+  try {
+    const value = JSON.parse(fs.readFileSync(PRIVATE_PROVIDER_CONFIG_FILE, 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch (_) { return {}; }
+}
+function writePrivateProviderConfig(value) {
+  const tmp = PRIVATE_PROVIDER_CONFIG_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(tmp, 0o600); } catch (_) {}
+  fs.renameSync(tmp, PRIVATE_PROVIDER_CONFIG_FILE);
+  try { fs.chmodSync(PRIVATE_PROVIDER_CONFIG_FILE, 0o600); } catch (_) {}
+}
+function privateSetting(name, envName) {
+  const cfg = readPrivateProviderConfig();
+  const saved = typeof cfg[name] === 'string' ? cfg[name].trim() : '';
+  return saved || (envName ? String(process.env[envName] || '').trim() : '');
+}
 const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
 const DEFAULT_ENGINE_URLS = (process.env.SERVERS || process.env.ENGINE_URLS || process.env.ENGINE_URL || 'https://king-md-v4-a6ls.onrender.com')
   .split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -599,8 +628,10 @@ function supportAnswer(message, history) {
     return 'I can help troubleshoot that. Please tell me: 1) which page or button you used, 2) what you expected to happen, and 3) the exact error message you saw. You can also use Report an Issue to send the details and a screenshot to the administrator.';
   if (has('command', 'commands', 'menu', 'whatsapp bot'))
     return 'For commands supported by your deployed bot, send `.menu` in the connected WhatsApp chat. Common commands may include `.ping`, `.menu`, `.owner` and `.sticker`, but the exact list depends on the bot engine configuration.';
-  if (has('thank', 'thanks')) return 'You’re welcome! 👑 If anything else is not working in KING MD V4, tell me what happened and I’ll help you troubleshoot it.';
-  return 'I’m KING MD V4 Assistant. I can help with WhatsApp pairing, QR scan, bot passwords, deployment, hosting, server capacity, connection problems, Premium and KM coins. I don’t want to guess about your issue—what page are you using, and what exact message or error do you see?';
+  if (has('friend', 'friends', 'be friends')) return 'Of course — I’d be happy to chat with you! 😊 I’m an AI assistant, but I can still keep you company, help with KING MD V4, or talk through whatever is on your mind. What shall we chat about?';
+  if (has('thank', 'thanks')) return 'You’re very welcome! 😊 I’m glad I could help. If anything else comes up with KING MD V4 or your bot, just tell me.';
+  if (/^(okay|ok|alright|cool|nice|got it)[.! ]*$/.test(q)) return 'Sounds good! 😊 Whenever you’re ready, tell me what you’d like help with next.';
+  return 'I’m here with you. 😊 Tell me a little more about what you’re trying to do in KING MD V4, and I’ll walk you through it step by step.';
 }
 
 app.post('/api/report', async (req, res) => {
@@ -655,6 +686,48 @@ function requireReportAdmin(req, res, next) {
     return res.status(403).json({ success: false, error: 'Admin only' });
   next();
 }
+
+// Admin-only provider setup. Secrets are never returned to the browser.
+app.get('/api/admin/provider-config', requireUser, requireReportAdmin, (req, res) => {
+  const cfg = readPrivateProviderConfig();
+  const origin = APP_URL || (req.protocol + '://' + req.get('host')).replace(/\/+$/, '');
+  res.json({
+    success: true,
+    googleConfigured: !!(cfg.googleClientId && cfg.googleClientSecret),
+    githubConfigured: !!(cfg.githubClientId && cfg.githubClientSecret),
+    aiConfigured: !!(cfg.groqApiKey || process.env.GROQ_API_KEY),
+    callbacks: {
+      google: origin + '/api/auth/google/callback',
+      github: origin + '/api/auth/github/callback'
+    }
+  });
+});
+app.post('/api/admin/provider-config', requireUser, requireReportAdmin, (req, res) => {
+  const body = req.body || {};
+  const current = readPrivateProviderConfig();
+  const fields = ['googleClientId', 'googleClientSecret', 'githubClientId', 'githubClientSecret', 'groqApiKey'];
+  for (const field of fields) {
+    if (body[field] === undefined) continue; // blank/omitted fields preserve existing secrets
+    const value = String(body[field] || '').trim();
+    if (!value) continue;
+    if (value.length > 4096) return res.status(400).json({ success: false, error: 'A configuration value is too long.' });
+    current[field] = value;
+  }
+  try {
+    writePrivateProviderConfig(current);
+    res.json({
+      success: true,
+      message: 'Private provider settings saved.',
+      googleConfigured: !!(current.googleClientId && current.googleClientSecret),
+      githubConfigured: !!(current.githubClientId && current.githubClientSecret),
+      aiConfigured: !!(current.groqApiKey || process.env.GROQ_API_KEY)
+    });
+  } catch (error) {
+    console.error('[KING MD] Could not save private provider settings:', error.message || error);
+    res.status(500).json({ success: false, error: 'Could not save settings. Check that the server has writable persistent storage.' });
+  }
+});
+
 app.get('/api/admin/reports', requireUser, requireReportAdmin, (req, res) => {
   res.json({ success: true, reports: supportReports.map(({ photo, ...r }) => ({ ...r, hasPhoto: !!photo })) });
 });
@@ -680,7 +753,49 @@ app.post('/api/support/start', (req, res) => {
   supportSessions.set(sid, { createdAt: Date.now(), history: [] });
   res.json({ success: true, sid });
 });
-app.post('/api/support/chat', (req, res) => {
+async function generateSupportReply(message, history) {
+  const key = privateSetting('groqApiKey', 'GROQ_API_KEY');
+  if (!key) return supportAnswer(message, history);
+  const configuredModels = (process.env.GROQ_MODELS || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile').split(',').map(x => x.trim()).filter(Boolean);
+  const model = configuredModels[0] || 'llama-3.3-70b-versatile';
+  const system = [
+    'You are KING MD V4 AI, a warm, patient, friendly personal assistant for the KING MD V4 website and WhatsApp bot platform.',
+    'Speak naturally like a helpful person, not like a rigid FAQ. Be friendly and encouraging, with light emoji use when it fits.',
+    'Do not repeat your full introduction after every greeting. Remember the conversation history and respond to what the user actually said.',
+    'Answer the exact question first. Keep ordinary replies concise; use numbered steps for troubleshooting.',
+    'Help with KING MD V4 pages, Google/GitHub sign-in, account onboarding, bot deployment, WhatsApp pairing and QR, manager-bot passwords, server capacity, admin reports, private admin chat, coins, Premium, ratings, tasks and common app errors.',
+    'Only describe features that are supported by the current app. If a feature, price, server status, or action cannot be verified, say so clearly and ask one useful follow-up question.',
+    'Never claim you have changed settings, contacted an admin, sent a report, deployed a bot, or checked live server status unless the server explicitly confirms it.',
+    'Never ask for passwords, OAuth codes, WhatsApp verification codes, M-Pesa PINs, API keys or other secrets. Ask users to hide tokens in screenshots and logs.',
+    'For a server-full issue, explain that it usually means available bot capacity is exhausted; guide the user to check enabled engines and capacity, and offer escalation to an administrator.',
+    'If the user says hello, greet them warmly and ask how you can help. If they ask to be friends, respond kindly while being clear you are an AI assistant.',
+    'If you do not know something, do not invent an answer. Explain what detail you need.'
+  ].join(' ');
+  const messages = [{ role: 'system', content: system }];
+  (Array.isArray(history) ? history.slice(-12) : []).forEach(item => {
+    if (item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
+      messages.push({ role: item.role, content: item.content.slice(0, 1200) });
+  });
+  messages.push({ role: 'user', content: String(message || '').slice(0, 1200) });
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, temperature: 0.65, max_tokens: 500 }),
+      signal: AbortSignal.timeout(22000)
+    });
+    const data = await response.json().catch(() => ({}));
+    const reply = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!response.ok || typeof reply !== 'string' || !reply.trim())
+      throw new Error((data && data.error && data.error.message) || 'AI provider returned no reply');
+    return reply.trim().slice(0, 5000);
+  } catch (error) {
+    console.warn('[KING MD AI] Groq response failed; using safe support fallback:', error.message || error);
+    return supportAnswer(message, history);
+  }
+}
+
+app.post('/api/support/chat', async (req, res) => {
   const body = req.body || {};
   let sid = String(body.sid || '');
   let session = supportSessions.get(sid);
@@ -689,11 +804,20 @@ app.post('/api/support/chat', (req, res) => {
   }
   const message = String(body.message || '').trim().slice(0, 600);
   if (!message) return res.status(400).json({ success: false, error: 'Please enter a message.' });
-  const reply = supportAnswer(message, session.history);
-  session.history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
-  session.history = session.history.slice(-16);
-  session.createdAt = Date.now();
-  res.json({ success: true, sid, reply, message: reply, pending: false });
+  try {
+    const reply = await generateSupportReply(message, session.history);
+    session.history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
+    session.history = session.history.slice(-24);
+    session.createdAt = Date.now();
+    res.json({ success: true, sid, reply, message: reply, pending: false, ai: !!privateSetting('groqApiKey', 'GROQ_API_KEY') });
+  } catch (error) {
+    console.error('[KING MD AI] Chat request failed:', error);
+    const reply = supportAnswer(message, session.history);
+    session.history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
+    session.history = session.history.slice(-24);
+    session.createdAt = Date.now();
+    res.json({ success: true, sid, reply, message: reply, pending: false, ai: false });
+  }
 });
 app.post('/api/support/result', (req, res) => {
   const sid = String((req.body || {}).sid || '');
@@ -704,12 +828,13 @@ app.post('/api/support/result', (req, res) => {
 function slugOK(s) { return /^[a-zA-Z0-9_]{3,20}$/.test(s || ''); }
 function findUsername(s) { return users.find(u => u.username.toLowerCase() === String(s || '').toLowerCase()); }
 
-function oauth(provider) {
+function oauth(provider, req) {
   const p = provider.toUpperCase();
+  const origin = APP_URL || (req ? (req.protocol + '://' + req.get('host')).replace(/\/+$/, '') : '');
   return {
-    id: process.env[p + '_CLIENT_ID'],
-    secret: process.env[p + '_CLIENT_SECRET'],
-    callback: APP_URL + '/api/auth/' + provider + '/callback'
+    id: privateSetting(provider + 'ClientId', p + '_CLIENT_ID'),
+    secret: privateSetting(provider + 'ClientSecret', p + '_CLIENT_SECRET'),
+    callback: origin + '/api/auth/' + provider + '/callback'
   };
 }
 
@@ -1078,8 +1203,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
 app.get('/api/auth/:provider/start', (req, res) => {
   const provider = String(req.params.provider || '').toLowerCase();
   if (!['google', 'github'].includes(provider)) return res.status(404).send('Unsupported provider');
-  const cfg = oauth(provider);
-  if (!APP_URL || !cfg.id || !cfg.secret) return res.status(503).type('text').send('Login is not configured.');
+  const cfg = oauth(provider, req);
+  if (!cfg.callback || !cfg.id || !cfg.secret) return res.status(503).type('text').send('Login is not configured. Open Admin → Login & AI Setup and save valid provider credentials.');
   const state = jwt.sign(
     { provider, nonce: crypto.randomBytes(16).toString('hex'), returnTo: req.query.returnTo === 'app' ? 'app' : 'site' },
     SECRET, { expiresIn: '10m' }
@@ -1108,7 +1233,7 @@ app.get('/api/auth/:provider/callback', async (req, res) => {
     returnPath = st.returnTo === 'app' ? '/app.html' : '/';
     if (st.provider !== provider) return fail('Sign-in state mismatch.');
     if (req.query.error || !req.query.code) return fail('Sign-in was cancelled.');
-    const cfg = oauth(provider);
+    const cfg = oauth(provider, req);
     const tr = await fetch(provider === 'google' ? 'https://oauth2.googleapis.com/token' : 'https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
