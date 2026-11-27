@@ -12,7 +12,13 @@
       headers: { 'Content-Type': 'application/json', 'x-device': dev() },
       body: JSON.stringify(body || {})
     }).then(function (r) {
-      return r.json().then(function (d) { return { d: d, status: r.status }; });
+      return r.text().then(function (raw) {
+        var d;
+        try { d = JSON.parse(raw || '{}'); }
+        catch (_) { d = { success: false, error: 'The server returned an invalid response. Please try again.' }; }
+        if (!r.ok && d && !d.error) d.error = 'Sign in failed (HTTP ' + r.status + ').';
+        return { d: d || {}, status: r.status };
+      });
     });
   }
 
@@ -48,7 +54,9 @@
         '<button class="btn block tap" type="submit" data-signin>' + ic('lock') + ' Log in</button>' +
         '<div style="text-align:center;margin-top:14px"><a data-forgot style="color:var(--p);font-weight:700;font-size:14px">' + ic('key') + ' Forgot your bot password?</a></div></form>' + EH.adCard();
       $('[data-forgot]', body).onclick = help;
-      $('[data-form]', body).onsubmit = function (e) { e.preventDefault(); login($('[data-num]', body).value.replace(/\D/g, ''), $('[data-pw]', body).value.trim()); };
+      var pwInput = $('[data-pw]', body);
+      if (pwInput) pwInput.addEventListener('input', function () { pwInput.value = pwInput.value.replace(/\s/g, '').toUpperCase(); });
+      $('[data-form]', body).onsubmit = function (e) { e.preventDefault(); login($('[data-num]', body).value.replace(/\D/g, ''), $('[data-pw]', body).value.replace(/\s/g, '').toUpperCase()); };
       $$('[data-q]', body).forEach(function (r) { r.onclick = function (e) { if (e.target.closest('[data-rm]')) return; var b = saved().filter(function (x) { return x.number === r.dataset.q; })[0]; if (b) login(b.number, b.password); }; });
       $$('[data-rm]', body).forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); EH.confirm({ title: 'Remove +' + b.dataset.rm + '?', text: 'It is only removed from this list on this phone.', ok: 'Remove', danger: true }).then(function (y) { if (y) { saveSaved(saved().filter(function (x) { return x.number !== b.dataset.rm; })); loginView(); } }); }; });
       showAtt(false); EH.mountAds(scr);
@@ -65,34 +73,33 @@
       if (a.left != null && a.left < 5) { box.hidden = false; box.innerHTML = (wrong ? '<b class="err">Wrong password.</b><br>' : '') + 'You have <b>' + a.left + '</b> ' + (a.left === 1 ? 'attempt' : 'attempts') + ' left.' + (wrong ? ' Go to your bot on WhatsApp and type <b>.password</b> to get your password.' : ''); }
       else { box.hidden = true; box.innerHTML = ''; }
     }
-    // ===== LOGIN - ACCEPTS BOT PASSWORD ✅ - NO URL =====
+    // ===== MANAGE BOT LOGIN: use the real server endpoint only =====
     function login(number, pass) {
       if ((att().until || 0) > Date.now()) { showAtt(); return; }
+      number = String(number || '').replace(/\D/g, '');
+      pass = String(pass || '').replace(/\s/g, '').toUpperCase();
       if (!number || !pass) return EH.toast('Enter both number and password', 'er');
-      var btn = $('[data-signin]', body); if (btn) btn.classList.add('busy'); EH.toast('Signing in…');
-      botApi('/api/manage-login', { phoneNumber: number, password: pass }).then(function (r) {
+      var btn = $('[data-signin]', body); if (btn) { btn.classList.add('busy'); btn.disabled = true; }
+      EH.toast('Signing in…');
+      botApi('/api/managebot/login', { phoneNumber: number, password: pass }).then(function (r) {
         var d = r.d || {};
-        if (d.success) { onLoginSuccess(d); return; }
-        return botApi('/api/managebot/login', { phoneNumber: number, password: pass }).then(function (r2) {
-          var d2 = r2.d || {};
-          if (d2.success) { onLoginSuccess(d2); return; }
-          return api('/api/managebot/login', { method: 'POST', body: { phoneNumber: number, password: pass } }).then(function (r3) {
-            var d3 = r3.d || {};
-            if (d3.success) { onLoginSuccess(d3); return; }
-            throw new Error(d3.error || d2.error || d.error || 'Sign in failed');
-          });
-        });
+        if (!d.success) throw new Error(d.error || 'Sign in failed. Check the bot number and the password sent by your bot.');
+        onLoginSuccess(d);
       }).catch(function (e) {
-        if (btn) btn.classList.remove('busy');
+        if (btn) { btn.classList.remove('busy'); btn.disabled = false; }
         var msg = (e && e.message) || 'Sign in failed';
-        if (msg.indexOf('Wrong') >= 0) { var a = att(); var left = (a.left == null ? 4 : a.left - 1); setAtt({ left: left }); showAtt(true); }
+        if (msg.toLowerCase().indexOf('wrong') >= 0 || msg.toLowerCase().indexOf('password') >= 0) {
+          var a = att(); var left = (a.left == null ? 4 : Math.max(0, a.left - 1)); setAtt({ left: left }); showAtt(true);
+        }
         EH.toast(msg, 'er');
       });
       function onLoginSuccess(d) {
-        if (btn) btn.classList.remove('busy');
+        if (btn) { btn.classList.remove('busy'); btn.disabled = false; }
         setAtt(null);
-        mb = { token: d.token, server: d.server || '', number: number, settings: d.settings || {}, password: pass };
-        var l = saved(), i = -1; l.forEach(function (b, k) { if (b.number === number) i = k; }); var en = { number: number, password: pass, lastLogin: Date.now() }; if (i >= 0) l[i] = en; else l.push(en); saveSaved(l);
+        mb = { token: d.token, server: d.server || (d.bot && (d.bot.server || d.bot.engine)) || '', number: number, settings: d.settings || {}, password: pass };
+        var l = saved(), i = -1; l.forEach(function (b, k) { if (b.number === number) i = k; });
+        var en = { number: number, password: pass, lastLogin: Date.now() };
+        if (i >= 0) l[i] = en; else l.push(en); saveSaved(l);
         EH.buzz(15); EH.toast('Bot unlocked ✓', 'ok'); panel();
       }
     }
