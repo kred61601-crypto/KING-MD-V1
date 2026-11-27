@@ -1,35 +1,35 @@
 {
   "name": "KING MD V4",
   "short_name": "KING MD",
-  "description": "KING MD V4 (KING MD) — deploy your own free WhatsApp bot in seconds, no hosting required.",
+  "description": "KING MD V4 (KING MD) \u2014 deploy your own free WhatsApp bot in seconds, no hosting required.",
   "id": "/",
   "start_url": "/app.html",
-  "scope": "/app",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#030303",
   "theme_color": "#ff2e93",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/assets/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
+      "src": "/assets/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/assets/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/assets/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

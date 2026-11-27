@@ -739,10 +739,12 @@ app.get('/api/auth/:provider/start', (req, res) => {
 
 app.get('/api/auth/:provider/callback', async (req, res) => {
   const provider = String(req.params.provider || '').toLowerCase();
-  const fail = msg => res.redirect('/?authError=' + encodeURIComponent(msg));
+  let returnPath = '/';
+  const fail = msg => res.redirect(returnPath + '?authError=' + encodeURIComponent(msg));
   try {
     if (!['google', 'github'].includes(provider)) return res.status(404).send('Unsupported provider');
     const st = jwt.verify(String(req.query.state || ''), SECRET);
+    returnPath = st.returnTo === 'app' ? '/app.html' : '/';
     if (st.provider !== provider) return fail('Sign-in state mismatch.');
     if (req.query.error || !req.query.code) return fail('Sign-in was cancelled.');
     const cfg = oauth(provider);
