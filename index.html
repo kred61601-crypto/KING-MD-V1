@@ -2139,7 +2139,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 #king-nav-splash{position:fixed;inset:0;z-index:100000;background:#030303;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;opacity:1;visibility:visible;transition:opacity .45s ease,visibility 0s;pointer-events:auto}
 #king-nav-splash.off{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .4s ease,visibility 0s linear .45s}
 #king-nav-splash:before{content:"";position:absolute;width:min(65vw,420px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(40,85,255,.28),rgba(120,40,220,.13) 48%,transparent 72%);filter:blur(15px)}
-#king-nav-splash .kn-orb{position:relative;width: min(230px,58vw);aspect-ratio:1;display:grid;place-items:center}
+#king-nav-splash .kn-orb{position:relative;width: min(155px,42vw);aspect-ratio:1;display:grid;place-items:center}
 #king-nav-splash .kn-orb:before,#king-nav-splash .kn-orb:after{content:"";position:absolute;inset:0;border:4px solid transparent;border-top-color:#3b82f6;border-left-color:#bd48d9;border-radius:50%;animation:knspin 2.1s linear infinite}
 #king-nav-splash .kn-orb:after{inset:8px;border-width:2px;border-top-color:#7d8cff;border-left-color:transparent;animation-duration:2.8s;animation-direction:reverse}
 #king-nav-splash img{width:74%;aspect-ratio:1;object-fit:cover;border-radius:50%;background:#000;box-shadow:0 0 32px rgba(59,130,246,.3)}
@@ -2152,7 +2152,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 </style></head>
 <body>
 <div id="king-nav-splash" aria-hidden="false"><div class="kn-orb"><img src="/assets/logo.png" alt="KING MD"></div><div class="kn-name">KING MD</div><div class="kn-dots"><i></i><i></i><i></i></div></div>
-<script>(function(){var el=document.getElementById('king-nav-splash');if(!el)return;var done=false;function hide(){if(done)return;done=true;el.classList.add('off');el.setAttribute('aria-hidden','true')}window.addEventListener('load',function(){setTimeout(hide,650)},{once:true});setTimeout(hide,7000)})();</script>
+<script>(function(){var el=document.getElementById('king-nav-splash');if(!el)return;var done=false;function hide(){if(done)return;done=true;el.classList.add('off');el.setAttribute('aria-hidden','true')}window.addEventListener('load',function(){setTimeout(hide,5000)},{once:true});setTimeout(hide,10000)})();</script>
 <div class="bg-wrap" id="bgWrap"></div>
 
 <div class="sub-banner" id="subBanner"><i class="fas fa-exclamation-triangle"></i> <span id="subBannerTxt"></span></div>
@@ -2617,6 +2617,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <button id="adm-nav-community" onclick="A.adminTab('community')"><i class="fas fa-comments"></i> Community</button>
         <button id="adm-nav-codes" onclick="A.adminTab('codes')"><i class="fas fa-ticket-alt"></i> Redeem Codes</button>
         <button id="adm-nav-notifs" onclick="A.adminTab('notifs')"><i class="fas fa-bell"></i> Notifications</button>
+        <button id="adm-nav-adminchat" onclick="A.adminTab('adminchat');A.adminLoadPrivateSupport()"><i class="fas fa-user-shield"></i> Private User Chats</button>
         <button id="adm-nav-reports" onclick="A.adminTab('reports');A.adminLoadReports()"><i class="fas fa-flag"></i> Issue Reports <span id="adminReportBadge" style="margin-left:auto;font-size:.7rem;color:#f472b6"></span></button>
         <button id="adm-nav-pages" onclick="A.adminTab('pages');A.adminLoadPageStatus();A.adminLoadBotSpaces();A.adminLoadFreeLimits();A.adminStickersLoad();A.adminFollowLoad();A.adminLoadMaintenanceStatus();A.adminLoadPaymentsStatus();A.adminLoadAds();A.adminLoadAppCfg();A.adminLoadSeasons()"><i class="fas fa-toggle-on"></i> Page Management</button>
         <button id="adm-nav-sessions" onclick="A.adminTab('sessions')"><i class="fas fa-robot"></i> Sessions</button>
@@ -2793,6 +2794,22 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 
       <div id="adm-sec-notifs" style="display:none">
         <div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem"><div class="ctitle" style="margin:0"><i class="fas fa-bell"></i> Sent Notifications <span id="notifAdminCount" style="color:var(--t2);font-size:.8rem;font-weight:400"></span></div><div style="display:flex;gap:.5rem;flex-wrap:wrap"><input type="text" id="notifAdminSearch" class="fi" placeholder="Search user..." style="max-width:160px" oninput="A.adminFilterNotifs(this.value)"><button class="btn bp" onclick="A.adminLoadNotifs()"><i class="fas fa-sync"></i> Load</button><button class="btn bdr" onclick="A.adminClearNotifs()"><i class="fas fa-trash"></i> Clear All</button></div></div><div id="notifAdminList"><div class="empty"><i class="fas fa-bell-slash"></i><p>Click Load to view sent notifications</p></div></div></div>
+      </div>
+
+      <div id="adm-sec-adminchat" style="display:none">
+        <div class="card">
+          <div class="ctitle"><i class="fas fa-user-shield"></i> Private User Chats</div>
+          <p style="font-size:.8rem;color:var(--t2);margin:.3rem 0 1rem">Only administrators can read and reply to these private conversations and their photo attachments.</p>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:.8rem">
+            <div id="adminPrivateThreads"><div class="empty"><i class="fas fa-comments"></i><p>Loading conversations…</p></div></div>
+            <div id="adminPrivateConversation" style="display:none;border:1px solid var(--bd);border-radius:12px;padding:.8rem">
+              <div id="adminPrivateTitle" class="ctitle"></div><div id="adminPrivateMessages" style="max-height:45vh;overflow:auto;margin:.5rem 0"></div>
+              <textarea id="adminPrivateReply" class="fi" rows="2" placeholder="Reply privately…"></textarea>
+              <input id="adminPrivatePhoto" type="file" accept="image/*" style="margin:.5rem 0;max-width:100%">
+              <div style="display:flex;gap:.5rem"><button class="btn bp" onclick="A.adminSendPrivateReply()"><i class="fas fa-paper-plane"></i> Send reply</button><button class="btn bs" onclick="A.adminLoadPrivateSupport()">Back to inbox</button></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="adm-sec-reports" style="display:none">
@@ -3440,6 +3457,19 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
   </footer>
 
 
+<!-- PRIVATE ADMIN CHAT -->
+<div class="modal" id="m-adminChat"><div class="mc" style="max-width:520px">
+  <button class="mc-close" onclick="A.closeM('adminChat')"><i class="fas fa-times"></i></button>
+  <div class="mt"><i class="fas fa-user-shield"></i> Private Admin Chat</div>
+  <div class="ms">Only you and authorized KING MD administrators can see this conversation.</div>
+  <button class="btn bs" style="width:100%;margin:.2rem 0" onclick="A.loadAdminChatMessages()"><i class="fas fa-sync"></i> Refresh messages</button>
+  <div id="userAdminMessages" style="max-height:42vh;overflow:auto;border:1px solid var(--bd);border-radius:10px;padding:.6rem;margin:.7rem 0"><div class="empty">Loading messages…</div></div>
+  <textarea id="userAdminMessage" class="fi" rows="2" maxlength="2000" placeholder="Describe the problem…"></textarea>
+  <label class="btn bs" style="display:block;text-align:center;margin:.5rem 0"><i class="fas fa-image"></i> Attach a photo <input id="userAdminPhoto" type="file" accept="image/*" style="display:none" onchange="A.previewAdminChatPhoto(this)"></label>
+  <div id="userAdminPhotoName" style="font-size:.75rem;color:var(--p);margin:.3rem 0"></div>
+  <button class="btn bp bfw" onclick="A.sendAdminChatMessage()"><i class="fas fa-paper-plane"></i> Send to admin</button>
+</div></div>
+
 <!-- MODALS -->
 <div class="modal" id="m-rating"><div class="mc" style="max-width:380px;text-align:center">
   <button class="mc-close" onclick="A.closeRating()"><i class="fas fa-times"></i></button>
@@ -3956,19 +3986,20 @@ const A = {
     try {
       const res = await fetch('/api/tasks', { headers: { 'x-auth-token': this.token } });
       const data = await res.json();
-      if (!data.success) return;
+      if (!res.ok || !data.success) throw new Error(data.error || 'Tasks are temporarily unavailable');
       this._tasksData = data;
       try { localStorage.setItem(this._tasksKey(), JSON.stringify(data)); } catch (_) {}
       this._renderOneTimeTasks();
       this._renderDailyTask();
       this._renderAdCoin();
-    } catch {}
+    } catch (e) { const list = document.getElementById('oneTimeTasksList'); if (list) list.innerHTML = `<div class="empty"><i class="fas fa-circle-exclamation"></i><p>${this._esc(e.message || 'Could not load tasks. Tap to retry.')}</p><button class="btn bs" onclick="A.loadTasks()">Retry</button></div>`; }
   },
 
   _renderOneTimeTasks() {
     const list = document.getElementById('oneTimeTasksList');
     if (!list || !this._tasksData) return;
-    const tasks = [...this._tasksData.oneTime].sort((a, b) => (a.completed === b.completed) ? 0 : a.completed ? 1 : -1);
+    const tasks = [...(this._tasksData.oneTime || [])].sort((a, b) => (a.completed === b.completed) ? 0 : a.completed ? 1 : -1);
+    if (!tasks.length) { list.innerHTML = '<div class="empty"><i class="fas fa-list-check"></i><p>No one-time tasks are available right now. Please check back later.</p></div>'; return; }
     if (tasks.every(t => t.completed)) {
       list.innerHTML = `<div class="empty"><i class="fas fa-check-circle" style="color:var(--ok)"></i><p>All tasks completed! Spin the Daily Spin every day for more.</p></div>`;
       return;
@@ -6935,7 +6966,7 @@ const A = {
   go(id, guestView) {
     if (!this.token && this._NEEDS_LOGIN[id] && !guestView) { this._afterLogin = id; this._openLoginModal(this._NEEDS_LOGIN[id]); return; }
     const navSplash = document.getElementById('king-nav-splash');
-    if (navSplash) { clearTimeout(this._navSplashTimer); clearTimeout(this._navSplashWatchdog); navSplash.classList.remove('off'); navSplash.setAttribute('aria-hidden', 'false'); this._navSplashWatchdog = setTimeout(() => navSplash.classList.add('off'), 8000); }
+    if (navSplash) { clearTimeout(this._navSplashTimer); clearTimeout(this._navSplashWatchdog); navSplash.classList.remove('off'); navSplash.setAttribute('aria-hidden', 'false'); this._navSplashWatchdog = setTimeout(() => { navSplash.classList.add('off'); navSplash.setAttribute('aria-hidden','true'); }, 7000); }
     if (this.currentPage === 'community' && id !== 'community') this._chatLeave();
     if (id !== 'admin') this._wipeLogs();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
@@ -6960,7 +6991,7 @@ const A = {
     document.body.classList.toggle('on-community', id === 'community');   // chat fills the screen like a window
     this._bnavSync();
     this._guestCards();
-    if (navSplash) this._navSplashTimer = setTimeout(() => { navSplash.classList.add('off'); navSplash.setAttribute('aria-hidden', 'true'); clearTimeout(this._navSplashWatchdog); }, 480);
+    if (navSplash) this._navSplashTimer = setTimeout(() => { navSplash.classList.add('off'); navSplash.setAttribute('aria-hidden', 'true'); clearTimeout(this._navSplashWatchdog); }, 5000);
   },
 
   // Channel React / Poll Voting for someone who is not signed in: the page says what it is and offers sign-in
@@ -10332,6 +10363,7 @@ async _doPair() {
     codes:      ['fa-ticket-alt', 'Redeem Codes'],
     notifs:     ['fa-bell', 'Notifications'],
     reports:    ['fa-flag', 'Issue Reports'],
+    adminchat:  ['fa-user-shield', 'Private User Chats'],
     pages:      ['fa-toggle-on', 'Page Management'],
     sessions:   ['fa-robot', 'Sessions'],
     ratings:    ['fa-star', 'Ratings'],
@@ -11879,9 +11911,9 @@ async _doPair() {
       const el = document.getElementById('codesList');
       if (!data.codes?.length) { el.innerHTML = '<div class="empty"><i class="fas fa-ticket-alt"></i><p>No codes yet. Create one!</p></div>'; return; }
       el.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Code</th><th>Type</th><th>Value</th><th>Uses</th><th>Expires</th><th>Action</th></tr></thead><tbody>' +
-        data.codes.map(c => `<tr><td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--p)">${c.code}</td><td>${c.type==='bot_space'?'Bot Space':'Referral'}</td><td>+${c.value}</td><td>${c.usedCount}/${c.maxUses}</td><td>${c.permanent?'<span class="badge b-g">Permanent</span>':c.expiresAt?new Date(c.expiresAt).toLocaleDateString():'–'}</td><td><button class="btn bdr" style="padding:.25rem .55rem;font-size:.72rem" onclick="A.deleteCode('${c.code}')"><i class="fas fa-trash"></i></button></td></tr>`).join('') +
+        data.codes.map(c => `<tr><td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--p)">${this._esc(c.code)}</td><td>${({bot_space:'Bot Space',referral:'Referral',coins:'Coins',pro:'Premium',verification:'Verification'}[c.type]||this._esc(c.type))}</td><td>+${c.value}</td><td>${c.usedCount}/${c.maxUses}</td><td>${c.permanent?'<span class="badge b-g">Permanent</span>':c.expiresAt?new Date(c.expiresAt).toLocaleDateString():'–'}</td><td><button class="btn bdr" style="padding:.25rem .55rem;font-size:.72rem" onclick="A.deleteCode('${c.code}')"><i class="fas fa-trash"></i></button></td></tr>`).join('') +
         '</tbody></table></div>';
-    } catch {}
+    } catch (e) { const el=document.getElementById('codesList'); if(el) el.innerHTML=`<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>${this._esc(e.message||'Could not load redeem codes')}</p></div>`; }
   },
 
   onCodeTypeChange() {
@@ -13242,6 +13274,55 @@ async _doPair() {
     btn.disabled = false; btn.innerHTML = old;
   },
 
+  _adminChatPhoto: '',
+  async openAdminChat() {
+    if (!this.token) { this._openLoginModal('Please sign in to contact the KING MD administrator.'); return; }
+    this.openM('adminChat'); await this.loadAdminChatMessages();
+  },
+  async loadAdminChatMessages() {
+    const box = document.getElementById('userAdminMessages'); if (!box) return;
+    try {
+      const r = await fetch('/api/admin-chat/messages', { headers: { 'x-auth-token': this.token } }); const d = await r.json();
+      if (!r.ok || !d.success) throw new Error(d.error || 'Could not load messages');
+      box.innerHTML = (d.messages || []).length ? d.messages.map(m => `<div style="padding:.55rem .65rem;margin:.4rem 0;border-radius:10px;background:${m.from === 'admin' ? 'rgba(34,197,94,.10)' : 'var(--bgg)'};border:1px solid var(--bd)"><b style="font-size:.74rem">${m.from === 'admin' ? 'KING MD Admin' : 'You'}</b><div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.84rem;margin-top:.25rem">${this._esc(m.message || '')}</div>${m.photo ? `<img src="${m.photo}" alt="Attached photo" style="max-width:100%;max-height:240px;border-radius:8px;margin-top:.4rem">` : ''}<div style="font-size:.65rem;color:var(--t2);margin-top:.25rem">${this._esc(new Date(m.createdAt).toLocaleString())}</div></div>`).join('') : '<div class="empty"><i class="fas fa-comments"></i><p>No messages yet. Send your problem and a screenshot if needed.</p></div>';
+      box.scrollTop = box.scrollHeight;
+    } catch(e) { box.innerHTML = `<div class="empty">${this._esc(e.message || 'Could not load messages')}</div>`; }
+  },
+  previewAdminChatPhoto(input) {
+    const f = input.files && input.files[0]; this._adminChatPhoto = '';
+    const label = document.getElementById('userAdminPhotoName'); if (!f) { if(label) label.textContent=''; return; }
+    if (!f.type.startsWith('image/') || f.size > 2 * 1024 * 1024) { this.toast('Choose an image smaller than 2 MB.', 'er'); input.value=''; return; }
+    const reader = new FileReader(); reader.onload = () => { this._adminChatPhoto = String(reader.result || ''); if(label) label.textContent = 'Photo attached: ' + f.name; }; reader.readAsDataURL(f);
+  },
+  async sendAdminChatMessage() {
+    const input = document.getElementById('userAdminMessage'), message = (input.value || '').trim();
+    if (!message && !this._adminChatPhoto) { this.toast('Write a message or attach a photo.', 'er'); return; }
+    try { const r = await fetch('/api/admin-chat/messages', { method:'POST', headers:{'Content-Type':'application/json','x-auth-token':this.token}, body:JSON.stringify({message, photo:this._adminChatPhoto}) }); const d = await r.json(); if(!r.ok || !d.success) throw new Error(d.error || 'Could not send message'); input.value=''; this._adminChatPhoto=''; document.getElementById('userAdminPhoto').value=''; document.getElementById('userAdminPhotoName').textContent=''; await this.loadAdminChatMessages(); this.toast('Message sent privately to admin.', 'ok'); } catch(e) { this.toast(e.message || 'Could not send message', 'er'); }
+  },
+  _privateSupportUser: '',
+  _privateSupportName: '',
+  async adminLoadPrivateSupport() {
+    const box = document.getElementById('adminPrivateThreads'); if (!box) return; box.innerHTML='<div class="empty"><div class="sp" style="margin:0 auto"></div><p>Loading private chats…</p></div>';
+    try { const r=await fetch('/api/admin/private-support',{headers:{'x-auth-token':this.token}}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'Could not load inbox');
+      box.innerHTML=(d.threads||[]).length ? d.threads.map(t=>`<button class="btn bs" style="display:block;width:100%;text-align:left;margin:.4rem 0;padding:.75rem" onclick="A.adminOpenPrivateThread('${this._esc(t.userId)}','${this._esc(t.username)}')"><b>${this._esc(t.username)}</b> ${t.unread?`<span class="badge b-r">${t.unread} new</span>`:''}<div style="font-size:.75rem;color:var(--t2);margin-top:.2rem">${this._esc(t.lastMessage||'Attachment')} · ${this._esc(new Date(t.updatedAt).toLocaleString())}</div></button>`).join(''):'<div class="empty"><i class="fas fa-inbox"></i><p>No private messages yet.</p></div>';
+      document.getElementById('adminPrivateConversation').style.display='none';
+    } catch(e){box.innerHTML=`<div class="empty">${this._esc(e.message||'Could not load inbox')}</div>`;}
+  },
+  async adminOpenPrivateThread(userId, username) {
+    this._privateSupportUser=userId; this._privateSupportName=username; document.getElementById('adminPrivateConversation').style.display=''; document.getElementById('adminPrivateTitle').textContent='Conversation with '+username;
+    const box=document.getElementById('adminPrivateMessages'); box.innerHTML='<div class="sp"></div>';
+    try { const r=await fetch('/api/admin/private-support/'+encodeURIComponent(userId),{headers:{'x-auth-token':this.token}}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'Could not load conversation');
+      box.innerHTML=(d.messages||[]).map(m=>`<div style="padding:.55rem;margin:.35rem 0;border-radius:9px;border:1px solid var(--bd);background:${m.from==='admin'?'rgba(34,197,94,.1)':'var(--bgg)'}"><b>${m.from==='admin'?'Admin':this._esc(m.username||'User')}</b><div style="white-space:pre-wrap;overflow-wrap:anywhere">${this._esc(m.message||'')}</div>${m.photo?`<img src="${m.photo}" style="display:block;max-width:100%;max-height:280px;border-radius:8px;margin-top:.4rem">`:''}<small style="color:var(--t2)">${this._esc(new Date(m.createdAt).toLocaleString())}</small></div>`).join('')||'<p>No messages yet.</p>'; box.scrollTop=box.scrollHeight;
+    } catch(e){box.textContent=e.message||'Could not load conversation';}
+  },
+  async adminSendPrivateReply() {
+    const userId=this._privateSupportUser, input=document.getElementById('adminPrivateReply'), file=document.getElementById('adminPrivatePhoto'), f=file.files&&file.files[0]; let photo='';
+    if(!userId){this.toast('Choose a conversation first.','er');return;}
+    try { if(f){if(!f.type.startsWith('image/')||f.size>2*1024*1024) throw new Error('Choose an image smaller than 2 MB.'); photo=await new Promise((resolve,reject)=>{const rd=new FileReader();rd.onload=()=>resolve(String(rd.result||''));rd.onerror=reject;rd.readAsDataURL(f);});}
+      const r=await fetch('/api/admin/private-support/'+encodeURIComponent(userId),{method:'POST',headers:{'Content-Type':'application/json','x-auth-token':this.token},body:JSON.stringify({message:(input.value||'').trim(),photo})}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'Could not send reply'); input.value='';file.value=''; await this.adminOpenPrivateThread(userId, this._privateSupportName || 'user'); this.toast('Private reply sent.','ok');
+    } catch(e){this.toast(e.message||'Could not send reply','er');}
+  },
+
   _allAdminReports: [],
   async adminLoadReports() {
     const box = document.getElementById('adminReportsList');
@@ -13798,6 +13879,7 @@ async function submitReportToTelegram(e) {
       <div class="sup-av"><img src="/assets/logo.png" alt=""><span class="sup-on"></span></div>
       <div class="sup-meta"><div class="sup-title">KING MD V4 AI <svg class="vseal" style="--bs:16px" viewBox="0 0 24 24" role="img" aria-label="Verified"><path d="M23.00 12.00L22.80 12.71L22.26 13.35L21.51 13.89L20.74 14.34L20.12 14.76L19.76 15.21L19.69 15.79L19.84 16.52L20.07 17.39L20.21 18.30L20.14 19.14L19.78 19.78L19.14 20.14L18.30 20.21L17.39 20.07L16.53 19.84L15.79 19.69L15.21 19.76L14.76 20.12L14.34 20.74L13.89 21.51L13.35 22.26L12.71 22.80L12.00 23.00L11.29 22.80L10.65 22.26L10.11 21.51L9.66 20.74L9.24 20.12L8.79 19.76L8.21 19.69L7.48 19.84L6.61 20.07L5.70 20.21L4.86 20.14L4.22 19.78L3.86 19.14L3.79 18.30L3.93 17.39L4.16 16.52L4.31 15.79L4.24 15.21L3.88 14.76L3.26 14.34L2.49 13.89L1.74 13.35L1.20 12.71L1.00 12.00L1.20 11.29L1.74 10.65L2.49 10.11L3.26 9.66L3.88 9.24L4.24 8.79L4.31 8.21L4.16 7.47L3.93 6.61L3.79 5.70L3.86 4.86L4.22 4.22L4.86 3.86L5.70 3.79L6.61 3.93L7.47 4.16L8.21 4.31L8.79 4.24L9.24 3.88L9.66 3.26L10.11 2.49L10.65 1.74L11.29 1.20L12.00 1.00L12.71 1.20L13.35 1.74L13.89 2.49L14.34 3.26L14.76 3.88L15.21 4.24L15.79 4.31L16.53 4.16L17.39 3.93L18.30 3.79L19.14 3.86L19.78 4.22L20.14 4.86L20.21 5.70L20.07 6.61L19.84 7.47L19.69 8.21L19.76 8.79L20.12 9.24L20.74 9.66L21.51 10.11L22.26 10.65L22.80 11.29Z" fill="#1d9bf0"/><path d="M7.4 12.4l3.1 3.1 6.1-6.5" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="sup-status">online · <select id="supModel" class="sup-model" onchange="supPickModel(this)" aria-label="AI model"><option value="">Auto</option><option value="gpt">GPT</option><option value="qwen">Qwen</option><option value="allam">ALLaM</option></select></div></div>
       <div class="sup-tools">
+        <button class="sup-ic" onclick="A.openAdminChat()" title="Chat privately with an admin" aria-label="Chat with admin"><i class="fas fa-user-shield"></i></button>
         <button class="sup-ic sup-fs" onclick="supToggleFull()" title="Full screen" aria-label="Full screen"><i class="fas fa-expand" id="supFsIcon"></i></button>
         <button class="sup-ic" onclick="supNewChat()" title="New chat" aria-label="New chat"><i class="fas fa-rotate-right"></i></button>
         <button class="sup-ic sup-x" onclick="closeSupportChat()" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>

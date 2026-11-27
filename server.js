@@ -299,7 +299,7 @@ function publicUser(u) {
   x.isAdmin = !!(u.isAdmin || isOwner(u.email, u.phone));
   x.isPremium = isPremiumUser(u);
   x.proPlan = x.isPremium;
-  x.isVerified = !!(x.isAdmin || x.isPremium);
+  x.isVerified = !!(x.isAdmin || x.isPremium || (Date.parse(u.verificationUntil || '') > Date.now()));
   x.verified = x.isVerified;
   x.followersCount = (u.followers || []).length;
   x.followingCount = (u.following || []).length;
@@ -346,6 +346,158 @@ const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
 let supportReports = loadJsonFile(REPORTS_FILE, []);
 if (!Array.isArray(supportReports)) supportReports = [];
 const supportSessions = new Map();
+const RATINGS_FILE = path.join(DATA_DIR, 'ratings.json');
+let siteRatings = loadJsonFile(RATINGS_FILE, []);
+if (!Array.isArray(siteRatings)) siteRatings = [];
+const ANNOUNCEMENTS_FILE = path.join(DATA_DIR, 'announcements.json');
+let announcements = loadJsonFile(ANNOUNCEMENTS_FILE, []);
+if (!Array.isArray(announcements)) announcements = [];
+const REDEEM_CODES_FILE = path.join(DATA_DIR, 'redeem-codes.json');
+let redeemCodes = loadJsonFile(REDEEM_CODES_FILE, []);
+if (!Array.isArray(redeemCodes)) redeemCodes = [];
+const PRIVATE_SUPPORT_FILE = path.join(DATA_DIR, 'private-support.json');
+let privateSupport = loadJsonFile(PRIVATE_SUPPORT_FILE, {});
+if (!privateSupport || typeof privateSupport !== 'object' || Array.isArray(privateSupport)) privateSupport = {};
+function savePrivateSupport() { saveJsonFile(PRIVATE_SUPPORT_FILE, privateSupport); }
+function isAdminAccount(u) { return !!(u && (u.isAdmin || isOwner(u.email, u.phone))); }
+
+// Ratings API used by the in-app rating prompt and Admin > Ratings.
+app.post('/api/rating', (req, res) => {
+  const b = req.body || {}, stars = Math.max(1, Math.min(5, Math.round(Number(b.stars) || 0)));
+  if (!stars) return res.status(400).json({ success: false, error: 'Choose a star rating first.' });
+  const account = currentUser(req);
+  const row = { id: crypto.randomUUID(), userId: account ? account.id : null, username: account ? account.username : String(b.name || 'Guest').slice(0, 60), stars, comment: String(b.comment || '').trim().slice(0, 500), feature: String(b.feature || 'site').slice(0, 80), createdAt: new Date().toISOString() };
+  siteRatings.unshift(row); siteRatings = siteRatings.slice(0, 2000); saveJsonFile(RATINGS_FILE, siteRatings);
+  if (account) { account.ratingDismissed = true; saveUsers(); }
+  res.json({ success: true });
+});
+app.post('/api/rating/dismiss', (req, res) => { const account = currentUser(req); if (account) { account.ratingDismissed = true; saveUsers(); } res.json({ success: true }); });
+app.get('/api/admin/ratings', requireUser, requireReportAdmin, (req, res) => {
+  const total = siteRatings.length, average = total ? siteRatings.reduce((n, x) => n + Number(x.stars || 0), 0) / total : 0;
+  const distribution = {}; for (let i = 1; i <= 5; i++) { const count = siteRatings.filter(x => Number(x.stars) === i).length; distribution[i] = { count, percent: total ? Math.round(count * 100 / total) : 0 }; }
+  res.json({ success: true, total, average, distribution, comments: siteRatings.filter(x => x.comment).slice(0, 50).map(x => ({ username: x.username, stars: x.stars, comment: x.comment, createdAt: x.createdAt })) });
+});
+
+// Private one-to-one support inbox. A normal account can only access its own thread;
+// the inbox and replies are restricted to administrators.
+function supportThread(user) {
+  const id = String(user.id); if (!Array.isArray(privateSupport[id])) privateSupport[id] = [];
+  return privateSupport[id];
+}
+function validSupportPhoto(photo) {
+  return !photo || (typeof photo === 'string' && photo.length <= 2_900_000 && /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(photo));
+}
+app.get('/api/admin-chat/messages', requireUser, (req, res) => res.json({ success: true, messages: supportThread(req.account) }));
+app.post('/api/admin-chat/messages', requireUser, (req, res) => {
+  const b = req.body || {}, text = String(b.message || '').trim().slice(0, 2000), photo = b.photo || '';
+  if (!text && !photo) return res.status(400).json({ success: false, error: 'Write a message or attach a photo.' });
+  if (!validSupportPhoto(photo)) return res.status(400).json({ success: false, error: 'Please attach an image smaller than 2 MB.' });
+  const row = { id: crypto.randomUUID(), from: 'user', userId: req.account.id, username: req.account.username, message: text, photo: photo || null, createdAt: new Date().toISOString(), read: false };
+  const thread = supportThread(req.account); thread.push(row); privateSupport[req.account.id] = thread.slice(-300); savePrivateSupport();
+  res.json({ success: true, message: row });
+});
+app.get('/api/admin/private-support', requireUser, requireReportAdmin, (req, res) => {
+  const threads = Object.entries(privateSupport).map(([userId, msgs]) => {
+    const last = (msgs || []).slice(-1)[0]; const u = users.find(x => x.id === userId);
+    return { userId, username: (u && u.username) || (last && last.username) || 'User', count: (msgs || []).length, unread: (msgs || []).filter(m => m.from === 'user' && !m.read).length, lastMessage: last ? (last.message || (last.photo ? '📷 Photo attachment' : '')) : '', updatedAt: last && last.createdAt };
+  }).sort((a,b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
+  res.json({ success: true, threads });
+});
+app.get('/api/admin/private-support/:userId', requireUser, requireReportAdmin, (req, res) => {
+  const msgs = privateSupport[String(req.params.userId)] || []; msgs.forEach(m => { if (m.from === 'user') m.read = true; }); savePrivateSupport();
+  res.json({ success: true, messages: msgs.map(m => ({ ...m })) });
+});
+app.post('/api/admin/private-support/:userId', requireUser, requireReportAdmin, (req, res) => {
+  const userId = String(req.params.userId), b = req.body || {}, message = String(b.message || '').trim().slice(0, 2000), photo = b.photo || '';
+  if (!users.some(u => u.id === userId)) return res.status(404).json({ success: false, error: 'User not found.' });
+  if (!message && !photo) return res.status(400).json({ success: false, error: 'Write a reply or attach a photo.' });
+  if (!validSupportPhoto(photo)) return res.status(400).json({ success: false, error: 'Please attach an image smaller than 2 MB.' });
+  const row = { id: crypto.randomUUID(), from: 'admin', userId, username: req.account.username || 'KING MD Admin', message, photo: photo || null, createdAt: new Date().toISOString(), read: false };
+  if (!Array.isArray(privateSupport[userId])) privateSupport[userId] = []; privateSupport[userId].push(row); privateSupport[userId] = privateSupport[userId].slice(-300); savePrivateSupport();
+  res.json({ success: true, message: row });
+});
+
+// Announcements power the home ticker, What's New admin panel and Change Log.
+app.get('/api/announcements', (req,res)=>{
+  const active=announcements.filter(x=>x.active!==false);
+  res.json({success:true,features:active.filter(x=>x.type==='feature').map(x=>({id:x.id,title:x.title,body:x.body})),changelog:active.filter(x=>x.type==='changelog').map(x=>({id:x.id,title:x.title,body:x.body,version:x.version,date:x.createdAt}))});
+});
+app.get('/api/admin/announcements', requireUser, requireReportAdmin, (req,res)=>res.json({success:true,items:announcements.map(x=>({id:x.id,type:x.type,title:x.title,body:x.body,version:x.version,active:x.active!==false,createdAt:x.createdAt}))}));
+app.post('/api/admin/announcements', requireUser, requireReportAdmin, (req,res)=>{
+  const b=req.body||{}, type=String(b.type||''), title=String(b.title||'').trim().slice(0,140), body=String(b.body||'').trim().slice(0,5000), version=String(b.version||'').trim().slice(0,40);
+  if(!['feature','changelog'].includes(type)) return res.status(400).json({success:false,error:'Choose a valid announcement type.'});
+  if(!title) return res.status(400).json({success:false,error:'Add a title first.'});
+  const row={id:crypto.randomUUID(),type,title,body,version,active:true,createdAt:new Date().toISOString()}; announcements.unshift(row); announcements=announcements.slice(0,300); saveJsonFile(ANNOUNCEMENTS_FILE,announcements); res.json({success:true,item:row});
+});
+app.post('/api/admin/announcements/:id/toggle', requireUser, requireReportAdmin, (req,res)=>{
+  const row=announcements.find(x=>x.id===req.params.id); if(!row) return res.status(404).json({success:false,error:'Announcement not found.'});
+  row.active=row.active===false; saveJsonFile(ANNOUNCEMENTS_FILE,announcements); res.json({success:true,active:row.active});
+});
+app.delete('/api/admin/announcements/:id', requireUser, requireReportAdmin, (req,res)=>{
+  const before=announcements.length; announcements=announcements.filter(x=>x.id!==req.params.id); if(before===announcements.length) return res.status(404).json({success:false,error:'Announcement not found.'});
+  saveJsonFile(ANNOUNCEMENTS_FILE,announcements); res.json({success:true});
+});
+
+// Admin-managed redeem codes and user redemption.
+app.get('/api/admin/redeemcodes', requireUser, requireReportAdmin, (req, res) => {
+  res.json({ success: true, codes: redeemCodes.map(c => ({ code:c.code, type:c.type, value:c.value, usedCount:(c.usedBy||[]).length, maxUses:c.maxUses, expiresAt:c.expiresAt, permanent:!c.expiresAt })) });
+});
+app.post('/api/admin/redeemcodes/create', requireUser, requireReportAdmin, (req, res) => {
+  const b=req.body||{}, allowed=['bot_space','referral','coins','pro','verification'], type=String(b.type||'');
+  const value=Math.floor(Number(b.value)), maxUses=Math.floor(Number(b.maxUses)), days=b.expiresInDays==null?null:Math.floor(Number(b.expiresInDays));
+  if(!allowed.includes(type)) return res.status(400).json({success:false,error:'Choose a valid code type.'});
+  if(!Number.isFinite(value)||value<1||value>1000000||!Number.isFinite(maxUses)||maxUses<1||maxUses>100000) return res.status(400).json({success:false,error:'Enter a valid reward value and maximum uses.'});
+  if(days!==null&&(!Number.isFinite(days)||days<1||days>3650)) return res.status(400).json({success:false,error:'Expiry must be between 1 and 3650 days.'});
+  const custom=String(b.customCode||'').trim().toUpperCase();
+  if(custom&&!/^[A-Z0-9_-]{4,32}$/.test(custom)) return res.status(400).json({success:false,error:'Custom codes must be 4–32 letters, numbers, hyphens or underscores.'});
+  const code=custom||('KING'+crypto.randomBytes(4).toString('hex').toUpperCase());
+  if(redeemCodes.some(c=>c.code===code)) return res.status(409).json({success:false,error:'That code already exists.'});
+  const row={code,type,value,maxUses,usedBy:[],createdAt:new Date().toISOString(),expiresAt:days?new Date(Date.now()+days*86400000).toISOString():null,planKey:String(b.planKey||'premium')};
+  redeemCodes.unshift(row); saveJsonFile(REDEEM_CODES_FILE,redeemCodes); res.json({success:true,code:{code:row.code,type:row.type,value:row.value,maxUses:row.maxUses,usedCount:0,expiresAt:row.expiresAt,permanent:!row.expiresAt}});
+});
+app.delete('/api/admin/redeemcodes/:code', requireUser, requireReportAdmin, (req,res)=>{
+  const code=String(req.params.code||'').toUpperCase(), before=redeemCodes.length; redeemCodes=redeemCodes.filter(c=>c.code!==code);
+  if(redeemCodes.length===before) return res.status(404).json({success:false,error:'Code not found.'});
+  saveJsonFile(REDEEM_CODES_FILE,redeemCodes); res.json({success:true});
+});
+app.post('/api/redeem', requireUser, (req,res)=>{
+  const code=String((req.body||{}).code||'').trim().toUpperCase(); if(!code) return res.status(400).json({success:false,error:'Enter a code.'});
+  const row=redeemCodes.find(c=>c.code===code); if(!row) return res.status(404).json({success:false,error:'Invalid redeem code.'});
+  if(row.expiresAt&&Date.parse(row.expiresAt)<=Date.now()) return res.status(410).json({success:false,error:'This code has expired.'});
+  if((row.usedBy||[]).length>=Number(row.maxUses||0)) return res.status(410).json({success:false,error:'This code has reached its maximum uses.'});
+  if((row.usedBy||[]).includes(req.account.id)) return res.status(409).json({success:false,error:'You have already used this code.'});
+  const v=Number(row.value)||0;
+  if(row.type==='bot_space') req.account.botSpaces=Number(req.account.botSpaces||(isPremiumUser(req.account)?PREMIUM_SLOTS:FREE_SLOTS))+v;
+  else if(row.type==='referral') req.account.referralCredits=Number(req.account.referralCredits||0)+v;
+  else if(row.type==='coins') req.account.coins=Number(req.account.coins||0)+v;
+  else if(row.type==='pro') { const base=Math.max(Date.now(),Date.parse(req.account.premiumUntil||'')||0); req.account.premiumUntil=new Date(base+v*30*86400000).toISOString(); req.account.isPremium=true; }
+  else if(row.type==='verification') { const base=Math.max(Date.now(),Date.parse(req.account.verificationUntil||'')||0); req.account.verificationUntil=new Date(base+v*86400000).toISOString(); }
+  row.usedBy=Array.isArray(row.usedBy)?row.usedBy:[]; row.usedBy.push(req.account.id); row.lastUsedAt=new Date().toISOString();
+  saveJsonFile(REDEEM_CODES_FILE,redeemCodes); saveUsers();
+  const names={bot_space:'bot space(s)',referral:'referral credit(s)',coins:'KM coins',pro:'Premium month(s)',verification:'verified badge day(s)'};
+  res.json({success:true,message:`Code redeemed! You received ${v} ${names[row.type]||'reward(s)'}.`});
+});
+
+// Task data endpoint: return an explicit empty state instead of leaving the client spinner forever.
+app.get('/api/tasks', requireUser, (req, res) => {
+  const segments = ['coin1','none','none','none','none','coin1','none','coin2'].map(id => ({ id }));
+  const today = new Date().toISOString().slice(0,10), done = req.account.lastSpinDate === today;
+  res.json({ success: true, oneTime: [], spin: { canSpin: !done, respin: false, todayPrize: req.account.lastSpinPrize || '', nextSpinAt: done ? new Date(Date.now() + Math.max(1000, 86400000 - (Date.now() - Date.parse(req.account.lastSpinAt || new Date().toISOString())))).toISOString() : null, segments, needAd: false, adOpen: null }, adcoin: { on: false } });
+});
+app.post('/api/tasks/visited', requireUser, (req, res) => { req.account.hasVisitedTasksPage = true; saveUsers(); res.json({ success: true }); });
+app.post('/api/tasks/social', requireUser, (req, res) => res.json({ success: false, error: 'There are no active social tasks right now.' }));
+app.post('/api/tasks/complete', requireUser, (req, res) => res.status(404).json({ success: false, error: 'This task is no longer available.' }));
+app.post('/api/spin', requireUser, (req, res) => {
+  const today = new Date().toISOString().slice(0,10);
+  if (req.account.lastSpinDate === today) return res.status(409).json({ success: false, error: 'You have already used today’s spin.' });
+  const segment = Math.max(0, Math.min(7, Math.floor(Number((req.body || {}).segment) || 0)));
+  const prize = ['coin1','none','none','none','none','coin1','none','coin2'][segment];
+  const labels = { coin1: '1 KM coin', coin2: '2 KM coins', none: 'No coins' };
+  if (prize === 'coin1') req.account.coins = Number(req.account.coins || 0) + 1;
+  if (prize === 'coin2') req.account.coins = Number(req.account.coins || 0) + 2;
+  req.account.lastSpinDate = today; req.account.lastSpinAt = new Date().toISOString(); req.account.lastSpinPrize = prize; saveUsers();
+  res.json({ success: true, prize, label: labels[prize], coins: Number(req.account.coins || 0), respin: false });
+});
 
 function supportAnswer(message, history) {
   const raw = String(message || '').trim();
