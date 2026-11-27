@@ -2617,6 +2617,7 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
         <button id="adm-nav-community" onclick="A.adminTab('community')"><i class="fas fa-comments"></i> Community</button>
         <button id="adm-nav-codes" onclick="A.adminTab('codes')"><i class="fas fa-ticket-alt"></i> Redeem Codes</button>
         <button id="adm-nav-notifs" onclick="A.adminTab('notifs')"><i class="fas fa-bell"></i> Notifications</button>
+        <button id="adm-nav-reports" onclick="A.adminTab('reports');A.adminLoadReports()"><i class="fas fa-flag"></i> Issue Reports <span id="adminReportBadge" style="margin-left:auto;font-size:.7rem;color:#f472b6"></span></button>
         <button id="adm-nav-pages" onclick="A.adminTab('pages');A.adminLoadPageStatus();A.adminLoadBotSpaces();A.adminLoadFreeLimits();A.adminStickersLoad();A.adminFollowLoad();A.adminLoadMaintenanceStatus();A.adminLoadPaymentsStatus();A.adminLoadAds();A.adminLoadAppCfg();A.adminLoadSeasons()"><i class="fas fa-toggle-on"></i> Page Management</button>
         <button id="adm-nav-sessions" onclick="A.adminTab('sessions')"><i class="fas fa-robot"></i> Sessions</button>
         <button id="adm-nav-ratings" onclick="A.adminTab('ratings');A.adminLoadRatings()"><i class="fas fa-star"></i> Ratings</button>
@@ -2792,6 +2793,16 @@ body[data-theme=light] .eh-track{background:#e6e8f2;border-color:#d4d6e5;box-sha
 
       <div id="adm-sec-notifs" style="display:none">
         <div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem"><div class="ctitle" style="margin:0"><i class="fas fa-bell"></i> Sent Notifications <span id="notifAdminCount" style="color:var(--t2);font-size:.8rem;font-weight:400"></span></div><div style="display:flex;gap:.5rem;flex-wrap:wrap"><input type="text" id="notifAdminSearch" class="fi" placeholder="Search user..." style="max-width:160px" oninput="A.adminFilterNotifs(this.value)"><button class="btn bp" onclick="A.adminLoadNotifs()"><i class="fas fa-sync"></i> Load</button><button class="btn bdr" onclick="A.adminClearNotifs()"><i class="fas fa-trash"></i> Clear All</button></div></div><div id="notifAdminList"><div class="empty"><i class="fas fa-bell-slash"></i><p>Click Load to view sent notifications</p></div></div></div>
+      </div>
+
+      <div id="adm-sec-reports" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
+            <div class="ctitle" style="margin:0"><i class="fas fa-flag"></i> User Issue Reports <span id="adminReportsCount" style="color:var(--t2);font-size:.8rem;font-weight:400"></span></div>
+            <button class="btn bp" onclick="A.adminLoadReports()"><i class="fas fa-sync"></i> Refresh reports</button>
+          </div>
+          <div id="adminReportsList"><div class="empty"><i class="fas fa-flag"></i><p>Press Refresh reports to load submissions.</p></div></div>
+        </div>
       </div>
 
       <div id="adm-sec-pages" style="display:none">
@@ -10320,6 +10331,7 @@ async _doPair() {
     community:  ['fa-comments', 'Community'],
     codes:      ['fa-ticket-alt', 'Redeem Codes'],
     notifs:     ['fa-bell', 'Notifications'],
+    reports:    ['fa-flag', 'Issue Reports'],
     pages:      ['fa-toggle-on', 'Page Management'],
     sessions:   ['fa-robot', 'Sessions'],
     ratings:    ['fa-star', 'Ratings'],
@@ -13230,6 +13242,52 @@ async _doPair() {
     btn.disabled = false; btn.innerHTML = old;
   },
 
+  _allAdminReports: [],
+  async adminLoadReports() {
+    const box = document.getElementById('adminReportsList');
+    if (!box) return;
+    box.innerHTML = '<div class="empty"><div class="sp" style="margin:0 auto"></div><p>Loading reports…</p></div>';
+    try {
+      const res = await fetch('/api/admin/reports', { headers: { 'x-auth-token': this.token } });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not load reports');
+      this._allAdminReports = data.reports || [];
+      const open = this._allAdminReports.filter(r => r.status !== 'resolved').length;
+      const count = document.getElementById('adminReportsCount'); if (count) count.textContent = `(${this._allAdminReports.length} total · ${open} open)`;
+      const badge = document.getElementById('adminReportBadge'); if (badge) badge.textContent = open ? String(open) : '';
+      box.innerHTML = this._allAdminReports.length ? this._allAdminReports.map(r => {
+        const id = this._esc(r.id); const status = r.status === 'resolved' ? 'Resolved' : 'Open';
+        return `<article style="border:1px solid var(--bd);background:var(--bgg);border-radius:12px;padding:.85rem;margin:.55rem 0">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;flex-wrap:wrap">
+            <div style="min-width:0;flex:1"><b style="font-size:.9rem">${this._esc(r.name || 'Anonymous')}</b><div style="font-size:.7rem;color:var(--t2);margin-top:.2rem">${this._esc(new Date(r.createdAt).toLocaleString())} · ${this._esc(r.workedStatus || 'In-app report')}</div></div>
+            <span class="badge ${r.status === 'resolved' ? 'b-g' : 'b-y'}">${status}</span>
+          </div>
+          <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.84rem;line-height:1.5;margin:.7rem 0">${this._esc(r.issue || '')}</div>
+          <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+            ${r.hasPhoto ? `<button class="btn alt" style="padding:.35rem .65rem;font-size:.75rem" onclick="A.adminViewReportPhoto('${id}')"><i class="fas fa-image"></i> View attachment</button>` : ''}
+            ${r.status === 'resolved' ? `<button class="btn alt" style="padding:.35rem .65rem;font-size:.75rem" onclick="A.adminSetReportStatus('${id}','new')">Reopen</button>` : `<button class="btn bs" style="padding:.35rem .65rem;font-size:.75rem" onclick="A.adminSetReportStatus('${id}','resolved')"><i class="fas fa-check"></i> Mark resolved</button>`}
+          </div><div id="admin-report-photo-${id}" style="margin-top:.6rem"></div>
+        </article>`;
+      }).join('') : '<div class="empty"><i class="fas fa-check-circle"></i><p>No issue reports have been submitted yet.</p></div>';
+    } catch (e) { box.innerHTML = `<div class="empty"><i class="fas fa-triangle-exclamation"></i><p>${this._esc(e.message || 'Could not load reports')}</p></div>`; }
+  },
+  async adminViewReportPhoto(id) {
+    const target = document.getElementById('admin-report-photo-' + id); if (!target) return;
+    target.innerHTML = '<div class="sp" style="margin:.5rem auto"></div>';
+    try {
+      const res = await fetch('/api/admin/reports/' + encodeURIComponent(id) + '/photo', { headers: { 'x-auth-token': this.token } });
+      const data = await res.json(); if (!res.ok || !data.success || !data.photo) throw new Error(data.error || 'No attachment found');
+      target.innerHTML = `<img src="${data.photo}" alt="Report attachment" style="display:block;max-width:100%;max-height:420px;border-radius:9px;border:1px solid var(--bd)">`;
+    } catch (e) { target.textContent = e.message || 'Could not load attachment'; }
+  },
+  async adminSetReportStatus(id, status) {
+    try {
+      const res = await fetch('/api/admin/reports/' + encodeURIComponent(id) + '/status', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': this.token }, body: JSON.stringify({ status }) });
+      const data = await res.json(); if (!res.ok || !data.success) throw new Error(data.error || 'Could not update report');
+      this.toast(status === 'resolved' ? 'Report marked resolved' : 'Report reopened', 'ok'); await this.adminLoadReports();
+    } catch (e) { this.toast(e.message || 'Could not update report', 'er'); }
+  },
+
   _allAdminNotifs: [],
   async adminLoadNotifs() {
     document.getElementById('notifAdminList').innerHTML = '<div class="empty"><div class="sp" style="margin:0 auto"></div></div>';
@@ -13708,11 +13766,12 @@ async function submitReportToTelegram(e) {
             body: JSON.stringify({ name, issue, workedStatus, photo })
         });
 
-        if (response.ok) {
-            alert('Your report has been sent directly to Denzel! Thank you.');
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.success) {
+            alert(result.message || 'Your report has been received. Thank you.');
             closeReportModal();
         } else {
-            alert('Failed to send report. Please check back later.');
+            alert(result.error || 'Failed to save your report. Please try again.');
         }
     } catch (err) {
         console.error(err);

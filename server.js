@@ -341,6 +341,139 @@ function requireUser(req, res, next) {
   next();
 }
 
+// ===== SUPPORT REPORTS + KING MD AI SUPPORT =====
+const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
+let supportReports = loadJsonFile(REPORTS_FILE, []);
+if (!Array.isArray(supportReports)) supportReports = [];
+const supportSessions = new Map();
+
+function supportAnswer(message, history) {
+  const raw = String(message || '').trim();
+  const q = raw.toLowerCase();
+  const has = (...terms) => terms.some(t => q.includes(t));
+  if (!raw) return 'Please type your question so I can help.';
+  if (/^(hi|hey|hello|good morning|good afternoon|good evening)\b/.test(q))
+    return 'Hello! 👑 Welcome to KING MD V4 support. I can help with pairing codes, bot deployment, passwords, connection problems, coins, Premium, reports and app errors. What is happening?';
+  if (has('pair', 'link whatsapp', 'linking', 'pairing code', 'qr code', 'qr scan'))
+    return 'To connect WhatsApp: 1) Open Deploy/Pair Bot in KING MD V4. 2) Enter your WhatsApp number with country code (Kenya: 254, without the leading 0). 3) Request the pairing code or use QR scan if that option is available. 4) On WhatsApp open Linked devices → Link a device and enter the code. Keep the bot engine online while pairing. If it fails, tell me the exact error and whether you requested a code or QR.';
+  if (has('password', 'wrong password', 'incorrect password', 'bot password'))
+    return 'For a bot password error, copy the password exactly as the bot generated it. Check for spaces before or after it, letter case, and whether the code has expired. Do not share your password publicly. If the correct password is still rejected, send the exact error text and the page where you entered it so this can be traced.';
+  if (has('deploy', 'deployment', 'host', 'hosting', 'render'))
+    return 'For deployment: confirm the bot engine service is deployed and running, then check its deployment logs for a successful start and a listening port. Next confirm the app is configured with the correct engine URL and shared bridge key. If deployment fails, share the hosting platform and the last error lines from its logs (hide all secrets and tokens).';
+  if (has('offline', 'not connected', 'disconnected', 'server down', 'server is down', 'not responding', 'connection'))
+    return 'Let’s check the connection: 1) Confirm the phone and hosting service have internet. 2) Open the bot dashboard and refresh its status. 3) Check the engine service logs for crashes or authentication errors. 4) Do not delete the WhatsApp session unless you are ready to pair again. Is the app server offline, the bot engine offline, or WhatsApp itself disconnected?';
+  if (has('full', 'capacity', 'slots', 'server is full', 'no space'))
+    return 'A “server is full” message usually means the selected engine has reached its configured bot capacity. Check the admin server list, enabled status and slot capacity, then try an enabled server with free slots. If all servers are full, an administrator needs to add capacity or enable another engine.';
+  if (has('coin', 'coins', 'balance', '9999'))
+    return 'Your KM coin balance is shown in your account area. If the balance looks wrong, sign out and back in once, then refresh. If it is still incorrect, report your username and the displayed balance—never send your password.';
+  if (has('premium', 'payment', 'mpesa', 'm-pesa', 'upgrade'))
+    return 'Open Premium from the home screen and follow the payment instructions displayed there. Keep the M-Pesa confirmation message. If payment completed but Premium did not activate, report your username, approximate payment time and transaction reference; never share your M-Pesa PIN.';
+  if (has('report', 'issue', 'error', 'failed', 'not working', 'bug'))
+    return 'I can help troubleshoot that. Please tell me: 1) which page or button you used, 2) what you expected to happen, and 3) the exact error message you saw. You can also use Report an Issue to send the details and a screenshot to the administrator.';
+  if (has('command', 'commands', 'menu', 'whatsapp bot'))
+    return 'For commands supported by your deployed bot, send `.menu` in the connected WhatsApp chat. Common commands may include `.ping`, `.menu`, `.owner` and `.sticker`, but the exact list depends on the bot engine configuration.';
+  if (has('thank', 'thanks')) return 'You’re welcome! 👑 If anything else is not working in KING MD V4, tell me what happened and I’ll help you troubleshoot it.';
+  return 'I’m KING MD V4 Assistant. I can help with WhatsApp pairing, QR scan, bot passwords, deployment, hosting, server capacity, connection problems, Premium and KM coins. I don’t want to guess about your issue—what page are you using, and what exact message or error do you see?';
+}
+
+app.post('/api/report', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const name = String(body.name || 'Anonymous').trim().slice(0, 100) || 'Anonymous';
+    const issue = String(body.issue || '').trim().slice(0, 5000);
+    const workedStatus = String(body.workedStatus || '').trim().slice(0, 1000);
+    const photo = typeof body.photo === 'string' ? body.photo : '';
+    if (!issue) return res.status(400).json({ success: false, error: 'Please describe the issue before submitting.' });
+    if (photo && (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(photo) || photo.length > 4_200_000))
+      return res.status(400).json({ success: false, error: 'The image must be a PNG, JPG, WEBP or GIF smaller than 3 MB.' });
+    const report = { id: crypto.randomUUID(), name, issue, workedStatus, photo: photo || null, createdAt: new Date().toISOString(), status: 'new', forwardedToTelegram: false };
+    supportReports.unshift(report);
+    supportReports = supportReports.slice(0, 500);
+    saveJsonFile(REPORTS_FILE, supportReports);
+
+    const token = process.env.TELEGRAM_BOT_TOKEN || '';
+    const chatId = process.env.TELEGRAM_CHAT_ID || '';
+    if (token && chatId) {
+      const caption = '👑 KING MD V4 — New issue report\nName: ' + name + '\n\nIssue: ' + issue + (workedStatus ? '\n\n' + workedStatus : '');
+      try {
+        let tg;
+        if (photo) {
+          const match = photo.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+          const bytes = Buffer.from(match[2], 'base64');
+          const form = new FormData();
+          form.append('chat_id', chatId); form.append('caption', caption);
+          form.append('photo', new Blob([bytes], { type: match[1] }), 'report-image');
+          tg = await fetch('https://api.telegram.org/bot' + token + '/sendPhoto', { method: 'POST', body: form });
+        } else {
+          tg = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: caption }) });
+        }
+        const result = await tg.json().catch(() => ({}));
+        report.forwardedToTelegram = !!(tg.ok && result.ok);
+        report.telegramError = report.forwardedToTelegram ? undefined : String(result.description || 'Telegram forwarding failed').slice(0, 300);
+        saveJsonFile(REPORTS_FILE, supportReports);
+      } catch (e) {
+        report.telegramError = String(e.message || 'Telegram forwarding failed').slice(0, 300);
+        saveJsonFile(REPORTS_FILE, supportReports);
+      }
+    }
+    return res.json({ success: true, saved: true, forwarded: report.forwardedToTelegram, message: report.forwardedToTelegram ? 'Your report has been sent to Denzel.' : 'Your report has been saved. Administrator Telegram forwarding is not configured or is temporarily unavailable.' });
+  } catch (e) {
+    console.error('Report submission failed:', e);
+    return res.status(500).json({ success: false, error: 'The report could not be saved. Please try again.' });
+  }
+});
+
+function requireReportAdmin(req, res, next) {
+  if (!(req.account && (req.account.isAdmin || isOwner(req.account.email, req.account.phone))))
+    return res.status(403).json({ success: false, error: 'Admin only' });
+  next();
+}
+app.get('/api/admin/reports', requireUser, requireReportAdmin, (req, res) => {
+  res.json({ success: true, reports: supportReports.map(({ photo, ...r }) => ({ ...r, hasPhoto: !!photo })) });
+});
+app.get('/api/admin/reports/:id/photo', requireUser, requireReportAdmin, (req, res) => {
+  const report = supportReports.find(r => r.id === req.params.id);
+  if (!report) return res.status(404).json({ success: false, error: 'Report not found' });
+  if (!report.photo) return res.status(404).json({ success: false, error: 'This report has no image attachment' });
+  res.json({ success: true, photo: report.photo });
+});
+app.post('/api/admin/reports/:id/status', requireUser, requireReportAdmin, (req, res) => {
+  const report = supportReports.find(r => r.id === req.params.id);
+  if (!report) return res.status(404).json({ success: false, error: 'Report not found' });
+  const status = String((req.body || {}).status || '');
+  if (!['new', 'resolved'].includes(status)) return res.status(400).json({ success: false, error: 'Invalid report status' });
+  report.status = status;
+  report.updatedAt = new Date().toISOString();
+  saveJsonFile(REPORTS_FILE, supportReports);
+  res.json({ success: true, report: { id: report.id, status: report.status } });
+});
+
+app.post('/api/support/start', (req, res) => {
+  const sid = crypto.randomUUID();
+  supportSessions.set(sid, { createdAt: Date.now(), history: [] });
+  res.json({ success: true, sid });
+});
+app.post('/api/support/chat', (req, res) => {
+  const body = req.body || {};
+  let sid = String(body.sid || '');
+  let session = supportSessions.get(sid);
+  if (!session || Date.now() - session.createdAt > 12 * 60 * 60 * 1000) {
+    sid = crypto.randomUUID(); session = { createdAt: Date.now(), history: [] }; supportSessions.set(sid, session);
+  }
+  const message = String(body.message || '').trim().slice(0, 600);
+  if (!message) return res.status(400).json({ success: false, error: 'Please enter a message.' });
+  const reply = supportAnswer(message, session.history);
+  session.history.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
+  session.history = session.history.slice(-16);
+  session.createdAt = Date.now();
+  res.json({ success: true, sid, reply, message: reply, pending: false });
+});
+app.post('/api/support/result', (req, res) => {
+  const sid = String((req.body || {}).sid || '');
+  if (!supportSessions.has(sid)) return res.status(404).json({ success: false, error: 'Support session expired. Please send your question again.' });
+  res.json({ success: true, sid, pending: false, reply: '' });
+});
+
 function slugOK(s) { return /^[a-zA-Z0-9_]{3,20}$/.test(s || ''); }
 function findUsername(s) { return users.find(u => u.username.toLowerCase() === String(s || '').toLowerCase()); }
 
