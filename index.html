@@ -5957,6 +5957,18 @@ const A = {
   async _initAds() {
     try {
       const st = await (await fetch('/api/pages/status')).json(); this._ads = (st.success && st.ads) || {};
+      if (st.success && st.maintenanceMode) {
+        await Promise.race([this._meReady, new Promise(r => setTimeout(r, 8000))]).catch(() => {});
+        if (!(this.user && this.user.isAdmin)) {
+          if (!document.getElementById('king-site-maintenance')) {
+            const gate = document.createElement('div'); gate.id = 'king-site-maintenance';
+            gate.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#050507;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:inherit';
+            gate.innerHTML = '<div style="max-width:420px"><div style="font-size:48px;margin-bottom:16px">🛠️</div><h1 style="font-size:24px;margin:0 0 10px">KING MD V4 is under maintenance</h1><p style="color:#a1a1aa;line-height:1.6;margin:0">We are working on the site. Please come back shortly.</p></div>';
+            document.body.appendChild(gate);
+          }
+          return;
+        }
+      }
       if (st.success) {   // the app switch: "use the site" keeps the installed app on these pages; turning it off sends it back to the app
         try {
           const was = localStorage.getItem('eh_app_site') === '1', now = !!(st.app && st.app.useSite);

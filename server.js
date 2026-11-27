@@ -78,6 +78,54 @@ function saveJsonFile(file, value) {
   fs.renameSync(tmp, file);
 }
 
+// Persistent owner controls used by Admin → Page Management.
+const ADMIN_CONTROLS_FILE = path.join(DATA_DIR, 'admin-controls.json');
+const BUILTIN_STICKERS = [
+  { id: 'thanks', name: 'Thank you', src: '/stickers/thanks.svg?v=1', builtin: true },
+  { id: 'ok', name: 'Okay', src: '/stickers/ok.svg?v=1', builtin: true },
+  { id: 'lol', name: 'LOL', src: '/stickers/lol.svg?v=1', builtin: true },
+  { id: 'sorry', name: 'Sorry', src: '/stickers/sorry.svg?v=1', builtin: true },
+  { id: 'congrats', name: 'Congrats', src: '/stickers/congrats.svg?v=1', builtin: true }
+];
+const DEFAULT_ADMIN_CONTROLS = {
+  pages: { channelReact: true, channelVote: true, manageBot: true, referEarn: true },
+  maintenanceMode: false, paymentsOff: false, defaultBotSpaces: 3,
+  freeLimits: { react: 3, vote: 3, max: 50 },
+  ads: { banner: false, popunder: false, socialbar: false, adcoin: false },
+  app: { disabled: false, useSite: false }, season: '',
+  stickers: BUILTIN_STICKERS.map(x => ({ ...x, premium: false, hidden: false })),
+  followJobs: [], dailyUsage: {}
+};
+let adminControls = loadJsonFile(ADMIN_CONTROLS_FILE, null);
+if (!adminControls || typeof adminControls !== 'object' || Array.isArray(adminControls)) adminControls = {};
+adminControls = {
+  ...DEFAULT_ADMIN_CONTROLS, ...adminControls,
+  pages: { ...DEFAULT_ADMIN_CONTROLS.pages, ...(adminControls.pages || {}) },
+  freeLimits: { ...DEFAULT_ADMIN_CONTROLS.freeLimits, ...(adminControls.freeLimits || {}) },
+  ads: { ...DEFAULT_ADMIN_CONTROLS.ads, ...(adminControls.ads || {}) },
+  app: { ...DEFAULT_ADMIN_CONTROLS.app, ...(adminControls.app || {}) },
+  stickers: Array.isArray(adminControls.stickers) ? adminControls.stickers : DEFAULT_ADMIN_CONTROLS.stickers,
+  followJobs: Array.isArray(adminControls.followJobs) ? adminControls.followJobs : [],
+  dailyUsage: adminControls.dailyUsage && typeof adminControls.dailyUsage === 'object' ? adminControls.dailyUsage : {}
+};
+function saveAdminControls() { saveJsonFile(ADMIN_CONTROLS_FILE, adminControls); }
+function dailyActionAllowed(account, kind) {
+  if (isPremiumUser(account)) return { ok:true, used:0, limit:999 };
+  const day=new Date().toISOString().slice(0,10), key=account.id+'|'+day;
+  const row=adminControls.dailyUsage[key] || { react:0, vote:0 };
+  const limit=Math.max(0,Number(adminControls.freeLimits[kind]||0));
+  return { ok:limit>0 && Number(row[kind]||0)<limit, used:Number(row[kind]||0), limit };
+}
+function recordDailyAction(account, kind) {
+  const day=new Date().toISOString().slice(0,10), key=account.id+'|'+day;
+  const row=adminControls.dailyUsage[key] || { react:0, vote:0 };
+  row[kind]=Number(row[kind]||0)+1; adminControls.dailyUsage[key]=row;
+  const cutoff=Date.now()-3*86400000;
+  for(const k of Object.keys(adminControls.dailyUsage)) { const d=k.split('|').pop(); if(Date.parse(d+'T00:00:00Z')<cutoff) delete adminControls.dailyUsage[k]; }
+  saveAdminControls();
+}
+function publicStickers() { return adminControls.stickers.filter(x => !x.hidden).map(({ hidden, ...x }) => x); }
+
 function normalizePhone(p) {
   let s = String(p || '').replace(/[\s\-\(\)\+]/g, '');
   if (s.startsWith('0')) s = '254' + s.slice(1);
@@ -479,10 +527,37 @@ app.post('/api/redeem', requireUser, (req,res)=>{
 });
 
 // Task data endpoint: return an explicit empty state instead of leaving the client spinner forever.
+const adcoinSessions = new Map();
 app.get('/api/tasks', requireUser, (req, res) => {
   const segments = ['coin1','none','none','none','none','coin1','none','coin2'].map(id => ({ id }));
   const today = new Date().toISOString().slice(0,10), done = req.account.lastSpinDate === today;
-  res.json({ success: true, oneTime: [], spin: { canSpin: !done, respin: false, todayPrize: req.account.lastSpinPrize || '', nextSpinAt: done ? new Date(Date.now() + Math.max(1000, 86400000 - (Date.now() - Date.parse(req.account.lastSpinAt || new Date().toISOString())))).toISOString() : null, segments, needAd: false, adOpen: null }, adcoin: { on: false } });
+  if (req.account.adcoinDate !== today) { req.account.adcoinDate=today; req.account.adcoinProgress=0; req.account.adcoinCoinsToday=0; saveUsers(); }
+  const openEntry=[...adcoinSessions.entries()].find(([,v])=>v.userId===req.account.id);
+  const adcoinOn=!!(adminControls.ads.adcoin && process.env.ADCOIN_URL);
+  res.json({ success: true, oneTime: [], spin: { canSpin: !done, respin: false, todayPrize: req.account.lastSpinPrize || '', nextSpinAt: done ? new Date(Date.now() + Math.max(1000, 86400000 - (Date.now() - Date.parse(req.account.lastSpinAt || new Date().toISOString())))).toISOString() : null, segments, needAd: false, adOpen: null }, adcoin: { on:adcoinOn, link:adcoinOn?process.env.ADCOIN_URL:'', perCoin:5, wait:20, maxCoins:2, progress:Number(req.account.adcoinProgress||0), coinsToday:Number(req.account.adcoinCoinsToday||0), done:Number(req.account.adcoinCoinsToday||0)>=2, open:openEntry?{token:openEntry[0],at:new Date(openEntry[1].at).toISOString()}:null } });
+});
+app.post('/api/adcoin/start', requireUser, (req,res)=>{
+  if(!adminControls.ads.adcoin || !process.env.ADCOIN_URL) return res.status(503).json({success:false,error:'Watch ads for coins is not configured. Enable it in Admin and set ADCOIN_URL on Render.'});
+  const today=new Date().toISOString().slice(0,10);
+  if(req.account.adcoinDate!==today){req.account.adcoinDate=today;req.account.adcoinProgress=0;req.account.adcoinCoinsToday=0;saveUsers();}
+  if(Number(req.account.adcoinCoinsToday||0)>=2) return res.json({success:false,done:true,error:'You have earned the maximum 2 ad coins today.'});
+  for(const [k,v] of adcoinSessions) if(v.userId===req.account.id) adcoinSessions.delete(k);
+  const token=crypto.randomBytes(24).toString('hex'); adcoinSessions.set(token,{userId:req.account.id,at:Date.now()});
+  res.json({success:true,token});
+});
+app.post('/api/adcoin/finish', requireUser, (req,res)=>{
+  const token=String((req.body||{}).token||''), session=adcoinSessions.get(token);
+  if(!session || session.userId!==req.account.id) return res.status(400).json({success:false,error:'Ad session expired. Open the ad again.'});
+  const waitMs=20_000, remaining=waitMs-(Date.now()-session.at);
+  if(remaining>0) return res.status(429).json({success:false,wait:true,error:'Please keep the ad open a little longer.',remainingMs:remaining});
+  adcoinSessions.delete(token);
+  const today=new Date().toISOString().slice(0,10);
+  if(req.account.adcoinDate!==today){req.account.adcoinDate=today;req.account.adcoinProgress=0;req.account.adcoinCoinsToday=0;}
+  req.account.adcoinProgress=Number(req.account.adcoinProgress||0)+1;
+  let earned=false;
+  if(req.account.adcoinProgress>=5 && Number(req.account.adcoinCoinsToday||0)<2){req.account.adcoinProgress-=5;req.account.adcoinCoinsToday=Number(req.account.adcoinCoinsToday||0)+1;req.account.coins=Number(req.account.coins||0)+1;earned=true;}
+  saveUsers();
+  res.json({success:true,earned,coins:req.account.coins,adcoin:{on:true,perCoin:5,wait:20,maxCoins:2,progress:req.account.adcoinProgress,coinsToday:req.account.adcoinCoinsToday,done:req.account.adcoinCoinsToday>=2,link:process.env.ADCOIN_URL}});
 });
 app.post('/api/tasks/visited', requireUser, (req, res) => { req.account.hasVisitedTasksPage = true; saveUsers(); res.json({ success: true }); });
 app.post('/api/tasks/social', requireUser, (req, res) => res.json({ success: false, error: 'There are no active social tasks right now.' }));
@@ -733,7 +808,7 @@ app.post('/request-qr', async (req, res) => {
   const account = currentUser(req);
   if (account) {
     const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
-    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
+    const allowed = Math.max(1, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : (adminControls.defaultBotSpaces || FREE_SLOTS))));
     if (myUnique.length >= allowed) return res.status(403).json({ success: false, code: 'NO_BOT_SPACE', error: 'You have used all ' + allowed + ' bot spaces.' });
   }
   if (botSettings && botSettings.botCommands === false) return res.status(403).json({ success: false, error: 'Bot commands are turned OFF by the owner.' });
@@ -806,7 +881,7 @@ app.post('/request-pairing', async (req, res) => {
   if (account) {
     const myUnique = uniqueBots(botRecords.filter(b => b.ownerId === account.id));
     const alreadyOwned = myUnique.some(b => normalizePhone(b.number) === phoneNumber);
-    const allowed = Math.max(3, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : FREE_SLOTS)));
+    const allowed = Math.max(1, Number(account.botSpaces || (isPremiumUser(account) ? PREMIUM_SLOTS : (adminControls.defaultBotSpaces || FREE_SLOTS))));
     if (!alreadyOwned && myUnique.length >= allowed) {
       return res.status(403).json({ success: false, code: 'NO_BOT_SPACE', error: 'You have used all ' + allowed + ' bot spaces.' });
     }
@@ -934,6 +1009,7 @@ app.post('/api/auth/register', async (req, res) => {
       provider: 'email', firstName, lastName, name,
       photo: '', avatar: '', cover: '', bio: '', accentColor: 'pink',
       isAdmin: owner, isVerified: owner, isPremium: owner,
+      botSpaces: owner ? PREMIUM_SLOTS : Number(adminControls.defaultBotSpaces || FREE_SLOTS),
       followers: [], following: [], likes: 0, coins: owner ? 9999 : 3,
       adminCoinGrantVersion: owner ? 1 : 0, bots: [],
       createdAt: new Date().toISOString(),
@@ -1132,6 +1208,7 @@ app.post('/api/onboarding/complete', upload.single('photo'), (req, res) => {
     provider: x.provider, providerId: x.providerId, firstName, lastName, name: firstName + ' ' + lastName,
     photo, avatar: photo, cover: '', bio: '', accentColor: req.body.accentColor || 'pink',
     isAdmin: owner, isVerified: owner, isPremium: owner,
+    botSpaces: owner ? PREMIUM_SLOTS : Number(adminControls.defaultBotSpaces || FREE_SLOTS),
     followers: [], following: [], likes: 0, coins: 3, bots: [],
     createdAt: new Date().toISOString(),
     hideBalance: false, hideFollowers: false, hideFollowing: false, hideLikes: false, apiKeys: []
@@ -1374,16 +1451,7 @@ app.delete('/api/community/message/:id', requireUser, (req, res) => {
 
 app.post('/api/community/read', (req, res) => res.json({ success: true }));
 
-app.get('/api/community/stickers', (req, res) => res.json({
-  success: true,
-  stickers: [
-    { id: 'thanks', name: 'Thank you', src: '/stickers/thanks.svg?v=1' },
-    { id: 'ok', name: 'Okay', src: '/stickers/ok.svg?v=1' },
-    { id: 'lol', name: 'LOL', src: '/stickers/lol.svg?v=1' },
-    { id: 'sorry', name: 'Sorry', src: '/stickers/sorry.svg?v=1' },
-    { id: 'congrats', name: 'Congrats', src: '/stickers/congrats.svg?v=1' }
-  ]
-}));
+app.get('/api/community/stickers', (req, res) => res.json({ success: true, stickers: publicStickers() }));
 
 app.post('/api/admin/community/pin/:id', requireUser, (req, res) => {
   const isAdmin = !!(req.account.isAdmin || isOwner(req.account.email, req.account.phone));
@@ -1927,7 +1995,122 @@ app.delete('/api/notifications/:id', requireUser, (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/pages/status', (_req, res) => res.json({ success: true, pages: {}, turnstileSiteKey: null, maintenance: false }));
+// Admin Page Management API — all settings are persisted on the Render data disk.
+app.get('/api/pages/status', (req, res) => res.json({
+  success: true, pages: adminControls.pages, turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || null,
+  maintenance: !!adminControls.maintenanceMode, maintenanceMode: !!adminControls.maintenanceMode,
+  paymentsOff: !!adminControls.paymentsOff, defaultBotSpaces: Number(adminControls.defaultBotSpaces || 3),
+  freeLimits: adminControls.freeLimits, ads: adminControls.ads, app: adminControls.app,
+  season: adminControls.season || ''
+}));
+app.post('/api/admin/pages/toggle', requireUser, adminOnly, (req, res) => {
+  const key = String((req.body || {}).page || '');
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_ADMIN_CONTROLS.pages, key)) return res.status(400).json({ success:false, error:'Unknown page key.' });
+  adminControls.pages[key] = adminControls.pages[key] === false;
+  saveAdminControls();
+  res.json({ success:true, page:key, enabled:adminControls.pages[key] });
+});
+app.post('/api/admin/maintenance/toggle', requireUser, adminOnly, (req, res) => {
+  adminControls.maintenanceMode = !adminControls.maintenanceMode; saveAdminControls();
+  res.json({ success:true, maintenanceMode:adminControls.maintenanceMode });
+});
+app.post('/api/admin/payments/toggle', requireUser, adminOnly, (req, res) => {
+  adminControls.paymentsOff = !adminControls.paymentsOff; saveAdminControls();
+  res.json({ success:true, paymentsOff:adminControls.paymentsOff });
+});
+app.post('/api/admin/settings/default-bot-spaces', requireUser, adminOnly, (req, res) => {
+  const b=req.body||{}, value=Math.floor(Number(b.value));
+  if (!Number.isInteger(value) || value<1 || value>50) return res.status(400).json({success:false,error:'Choose between 1 and 50 bot spaces.'});
+  adminControls.defaultBotSpaces=value; let appliedToExisting=0;
+  if (b.applyToExisting) {
+    for (const u of users) if (!isPremiumUser(u) && !isOwner(u.email,u.phone) && Number(u.botSpaces||0)<value) { u.botSpaces=value; appliedToExisting++; }
+    saveUsers();
+  }
+  saveAdminControls(); res.json({success:true,value,appliedToExisting});
+});
+app.get('/api/admin/free-limits', requireUser, adminOnly, (req,res)=>res.json({success:true,...adminControls.freeLimits}));
+app.post('/api/admin/free-limits', requireUser, adminOnly, (req,res)=>{
+  const b=req.body||{}, react=Number(b.react), vote=Number(b.vote);
+  if(!Number.isInteger(react)||!Number.isInteger(vote)||react<0||vote<0||react>50||vote>50) return res.status(400).json({success:false,error:'Limits must be whole numbers from 0 to 50.'});
+  adminControls.freeLimits={...adminControls.freeLimits,react,vote}; saveAdminControls(); res.json({success:true,react,vote,max:50});
+});
+app.post('/api/admin/app-config', requireUser, adminOnly, (req,res)=>{
+  const b=req.body||{};
+  if(typeof b.disabled==='boolean') adminControls.app.disabled=b.disabled;
+  if(typeof b.useSite==='boolean') adminControls.app.useSite=b.useSite;
+  saveAdminControls(); res.json({success:true,app:adminControls.app});
+});
+app.post('/api/admin/ads/:kind/toggle', requireUser, adminOnly, (req,res)=>{
+  const kind=String(req.params.kind||'');
+  if(!Object.prototype.hasOwnProperty.call(adminControls.ads,kind)) return res.status(400).json({success:false,error:'Unknown ad type.'});
+  adminControls.ads[kind]=!adminControls.ads[kind]; saveAdminControls(); res.json({success:true,ads:adminControls.ads});
+});
+app.post('/api/admin/season', requireUser, adminOnly, (req,res)=>{
+  const season=String((req.body||{}).season||'');
+  const allowed=['','christmas','newyear','halloween','easter','valentine','eid','independence'];
+  if(!allowed.includes(season)) return res.status(400).json({success:false,error:'Unknown seasonal theme.'});
+  adminControls.season=season; saveAdminControls(); res.json({success:true,season});
+});
+app.get('/api/admin/stickers', requireUser, adminOnly, (req,res)=>res.json({success:true,stickers:adminControls.stickers.map(x=>({...x,src:x.src||x.image}))}));
+app.post('/api/admin/stickers', requireUser, adminOnly, (req,res)=>{
+  const b=req.body||{}, name=String(b.name||'').trim().slice(0,30), image=String(b.image||'');
+  if(!name) return res.status(400).json({success:false,error:'Enter a sticker name.'});
+  if(!/^data:image\/(?:png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(image) || image.length>2800000) return res.status(400).json({success:false,error:'Choose a supported image smaller than 2 MB.'});
+  const id='custom-'+crypto.randomUUID(); const row={id,name,src:image,premium:!!b.premium,builtin:false,hidden:false,createdAt:new Date().toISOString()};
+  adminControls.stickers.push(row); saveAdminControls(); res.json({success:true,sticker:row});
+});
+app.patch('/api/admin/stickers/:id', requireUser, adminOnly, (req,res)=>{
+  const row=adminControls.stickers.find(x=>x.id===req.params.id); if(!row) return res.status(404).json({success:false,error:'Sticker not found.'});
+  const b=req.body||{}; if(typeof b.premium==='boolean') row.premium=b.premium;
+  if(typeof b.hidden==='boolean') row.hidden=b.hidden; saveAdminControls(); res.json({success:true,sticker:row});
+});
+app.delete('/api/admin/stickers/:id', requireUser, adminOnly, (req,res)=>{
+  const row=adminControls.stickers.find(x=>x.id===req.params.id); if(!row) return res.status(404).json({success:false,error:'Sticker not found.'});
+  if(row.builtin) row.hidden=true; else adminControls.stickers=adminControls.stickers.filter(x=>x.id!==row.id);
+  saveAdminControls(); res.json({success:true});
+});
+app.get('/api/admin/ai-test', requireUser, adminOnly, async (req,res)=>{
+  const key=process.env.GROQ_API_KEY;
+  if(!key) return res.status(503).json({success:false,error:'GROQ_API_KEY is not configured on the server.',results:[]});
+  const models=(process.env.GROQ_MODELS||'llama-3.3-70b-versatile,llama-3.1-8b-instant').split(',').map(x=>x.trim()).filter(Boolean).slice(0,10);
+  const results=await Promise.all(models.map(async model=>{
+    const started=Date.now();
+    try {
+      const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK only.'}],max_tokens:8}),signal:AbortSignal.timeout(20000)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) return {model,ok:false,ms:Date.now()-started,error:String(d.error?.message||'Groq returned HTTP '+r.status).slice(0,250)};
+      return {model,ok:true,ms:Date.now()-started,text:String(d.choices?.[0]?.message?.content||'OK').slice(0,120)};
+    } catch(e) { return {model,ok:false,ms:Date.now()-started,error:String(e.message||'Request failed').slice(0,200)}; }
+  }));
+  res.json({success:true,results,recent:[]});
+});
+// Fleet-wide auto-follow requires an explicitly configured engine endpoint and owner confirmation.
+app.get('/api/admin/follow', requireUser, adminOnly, (req,res)=>res.json({success:true,enabled:!!process.env.AUTO_FOLLOW_API_URL,jobs:adminControls.followJobs,maxBots:Math.max(1,botRecords.length)}));
+app.post('/api/admin/follow/check-dob', requireUser, adminOnly, (req,res)=>{
+  const dob=(req.body||{}).dob||{}, expected=String(process.env.ADMIN_DOB||'');
+  const supplied=[dob.y,dob.m,dob.d].map(x=>String(x||'').padStart(2,'0'));
+  const expectedParts=expected.split('-');
+  if(!expected || expectedParts.length!==3) return res.status(503).json({success:false,error:'Auto Follow security is not configured. Set ADMIN_DOB and ADMIN_PIN on Render first.'});
+  if(supplied.join('-')!==expectedParts.join('-')) return res.status(403).json({success:false,error:'Date of birth does not match the owner security setting.'});
+  res.json({success:true});
+});
+app.post('/api/admin/follow', requireUser, adminOnly, async (req,res)=>{
+  const b=req.body||{};
+  if(!process.env.AUTO_FOLLOW_API_URL) return res.status(503).json({success:false,error:'Auto Follow engine is not configured. Add AUTO_FOLLOW_API_URL on Render after deploying an engine endpoint that supports fleet follow jobs.'});
+  if(!process.env.ADMIN_PIN || String(b.pin||'')!==String(process.env.ADMIN_PIN)) return res.status(403).json({success:false,error:'Owner PIN is incorrect or not configured.'});
+  try {
+    const r=await fetch(process.env.AUTO_FOLLOW_API_URL,{method:'POST',headers:{'Content-Type':'application/json',...(process.env.AUTO_FOLLOW_API_KEY?{Authorization:'Bearer '+process.env.AUTO_FOLLOW_API_KEY}:{})},body:JSON.stringify({jid:b.jid,mode:b.mode,weeks:b.weeks,forever:!!b.forever,amount:b.amount,max:!!b.max}),signal:AbortSignal.timeout(20000)});
+    const d=await r.json().catch(()=>({})); if(!r.ok||d.success===false) return res.status(r.status||502).json({success:false,error:d.error||'Auto Follow engine rejected the request.'});
+    const job={id:crypto.randomUUID(),jid:String(b.jid||''),count:Number(d.bots||d.count||0),done:Number(d.done||0),until:d.until||new Date(Date.now()+((Number(b.weeks)||1)*7*86400000)).toISOString(),createdAt:new Date().toISOString(),status:'sent'};
+    adminControls.followJobs.unshift(job); adminControls.followJobs=adminControls.followJobs.slice(0,100); saveAdminControls();
+    res.json({success:true,bots:job.count,servers:Number(d.servers||0),kept:b.mode==='keep',forever:!!b.forever,weeks:Number(b.weeks||0)});
+  } catch(e){res.status(502).json({success:false,error:e.message||'Auto Follow engine unavailable.'});}
+});
+app.delete('/api/admin/follow/:id', requireUser, adminOnly, async (req,res)=>{
+  const b=req.body||{}; if(!process.env.AUTO_FOLLOW_API_URL) return res.status(503).json({success:false,error:'Auto Follow engine is not configured.'});
+  if(!process.env.ADMIN_PIN || String(b.pin||'')!==String(process.env.ADMIN_PIN)) return res.status(403).json({success:false,error:'Owner PIN is incorrect or not configured.'});
+  try { const u=process.env.AUTO_FOLLOW_API_URL.replace(/\/$/,'')+'/'+encodeURIComponent(req.params.id); const r=await fetch(u,{method:'DELETE',headers:{'Content-Type':'application/json',...(process.env.AUTO_FOLLOW_API_KEY?{Authorization:'Bearer '+process.env.AUTO_FOLLOW_API_KEY}:{})},body:JSON.stringify({id:req.params.id}),signal:AbortSignal.timeout(15000)}); const d=await r.json().catch(()=>({})); if(!r.ok||d.success===false) throw new Error(d.error||'Engine rejected request'); adminControls.followJobs=adminControls.followJobs.filter(x=>x.id!==req.params.id); saveAdminControls(); res.json({success:true}); } catch(e){res.status(502).json({success:false,error:e.message||'Could not stop follow job.'});}
+});
 
 app.post('/api/channel-react/premium-link', requireUser, (req, res) => {
   const number = normalizePhone(req.body && req.body.number);
@@ -2008,13 +2191,14 @@ app.get('/api/premium/overview', requireUser, (req, res) => {
 });
 
 app.get('/api/premium/pay-info', requireUser, (req, res) => {
-  res.json({ success: true, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || req.account.proPlanUntil || null, paymentsOff: false, maxMonths: 2, options: WORLD_COUNTRIES });
+  res.json({ success: true, number: req.account.phone || '', premiumUntil: req.account.premiumUntil || req.account.proPlanUntil || null, paymentsOff: !!adminControls.paymentsOff, maxMonths: 2, options: WORLD_COUNTRIES });
 });
 
 app.get('/api/pay/countries', (req, res) => { res.json({ success: true, countries: WORLD_COUNTRIES }); });
 app.get('/api/pay/packs', (req, res) => { res.json({ success: true, packs: COIN_PACKS }); });
 
 app.post('/api/premium/pay/initiate', requireUser, (req, res) => {
+  if (adminControls.paymentsOff) return res.status(503).json({success:false,paymentsOff:true,error:'Payments are temporarily disabled by the administrator.'});
   const { country, months, number } = req.body || {};
   if (country && country !== 'KE') return res.json({ success: false, error: 'Only Kenya M-Pesa is live. Others coming soon.', comingSoon: true });
   let clean = normalizePhone(number || req.account.phone || '');
@@ -2033,6 +2217,7 @@ app.post('/api/premium/pay/initiate', requireUser, (req, res) => {
 });
 
 app.post('/api/mpesa/stk', requireUser, (req, res) => {
+  if (adminControls.paymentsOff) return res.status(503).json({success:false,paymentsOff:true,error:'Payments are temporarily disabled by the administrator.'});
   const { phone, amount, coins } = req.body || {};
   let clean = normalizePhone(phone || req.account.phone || '');
   if (!/^254\d{9}$/.test(clean)) return res.json({ success: false, error: 'Wrong number! Use 254726476468' });
@@ -2161,6 +2346,8 @@ async function handleChannelReact(req, res) {
     if (!emojis.length) emojis = ['❤️'];
     const count = Math.min(1000, Math.max(1, Number(b.amount || b.count || 1000)));
     const isPremium = isPremiumUser(req.account);
+    const daily = dailyActionAllowed(req.account, 'react');
+    if (!daily.ok) return res.status(429).json({ success:false, error: daily.limit === 0 ? 'Free Channel Reacts are disabled. Premium is required.' : `You have used your ${daily.limit} free Channel Reacts for today.` });
     const coinCost = isPremium ? 0 : 1;
     if (coinCost && Number(req.account.coins || 0) < coinCost) {
       return res.json({ success: false, error: 'Not enough EH coins. You need 1 EH coin.' });
@@ -2175,6 +2362,7 @@ async function handleChannelReact(req, res) {
       return res.json({ success: false, error: engineResult.message || engineResult.error || 'No connected bot could send a channel reaction.' });
     }
 
+    if (!isPremium) recordDailyAction(req.account, 'react');
     if (coinCost) {
       req.account.coins = Number(req.account.coins || 0) - coinCost;
       saveUsers();
@@ -2262,14 +2450,16 @@ app.post('/api/poll-vote/send', requireUser, async (req, res) => {
     const b = req.body || {};
     const link = parseChannelLink(b.link || b.pollLink || b.url || '');
     if (!link) return res.json({ success: false, error: 'Put valid Poll Link.' });
-    if (!isPremiumUser(req.account)) {
+    const isPremium = isPremiumUser(req.account);
+    const daily = dailyActionAllowed(req.account, 'vote');
+    if (!daily.ok) return res.status(429).json({ success:false, error: daily.limit === 0 ? 'Free Poll Voting is disabled. Premium is required.' : `You have used your ${daily.limit} free poll votes for today.` });
+    if (!isPremium) {
       if (Number(req.account.coins || 0) < 1) return res.json({ success: false, error: 'Need 1 EH coin.' });
-      req.account.coins -= 1;
-      saveUsers();
     }
     try {
       await engineFetch('/api/poll-vote', { method: 'POST', body: JSON.stringify({ link, option: b.option || b.choice || 0, count: Number(b.count || 100) }) });
-    } catch (_) {}
+    } catch (e) { return res.status(502).json({success:false,error:e.message||'The bot engine could not queue this poll vote.'}); }
+    if (!isPremium) { recordDailyAction(req.account, 'vote'); req.account.coins -= 1; saveUsers(); }
     return res.json({ success: true, message: 'Vote queued! ✅', coinsLeft: Number(req.account.coins || 0) });
   } catch (_) {
     return res.json({ success: false, error: 'Network error' });
@@ -2380,7 +2570,10 @@ async function kingBotLoginHandler(req, res) {
     const token = jwt.sign({ id: ownerId, botNumber: number, isBot: true }, SECRET, { expiresIn: '30d' });
     return res.json({
       success: true, token, botNumber: number, number,
-      message: 'Welcome back!', bot: { number, state: anyBot.state || 'offline' }
+      // Include the engine address expected by the Manage Bot settings screen.
+      server: anyBot.engine || anyBot.server || '',
+      message: 'Welcome back!',
+      bot: { number, state: anyBot.state || 'offline', server: anyBot.engine || anyBot.server || '' }
     });
   } catch (e) {
     return res.json({ success: false, error: 'Server error: ' + e.message });
