@@ -18,7 +18,7 @@
   EH.installCard = function () {
     if (!wanted()) return '';
     var sub = dp ? 'Opens full screen from your home screen, with notifications.' : ios ? 'Tap Share, then Add to Home Screen.' : 'Add it to your home screen from the browser menu.';
-    return '<section class="inst rise" style="--i:2"><img src="/logo.png" alt=""><div class="inst-t"><b>Install the app</b><small>' + EH.esc(sub) + '</small></div>' +
+    return '<section class="inst rise" style="--i:2"><img src="/assets/logo.png" alt=""><div class="inst-t"><b>Install the app</b><small>' + EH.esc(sub) + '</small></div>' +
       '<button class="inst-go tap" data-inst-go>' + (ios ? 'How' : 'Install') + '</button><button class="inst-x tap" data-inst-x aria-label="Close">' + EH.ic('x') + '</button></section>';
   };
   EH.install = function () {

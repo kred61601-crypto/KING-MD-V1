@@ -44,7 +44,7 @@
   }
 
   function hero(o) {
-    return '<div class="svc-hero rise" style="--g1:' + o.g1 + ';--g2:' + o.g2 + '"><span class="svc-wm">' + ic(o.icon) + '</span><div class="svc-top"><div class="svc-logo"><img src="/logo.png" alt=""></div><div class="svc-tx"><h2>' + o.title + '</h2><p>' + o.sub + '</p></div></div>' +
+    return '<div class="svc-hero rise" style="--g1:' + o.g1 + ';--g2:' + o.g2 + '"><span class="svc-wm">' + ic(o.icon) + '</span><div class="svc-top"><div class="svc-logo"><img src="/assets/logo.png" alt=""></div><div class="svc-tx"><h2>' + o.title + '</h2><p>' + o.sub + '</p></div></div>' +
       '<button class="svc-how tap" data-how="' + o.video + '">' + ic('play') + ' See how it works</button></div>';
   }
   function wireHow(root) {

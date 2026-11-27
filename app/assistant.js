@@ -101,7 +101,7 @@
         var issue = $('[data-ri]', b).value.trim(); if (!issue) return EH.toast('Describe the problem first', 'er');
         var btn = $('[data-rs]', b); btn.disabled = true;
         EH.api('/api/report', { method: 'POST', auth: false, body: { name: $('[data-rn]', b).value.trim() || 'Anonymous', issue: issue, workedStatus: '\n💬 From: KING MD AI chat (app)' } }).then(function (r) {
-          if (r.d && r.d.success) { s.close(); EH.toast('Sent to Denzel ✅', 'ok'); } else { btn.disabled = false; EH.toast((r.d && r.d.error) || 'Could not send. Try again', 'er'); }
+          if (r.ok && r.d && r.d.success) { s.close(); EH.toast(r.d.message || 'Report received ✅', 'ok'); } else { btn.disabled = false; EH.toast((r.d && r.d.error) || 'Could not send. Try again', 'er'); }
         });
       };
     };

@@ -242,13 +242,35 @@
   EH.alert = function (title, text) { return EH.confirm({ title: title, text: text, ok: 'OK', cancel: 'Close' }); };
 
   /* ───── screens + router ───── */
-  var routes = {}, cache = {}, cur = null, idx = 0, cleanups = [];
+  var routes = {}, cache = {}, cur = null, idx = 0, cleanups = [], navSplashTimer = 0, navSplashWatchdog = 0, navSplashStarted = 0;
   EH.screen = function (name, def) { routes[name] = def; };
   var parse = function (h) { var m = String(h || '').replace(/^#\/?/, '').split('/'); return { name: m[0] || 'home', arg: decodeURIComponent(m.slice(1).join('/') || '') }; };
+  /* Reuse the exact branded startup splash for in-app navigation. Keep the
+     element mounted after startup so it can be shown again without rebuilding it. */
+  function showNavSplash() {
+    var el = document.getElementById('splash'); if (!el) return;
+    clearTimeout(navSplashTimer); clearTimeout(navSplashWatchdog);
+    navSplashStarted = Date.now();
+    el.classList.remove('out'); el.setAttribute('aria-hidden', 'false');
+    /* Keep the branded transition visible for at least 7 seconds, but never
+       leave it covering the destination for more than 10 seconds. */
+    navSplashWatchdog = setTimeout(hideNavSplash, 10000);
+  }
+  function hideNavSplash() {
+    var el = document.getElementById('splash'); if (!el) return;
+    clearTimeout(navSplashWatchdog); el.classList.add('out'); el.setAttribute('aria-hidden', 'true');
+  }
+  function finishNavSplashSoon() {
+    clearTimeout(navSplashTimer);
+    /* Let the destination mount, then hold the original splash for ~7 seconds. */
+    var remaining = Math.max(0, 7000 - (Date.now() - navSplashStarted));
+    navSplashTimer = setTimeout(hideNavSplash, remaining);
+  }
   EH.go = function (path, replace) {
     var h = '#/' + path;
     if (replace) history.replaceState({ i: idx }, '', h); else { idx++; history.pushState({ i: idx }, '', h); }
-    render(parse(h), 'push');
+    showNavSplash();
+    try { render(parse(h), 'push'); } finally { finishNavSplashSoon(); }
   };
   EH.back = function () { if (idx > 0) history.back(); else EH.go('home', true); };
   /* Scroll ONE screen's list (its .body) so an element sits where you want it. element.scrollIntoView also scrolls every parent, and the shell around the
@@ -270,7 +292,7 @@
   }, true);
   if (window.visualViewport) window.visualViewport.addEventListener('scroll', function () { if (window.scrollY) window.scrollTo(0, 0); });
   EH.tab = function (name) { if (cur && cur.name === name) { var b = $('.body', cur.scr); if (b) b.scrollTo({ top: 0, behavior: 'smooth' }); return; } EH.go(name, true); };
-  window.addEventListener('popstate', function (e) { var i = (e.state && e.state.i) || 0, dir = i < idx ? 'back' : 'push'; idx = i; render(parse(location.hash), dir); });
+  window.addEventListener('popstate', function (e) { var i = (e.state && e.state.i) || 0, dir = i < idx ? 'back' : 'push'; idx = i; showNavSplash(); try { render(parse(location.hash), dir); } finally { finishNavSplashSoon(); } });
   function flush() { cleanups.forEach(function (f) { f(); }); cleanups = []; }
   function render(r, dir) {
     EH.closeSheets(); flush();
@@ -302,9 +324,9 @@
   EH.frame = function (scr, o) {
     o = o || {}; var bar = '';
     if (o.bar === 'brand') {
-      bar = '<div class="bar"><div class="logo"><img src="/logo.png" alt=""></div><div class="brand"><b>KING MD</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
+      bar = '<div class="bar"><div class="logo"><img src="/assets/logo.png" alt=""></div><div class="brand"><b>KING MD</b><span>V4 · WhatsApp bot</span></div><div class="acts" data-hdr></div></div>';
     } else if (o.bar === 'push') {
-      var ico = o.logo ? '<span class="bico lg"><img src="/logo.png" alt=""></span>' : o.icon ? '<span class="bico" style="--a:' + (o.ia || '#ff6aa8') + ';--b:' + (o.ib || '#e11d63') + '">' + EH.ic(o.icon) + '</span>' : '';
+      var ico = o.logo ? '<span class="bico lg"><img src="/assets/logo.png" alt=""></span>' : o.icon ? '<span class="bico" style="--a:' + (o.ia || '#ff6aa8') + ';--b:' + (o.ib || '#e11d63') + '">' + EH.ic(o.icon) + '</span>' : '';
       bar = '<div class="bar"><button class="back tap" data-back aria-label="Back">' + EH.ic('chevL') + '</button>' + ico + '<div class="ttl">' + EH.esc(o.title || '') + (o.verified ? ' ' + EH.vBadge(15) : '') + (o.sub ? '<small>' + EH.esc(o.sub) + '</small>' : '') + '</div><div class="acts">' + (o.acts || '') + '</div></div>';
     } else {
       bar = '<div class="bar"><div class="ttl">' + EH.esc(o.title || '') + (o.sub ? '<small>' + EH.esc(o.sub) + '</small>' : '') + '</div><div class="acts">' + (o.acts || '') + '</div></div>';
@@ -355,7 +377,7 @@
   var GITHUB = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>';
   EH.login = function (msg) {
     var s = EH.sheet({ title: 'Sign in', html:
-      '<div style="text-align:center;padding:4px 0 6px"><img src="/logo.png" alt="" style="width:76px;height:76px;border-radius:50%;margin:0 auto 12px;box-shadow:0 0 30px rgba(40,110,255,.4)">' +
+      '<div style="text-align:center;padding:4px 0 6px"><img src="/assets/logo.png" alt="" style="width:76px;height:76px;border-radius:50%;margin:0 auto 12px;box-shadow:0 0 30px rgba(40,110,255,.4)">' +
       '<div class="sub" style="margin-bottom:18px">' + EH.esc(msg || 'Sign in, or create your account in one tap.') + '</div></div>' +
       '<button class="btn block alt tap" data-p="google" style="background:#fff;color:#1a1a1a;margin-bottom:10px">' + GOOGLE + ' Continue with Google</button>' +
       '<button class="btn block alt tap" data-p="github">' + GITHUB + ' Continue with GitHub</button>' +
@@ -486,7 +508,7 @@
   function showOff(on) {
     if (!on) { if (offEl) { offEl.remove(); offEl = null; } return; }
     if (offEl) return; offEl = document.createElement('div'); offEl.className = 'offscr';
-    offEl.innerHTML = '<div class="off-in"><img src="/logo.png" alt="" width="84" height="84"><div class="off-ic">' + EH.ic('warn') + '</div><h2>App disabled</h2><p>The app is under maintenance right now. Please use the site until it is back.</p>' +
+    offEl.innerHTML = '<div class="off-in"><img src="/assets/logo.png" alt="" width="84" height="84"><div class="off-ic">' + EH.ic('warn') + '</div><h2>App disabled</h2><p>The app is under maintenance right now. Please use the site until it is back.</p>' +
       '<button class="btn block tap" data-opensite>' + EH.ic('globe') + ' Open the site</button><button class="btn alt block tap" data-retry style="margin-top:10px">' + EH.ic('refresh') + ' Try again</button></div>';
     ($('#app') || document.body).appendChild(offEl);
     $('[data-opensite]', offEl).onclick = function () { EH.openSite('/app/s'); };
@@ -562,8 +584,8 @@
     render(parse(location.hash), 'push');
 
     var splash = $('#splash'), show = !EH.ss.get('eh_splash') || /[?&]splash=1/.test(location.search), t0 = Date.now(), done = false, ready = false;
-    function enter() { if (done) return; done = true; if (splash) { splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 800); } document.body.classList.add('ready'); EH.ss.set('eh_splash', '1'); EH.emit('ready'); }
-    if (show) { var tick = function () { if (ready && Date.now() - t0 >= 1500) enter(); else if (!done) setTimeout(tick, 80); }; setTimeout(enter, 3200); tick(); userDone.then(function () { ready = true; }); }
-    else { if (splash) splash.remove(); done = true; document.body.classList.add('ready'); EH.emit('ready'); }
+    function enter() { if (done) return; done = true; if (splash) { splash.classList.add('out'); splash.setAttribute('aria-hidden', 'true'); } document.body.classList.add('ready'); EH.ss.set('eh_splash', '1'); EH.emit('ready'); }
+    if (show) { var tick = function () { if (ready && Date.now() - t0 >= 7000) enter(); else if (!done) setTimeout(tick, 80); }; setTimeout(enter, 10000); tick(); userDone.then(function () { ready = true; }); }
+    else { if (splash) { splash.classList.add('out'); splash.setAttribute('aria-hidden', 'true'); } done = true; document.body.classList.add('ready'); EH.emit('ready'); }
   };
 })();

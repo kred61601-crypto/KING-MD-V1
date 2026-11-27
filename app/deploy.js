@@ -77,7 +77,7 @@
     }
     function setLoading(on, title, copy) { var el = $('[data-dp-loading]', body); if (!el) return; el.classList.toggle('hide', !on); if (title) $('[data-loading-title]', el).textContent = title; if (copy) $('[data-loading-copy]', el).textContent = copy; }
     body.innerHTML =
-      '<div class="dp-hero rise"><div class="dp-hl"><div class="svc-logo"><img src="/logo.png" alt=""></div><div><h2>Deploy your bot</h2><p>Enter your number, get a pairing code and link it in WhatsApp. Live in about a minute.</p></div></div>' +
+      '<div class="dp-hero rise"><div class="dp-hl"><div class="svc-logo"><img src="/assets/logo.png" alt=""></div><div><h2>Deploy your bot</h2><p>Enter your number, get a pairing code and link it in WhatsApp. Live in about a minute.</p></div></div>' +
         '<div class="dp-st"><div><b data-st="bots"><i class="sk"></i></b><span>Bots paired</span></div><div><b data-st="srv"><i class="sk"></i></b><span>Servers</span></div><div><b data-st="slots"><i class="sk"></i></b><span>Free slots</span></div></div>' +
         '<button class="svc-how tap" data-tut type="button" style="--g2:var(--p)">' + ic('play') + ' Watch the tutorial</button></div>' +
       EH.adCard() +

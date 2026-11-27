@@ -210,7 +210,7 @@
   EH.screen('profile', { tab: true, mount: function (scr) {
     scr.innerHTML = '<div class="body pfb tabpad"></div>'; var body = $('.body', scr), first = true, last = '';
     function guest() {
-      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join KING MD V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, KM coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
+      body.innerHTML = '<div class="pf-guest"><h1 class="h1" style="font-size:28px">Profile</h1></div><div class="pf-pad"><div class="card" style="text-align:center;padding:26px 18px"><img src="/assets/logo.png" alt="" style="width:84px;height:84px;border-radius:50%;margin:0 auto 14px"><div class="h1" style="font-size:24px">Join KING MD V4</div><div class="sub" style="margin:8px 0 18px">Sign in to get more bot spaces, KM coins, daily spins, the community chat and your own profile.</div><button class="btn block tap" data-login>' + ic('user') + ' Sign in or create account</button></div>' +
         '<div class="sec"><h3>Appearance</h3></div>' + appearance(null) + '<div class="sec"><h3>More</h3></div><div class="grp">' + links() + '</div></div>';
       wireTheme();
     }

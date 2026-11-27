@@ -40,7 +40,7 @@
     function loginView() {
       var list = saved();
       body.innerHTML =
-        '<div class="bl-top rise"><div class="bl-logo"><img src="/logo.png" alt=""></div><div><h2>Log in to your bot</h2><p>Enter your bot number and password.</p></div></div>' +
+        '<div class="bl-top rise"><div class="bl-logo"><img src="/assets/logo.png" alt=""></div><div><h2>Log in to your bot</h2><p>Enter your bot number and password.</p></div></div>' +
         (list.length ? '<div class="grp rise" data-saved style="margin-bottom:14px">' + list.map(function (b) { return '<div class="row tap" data-q="' + esc(b.number) + '"><div class="ri" style="--a:#34d399;--b:#059669">' + ic('robot') + '</div><div class="rt"><b>+' + esc(b.number) + '</b><small>Tap to log in · last login ' + new Date(b.lastLogin).toLocaleDateString() + '</small></div><button class="ibtn tap" data-rm="' + esc(b.number) + '" aria-label="Remove" style="color:#f87171">' + ic('trash') + '</button></div>'; }).join('') + '</div>' : '') +
         '<form class="card rise" data-form style="--i:1" autocomplete="off"><label class="fld"><span>Bot number</span><div class="inwrap"><span class="pre">' + ic('phone') + '</span><input class="inp" data-num type="tel" inputmode="numeric" placeholder="e.g. 254726476468"></div></label>' +
         '<label class="fld"><span>Password</span><div class="inwrap"><span class="pre">' + ic('key') + '</span><input class="inp" data-pw type="text" placeholder="8 characters" maxlength="32" style="letter-spacing:2px" autocapitalize="none" autocomplete="off"></div></label>' +
